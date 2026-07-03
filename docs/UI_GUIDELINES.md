@@ -29,7 +29,8 @@ this is about how the product should look and behave.
 - One spacing scale, one type scale, one color palette — defined in the Tailwind
   config and used via tokens, not ad-hoc values.
 - **Lucide React** is the only icon set; consistent sizes (`size-4`/`size-5`) and
-  meanings (a trash icon always means delete).
+  meanings (a trash icon always means delete). Sole exception: Google/GitHub brand
+  logos ship as inline SVGs ([ADR 0005](adr/0005-oauth-social-login.md#frontend--ux)).
 - Light/dark themes share tokens; never hardcode colors that break a theme.
 
 ## 3. Layout & navigation

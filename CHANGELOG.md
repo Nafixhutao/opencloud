@@ -13,7 +13,31 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 
 ## [Unreleased]
 
+### Fixed
+- Doc consistency with accepted ADRs: `docs/DATABASE.md` intro no longer lists
+  Redis as a job queue (the queue is the Postgres `jobs` table — ADR 0002);
+  `docs/SECURITY.md` names argon2id as the password hash (matching
+  `docs/BACKEND.md` §13, was "bcrypt or argon2id"); `docs/HOSTING.md`
+  provisioner interface drops the vestigial `node` parameter from
+  `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
+
+### Changed
+- Planned Redis version bumped **7 → 8** (`docs/DATABASE.md`,
+  `docs/INFRASTRUCTURE.md`) — current supported series, tri-licensed incl.
+  AGPLv3; the cache/session/rate-limit usage is unchanged.
+
 ### Added
+- ADR 0005: **social login (Google & GitHub)** alongside password auth — OAuth
+  authorization-code flow handled by the Go backend, which issues the same
+  JWT/refresh pair; identities in a new `user_identities` table,
+  `users.password_hash` now nullable. `golang.org/x/oauth2` added to approved
+  deps. Docs updated: `docs/DATABASE.md`, `docs/API.md`, `docs/SECURITY.md`,
+  `docs/BACKEND.md`, `docs/INFRASTRUCTURE.md`, `ROADMAP.md` (Phase 1).
+  A **Frontend & UX** section records the login-screen design: social buttons are
+  a top-level redirect (not a `fetch` — sanctioned `FRONTEND.md §3` exception),
+  Google/GitHub brand SVGs are the sole exception to the Lucide-only icon rule,
+  the `/login?error=<code>` → plain-language copy map, and the anti-lockout guard
+  on Settings → Connected accounts.
 - ADR 0003: **Cloudflare is the authoritative DNS and ingress path** — customer
   zones managed via the Cloudflare API by the provisioner; inbound traffic via
   Cloudflare Tunnel (`cloudflared`), so self-hosted nodes work behind CGNAT

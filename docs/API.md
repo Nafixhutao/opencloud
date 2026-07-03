@@ -140,6 +140,8 @@ below shows the intended shape and naming.
 |---|---|---|
 | `POST` | `/auth/register` | create account + first user |
 | `POST` | `/auth/login` | issue access + refresh tokens |
+| `GET`  | `/auth/oauth/{provider}` | start Google/GitHub OAuth flow (redirect, `state` CSRF param — ADR 0005) |
+| `GET`  | `/auth/oauth/{provider}/callback` | exchange code → issue the same access + refresh tokens |
 | `POST` | `/auth/refresh` | rotate tokens |
 | `POST` | `/auth/logout` | revoke refresh token |
 | `GET`  | `/auth/me` | current user + account |

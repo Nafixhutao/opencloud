@@ -25,8 +25,14 @@ rules are not optional and are never "simplified away" (see [`../CLAUDE.md`](../
   `role`, `exp`. Verified by `middleware/auth` on every protected route.
 - **Refresh tokens**, long-lived, **rotated** on each use, stored server-side in
   Redis so they can be revoked. Reuse of a revoked token revokes the whole chain.
-- **Passwords** hashed with **bcrypt or argon2id** (never plaintext, never
-  reversible). Enforce a sensible minimum policy; throttle and lock on repeated
+- **Passwords** hashed with **argon2id** (`golang.org/x/crypto` — see
+  [`BACKEND.md`](BACKEND.md#13-approved-dependencies); never plaintext, never
+  reversible).
+- **Social login (Google, GitHub)** via the OAuth authorization-code flow,
+  handled by the backend, which then issues the same JWT/refresh pair — one
+  session model for all login methods. `state` parameter is mandatory (CSRF);
+  auto-linking to an existing user only on a **provider-verified** email.
+  Details: [ADR 0005](adr/0005-oauth-social-login.md). Enforce a sensible minimum policy; throttle and lock on repeated
   failures.
 - **Sensitive actions** (delete account, change billing, role change) require
   re-authentication or 2FA where configured.

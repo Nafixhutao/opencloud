@@ -76,7 +76,9 @@ export default async function SitesPage() {
   Components never call `fetch` directly.
 - The Next.js server (route handlers + server components) is the **BFF**: it holds
   the JWT in an httpOnly cookie and attaches it to backend calls. Tokens never
-  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#tokens).
+  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#tokens). (One sanctioned
+  exception: OAuth social-login buttons are a top-level redirect, not a fetch —
+  [ADR 0005](adr/0005-oauth-social-login.md#frontend--ux).)
 - Mutations from client components call a route handler under `app/api/…`, which
   forwards to the backend with the session token. Route handlers contain **no
   business logic** — they are a thin secure proxy.
