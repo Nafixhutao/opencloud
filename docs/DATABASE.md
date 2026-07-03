@@ -1,10 +1,10 @@
 # Database — PostgreSQL & Redis
 
-PostgreSQL is the **system of record**; Redis is a disposable cache, session
-store, and job queue. Data access rules are part of the contract
+PostgreSQL is the **system of record** — and the job queue (ADR 0002); Redis is
+a disposable cache, session store, and rate limiter. Data access rules are part of the contract
 ([`../CLAUDE.md`](../CLAUDE.md)); this is the deep dive.
 
-**Stack:** PostgreSQL 16 · Bun ORM (`uptrace/bun`) · Redis 7.
+**Stack:** PostgreSQL 16 · Bun ORM (`uptrace/bun`) · Redis 8.
 
 ---
 
@@ -56,13 +56,27 @@ CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id    UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,                          -- NULL for OAuth-only users (ADR 0005)
     role          TEXT NOT NULL DEFAULT 'customer'
                   CHECK (role IN ('customer','admin')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_users_account_id ON users(account_id);
+
+-- user_identities: linked OAuth logins (Google, GitHub — ADR 0005).
+-- A user may have several; password + socials coexist on one user.
+CREATE TABLE user_identities (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider         TEXT NOT NULL CHECK (provider IN ('google','github')),
+    provider_user_id TEXT NOT NULL,              -- provider's stable subject/id
+    email            TEXT,                       -- email as reported by the provider
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (provider, provider_user_id)
+);
+CREATE INDEX idx_user_identities_user_id ON user_identities(user_id);
 
 -- nodes: hosting servers running Hestia
 CREATE TABLE nodes (

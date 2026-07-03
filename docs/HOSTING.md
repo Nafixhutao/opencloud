@@ -45,7 +45,7 @@ type Provisioner interface {
     CreateSite(ctx context.Context, node model.Node, spec SiteSpec) error
     DeleteSite(ctx context.Context, node model.Node, domain string) error
     CreateDatabase(ctx context.Context, node model.Node, spec DBSpec) error
-    CreateDNSZone(ctx context.Context, node model.Node, zone string) error
+    CreateDNSZone(ctx context.Context, zone string) error // Cloudflare API, not a node (ADR 0003)
     IssueCertificate(ctx context.Context, node model.Node, domain string) error
 }
 ```

@@ -245,6 +245,7 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 |---|---|---|
 | `golang-jwt/jwt/v5` | Access/refresh token signing & parsing | — |
 | `golang.org/x/crypto` | Password hashing (**argon2id**) | Inventing crypto |
+| `golang.org/x/oauth2` | Google/GitHub login flows (ADR 0005) | A second session system |
 | `google/uuid` | Entity + job IDs | — |
 | `prometheus/client_golang` | `/metrics` endpoint, counters/histograms | — |
 | `go-redis/redis_rate` | Rate limiting middleware | Queueing (ADR 0002) |

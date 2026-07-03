@@ -36,6 +36,8 @@ user can register and log in.
 ## Phase 1 — Auth & accounts ⏳
 
 - JWT access + refresh tokens (httpOnly cookies, Redis-backed rotation/revocation)
+- Social login: Google + GitHub OAuth via the backend, issuing the same
+  token pair (ADR 0005)
 - RBAC (`customer`, `admin`) enforced in middleware
 - Account + user management (signup, login, profile, password reset)
 - Admin panel shell with role-gated routes
