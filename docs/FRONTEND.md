@@ -137,6 +137,24 @@ export function NodeBadge({ online, className }: { online: boolean; className?: 
 }
 ```
 
+### Component rollout (per-need, not up front)
+
+shadcn/ui is initialized in **Phase 1** ([`../ROADMAP.md`](../ROADMAP.md)) with the
+first authenticated screen; primitives are added as each need lands
+(`npx shadcn@latest add …`) — never `--all`:
+
+| Phase | `add` | For |
+|---|---|---|
+| **1 Auth** | `button input label card form dialog sonner dropdown-menu avatar badge skeleton` | login/register/profile, app shell, toasts |
+| **2 Provisioning** | `table alert-dialog select tooltip progress sheet` | site/DB lists, async status, destructive delete |
+| **3 Domains/DNS/SSL** | `alert accordion switch` | cert/DNS status, DNS records |
+| **4 Email/FTP/cron** | `checkbox tabs` | account toggles |
+| **5 Billing** | `chart` | usage charts, invoices |
+
+`Form` wires react-hook-form + zod via `@hookform/resolvers/zod` — one pattern for
+every form (§6); the backend always re-validates. GSAP stays landing-only —
+dashboard motion is Tailwind + `tailwindcss-animate` (§5), not a second lib.
+
 ## 6. Forms & validation
 
 - Forms use **react-hook-form + zod** through the shadcn/ui `Form` primitives —

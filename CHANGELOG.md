@@ -29,6 +29,8 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   preset, verified compatible with Next 16 + React 19 via Context7) — with the
   first authenticated screen, primitives added per-need, not up front. Reaffirms
   GSAP stays landing-only (none in `app/(dashboard)`/`app/(admin)`).
+  `docs/FRONTEND.md §5` adds the per-phase shadcn component rollout table
+  (which primitives `add` in which phase).
 
 ### Added
 - ADR 0005: **social login (Google & GitHub)** alongside password auth — OAuth
