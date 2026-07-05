@@ -25,6 +25,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 - Planned Redis version bumped **7 → 8** (`docs/DATABASE.md`,
   `docs/INFRASTRUCTURE.md`) — current supported series, tri-licensed incl.
   AGPLv3; the cache/session/rate-limit usage is unchanged.
+- `ROADMAP.md` Phase 1 now records **when shadcn/ui is initialized** (Tailwind v4
+  preset, verified compatible with Next 16 + React 19 via Context7) — with the
+  first authenticated screen, primitives added per-need, not up front. Reaffirms
+  GSAP stays landing-only (none in `app/(dashboard)`/`app/(admin)`).
 
 ### Added
 - ADR 0005: **social login (Google & GitHub)** alongside password auth — OAuth

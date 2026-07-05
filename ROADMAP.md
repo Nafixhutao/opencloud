@@ -35,6 +35,11 @@ user can register and log in.
 
 ## Phase 1 — Auth & accounts ⏳
 
+- **shadcn/ui initialized** (Tailwind v4 preset — blank `tailwind.config`,
+  `cssVariables: true`; verified compatible with Next 16 + React 19) as the
+  dashboard component baseline. The login/register screen is its first consumer;
+  primitives are added per-need (`button input card form dialog` first), not all
+  at once. Landing stays GSAP-only — no GSAP in `app/(dashboard)`/`app/(admin)`.
 - JWT access + refresh tokens (httpOnly cookies, Redis-backed rotation/revocation)
 - Social login: Google + GitHub OAuth via the backend, issuing the same
   token pair (ADR 0005)
