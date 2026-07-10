@@ -5,7 +5,9 @@ self-service UI and the operator admin panel. Contract: [`../CLAUDE.md`](../CLAU
 Design and UX rules: [`UI_GUIDELINES.md`](UI_GUIDELINES.md).
 
 **Stack:** Next.js (App Router) · React 19 · TypeScript (strict) · Tailwind CSS ·
-shadcn/ui · Lucide React · GSAP (`@gsap/react`) · Geist fonts via `@fontsource`.
+shadcn/ui (dashboard/admin) · Astryx + StyleX (marketing — [ADR 0007](adr/0007-astryx-alongside-shadcn.md)) ·
+Lucide React · GSAP (`@gsap/react`) · Geist fonts via `@fontsource`.
+**Auth:** better-auth in the BFF ([ADR 0006](adr/0006-better-auth-identity-provider.md)).
 
 **Approved for the dashboard phase** (add when the need lands, not before):
 **TanStack Query** (server state + job-status polling) · **react-hook-form + zod**
@@ -76,9 +78,10 @@ export default async function SitesPage() {
   Components never call `fetch` directly.
 - The Next.js server (route handlers + server components) is the **BFF**: it holds
   the JWT in an httpOnly cookie and attaches it to backend calls. Tokens never
-  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#tokens). (One sanctioned
-  exception: OAuth social-login buttons are a top-level redirect, not a fetch —
-  [ADR 0005](adr/0005-oauth-social-login.md#frontend--ux).)
+  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#tokens). (Auth is the
+  exception: sign-in/session go through the **better-auth** client, not
+  `lib/api-client.ts` — better-auth is mounted at `app/api/auth/[...all]/route.ts`
+  and owns the flow — [ADR 0006](adr/0006-better-auth-identity-provider.md).)
 - Mutations from client components call a route handler under `app/api/…`, which
   forwards to the backend with the session token. Route handlers contain **no
   business logic** — they are a thin secure proxy.
@@ -112,8 +115,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 ## 5. Components & styling
 
-- **shadcn/ui** is the component baseline. Compose its primitives in
-  `components/ui/`. Don't add a second component library.
+- **shadcn/ui** is the component baseline **for `app/(dashboard)` and
+  `app/(admin)`**. Compose its primitives in `components/ui/`. The **marketing**
+  surface uses **Astryx** instead ([ADR 0007](adr/0007-astryx-alongside-shadcn.md));
+  never mix the two within one route group.
 - Generated primitives may be edited, but keep the shadcn structure so upstream
   updates stay mergeable.
 - **Tailwind only.** No CSS-in-JS, no ad-hoc stylesheets beyond `globals.css`.
@@ -153,7 +158,9 @@ first authenticated screen; primitives are added as each need lands
 
 `Form` wires react-hook-form + zod via `@hookform/resolvers/zod` — one pattern for
 every form (§6); the backend always re-validates. GSAP stays landing-only —
-dashboard motion is Tailwind + `tailwindcss-animate` (§5), not a second lib.
+dashboard motion is Tailwind + `tailwindcss-animate` (§5), not a second lib. The
+table above is the **dashboard/admin** (shadcn) surface; `app/(marketing)` uses
+**Astryx** components/templates instead ([ADR 0007](adr/0007-astryx-alongside-shadcn.md)).
 
 ## 6. Forms & validation
 

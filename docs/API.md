@@ -98,7 +98,7 @@ Base URL: `/api/v1` · Format: JSON · Auth: JWT (see [`SECURITY.md`](SECURITY.m
 
 - Send the access token as `Authorization: Bearer <jwt>`. The dashboard does this
   server-side from an httpOnly cookie — tokens never live in client JS.
-- `401` → refresh via `/auth/refresh`; on refresh failure, re-authenticate.
+- `401` → the BFF refreshes the session via better-auth; on failure, re-authenticate.
 - Authorization (RBAC) is enforced server-side; hiding a button in the UI is not
   security. Full model: [`SECURITY.md`](SECURITY.md).
 
@@ -136,15 +136,12 @@ Endpoints are added as features ship ([`../ROADMAP.md`](../ROADMAP.md)). The set
 below shows the intended shape and naming.
 
 ### Auth
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/auth/register` | create account + first user |
-| `POST` | `/auth/login` | issue access + refresh tokens |
-| `GET`  | `/auth/oauth/{provider}` | start Google/GitHub OAuth flow (redirect, `state` CSRF param — ADR 0005) |
-| `GET`  | `/auth/oauth/{provider}/callback` | exchange code → issue the same access + refresh tokens |
-| `POST` | `/auth/refresh` | rotate tokens |
-| `POST` | `/auth/logout` | revoke refresh token |
-| `GET`  | `/auth/me` | current user + account |
+
+Auth is served by **better-auth** in the Next.js BFF under **`/api/auth/*`** —
+**not** this Go API ([ADR 0006](adr/0006-better-auth-identity-provider.md)): it
+owns sign-up, sign-in, social login, session, logout, and the JWT/JWKS endpoints.
+The Go API exposes **no** auth endpoints; every route below requires a valid
+better-auth JWT, and the current user/tenant is read from its claims.
 
 ### Sites
 | Method | Path | Purpose |

@@ -24,7 +24,8 @@ Stand up the skeleton everything else hangs off.
 - ✅ Frontend migration to Next.js App Router; legacy Vite artifacts removed
 - ⏳ Go backend scaffold: `cmd/api`, `cmd/worker`, layered packages, config (Viper), logging (Zap)
 - ⏳ PostgreSQL + Redis wired via Docker Compose
-- ⏳ Bun migration tooling + initial schema (`accounts`, `users`)
+- ⏳ Bun migration tooling + initial domain schema (`public.accounts`, …); identity
+  tables (`auth.*`) are owned by better-auth's migrations, not Bun (ADR 0006)
 - ⏳ Health/readiness endpoints + Prometheus metrics endpoint
 - ⏳ Hestia integration spike (local VM): validate API auth/key-scoping and
   idempotency assumptions (ADR 0001) before Phase 2 builds on them
@@ -40,9 +41,12 @@ user can register and log in.
   dashboard component baseline. The login/register screen is its first consumer;
   primitives are added per-need (`button input card form dialog` first), not all
   at once. Landing stays GSAP-only — no GSAP in `app/(dashboard)`/`app/(admin)`.
-- JWT access + refresh tokens (httpOnly cookies, Redis-backed rotation/revocation)
-- Social login: Google + GitHub OAuth via the backend, issuing the same
-  token pair (ADR 0005)
+  The **marketing** surface adopts **Astryx** when reworked (ADR 0007); one
+  component system per route group.
+- **better-auth** owns sessions + JWT (httpOnly cookies, JWKS); the Go backend
+  validates JWTs and issues none (ADR 0006)
+- Social login (Google + GitHub) + email/password via better-auth
+  (ADR 0006 — supersedes ADR 0005)
 - RBAC (`customer`, `admin`) enforced in middleware
 - Account + user management (signup, login, profile, password reset)
 - Admin panel shell with role-gated routes

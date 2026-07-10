@@ -23,9 +23,10 @@ Full context: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) �
 ## 2. Tech stack (authoritative)
 
 - **Backend:** Go · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap
-  — approved libs: `golang-jwt/jwt/v5` · `x/crypto` (argon2id) · `google/uuid` · `prometheus/client_golang` · `go-redis/redis_rate` · `testify` (tests). Full list: [`docs/BACKEND.md`](docs/BACKEND.md#13-approved-dependencies)
-- **Frontend:** Next.js (App Router) · React · TypeScript · Tailwind CSS · shadcn/ui · Lucide React · GSAP (marketing animations only)
+  — approved libs: `golang-jwt/jwt/v5` (validate better-auth JWTs — ADR 0006) · `google/uuid` · `prometheus/client_golang` · `go-redis/redis_rate` · `testify` (tests). Full list: [`docs/BACKEND.md`](docs/BACKEND.md#13-approved-dependencies)
+- **Frontend:** Next.js (App Router) · React · TypeScript · Tailwind CSS · shadcn/ui (dashboard/admin) · Astryx + StyleX (marketing — ADR 0007) · Lucide React · GSAP (marketing animations only)
   — approved libs (dashboard phase): TanStack Query · TanStack Table · react-hook-form + zod · Recharts · Vitest + Testing Library (tests)
+- **Auth:** better-auth in the Next.js BFF (identity provider — ADR 0006); the Go backend validates its JWTs via JWKS and issues none.
 - **Hosting:** Hestia · Nginx · Apache · PHP-FPM · MariaDB · Certbot · Cloudflare (DNS + Tunnel — ADR 0003) · BIND9 (fallback only)
 - **Platform:** Docker · Docker Compose · Prometheus · Grafana · Fail2ban · UFW
 
@@ -109,7 +110,7 @@ handler (Gin) → service (logic, transactions) → repository (Bun) → Postgre
 - ❌ Floats for money; non-UTC timestamps; magic numbers.
 - ❌ Editing a shipped migration instead of adding a new one.
 - ❌ Long-running work synchronously inside an HTTP handler.
-- ❌ A second component/styling library alongside shadcn/ui + Tailwind.
+- ❌ Mixing component libraries **within a route group** — shadcn/ui owns `(dashboard)`/`(admin)`, Astryx owns `(marketing)` (ADR 0007); never both on one screen.
 - ❌ Leaking stack traces, SQL, or Hestia output to API clients.
 - ❌ Committing/pushing without the human's go-ahead; committing straight to `main`.
 
