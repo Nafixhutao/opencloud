@@ -25,9 +25,31 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 - Planned Redis version bumped **7 → 8** (`docs/DATABASE.md`,
   `docs/INFRASTRUCTURE.md`) — current supported series, tri-licensed incl.
   AGPLv3; the cache/session/rate-limit usage is unchanged.
+- `ROADMAP.md` Phase 1 now records **when shadcn/ui is initialized** (Tailwind v4
+  preset, verified compatible with Next 16 + React 19 via Context7) — with the
+  first authenticated screen, primitives added per-need, not up front. Reaffirms
+  GSAP stays landing-only (none in `app/(dashboard)`/`app/(admin)`).
+  `docs/FRONTEND.md §5` adds the per-phase shadcn component rollout table
+  (which primitives `add` in which phase).
 
 ### Added
-- ADR 0005: **social login (Google & GitHub)** alongside password auth — OAuth
+- ADR 0006: **better-auth is the identity provider** (supersedes ADR 0005) — auth
+  moves from the Go backend into the Next.js BFF. better-auth owns email/password
+  + Google/GitHub social + sessions and four `auth.*` tables (`user`, `session`,
+  `account`, `verification`, on its own migrations); its `jwt` plugin issues JWTs
+  via a JWKS endpoint, and the **Go backend becomes a resource server** that only
+  validates them. Drops the 0005 plan (`x/oauth2`, argon2id passwords,
+  `user_identities`, Go token issuance). Docs updated: `ARCHITECTURE.md`,
+  `CLAUDE.md`, `docs/SECURITY.md`, `docs/BACKEND.md`, `docs/API.md`,
+  `docs/DATABASE.md`, `docs/FRONTEND.md`, `ROADMAP.md`.
+- ADR 0007: **Astryx (React + StyleX) alongside shadcn/ui**, split by route group —
+  Astryx owns `app/(marketing)`, shadcn/ui owns `app/(dashboard)`/`app/(admin)`;
+  they coexist via CSS layers but never share a screen. Relaxes the "single
+  component library / no CSS-in-JS" rule to a per-route-group boundary. Docs
+  updated: `CLAUDE.md` (§2, §6), `docs/FRONTEND.md`, `docs/UI_GUIDELINES.md`,
+  `ROADMAP.md`.
+- ADR 0005: **social login (Google & GitHub)** alongside password auth
+  (**superseded by ADR 0006**) — OAuth
   authorization-code flow handled by the Go backend, which issues the same
   JWT/refresh pair; identities in a new `user_identities` table,
   `users.password_hash` now nullable. `golang.org/x/oauth2` added to approved

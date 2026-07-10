@@ -84,7 +84,7 @@ type Config struct {
     HTTPAddr   string `mapstructure:"HTTP_ADDR"`
     DatabaseURL string `mapstructure:"DATABASE_URL"`
     RedisURL   string `mapstructure:"REDIS_URL"`
-    JWTSecret  string `mapstructure:"JWT_SECRET"`
+    AuthJWKSURL string `mapstructure:"AUTH_JWKS_URL"`   // better-auth JWKS — validate JWTs (ADR 0006)
     Hestia     HestiaConfig
     LogLevel   string `mapstructure:"LOG_LEVEL"`
 }
@@ -243,9 +243,7 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 
 | Library | Use for | Not for |
 |---|---|---|
-| `golang-jwt/jwt/v5` | Access/refresh token signing & parsing | — |
-| `golang.org/x/crypto` | Password hashing (**argon2id**) | Inventing crypto |
-| `golang.org/x/oauth2` | Google/GitHub login flows (ADR 0005) | A second session system |
+| `golang-jwt/jwt/v5` (+ JWKS) | Validate better-auth JWTs; the backend issues no tokens (ADR 0006) | — |
 | `google/uuid` | Entity + job IDs | — |
 | `prometheus/client_golang` | `/metrics` endpoint, counters/histograms | — |
 | `go-redis/redis_rate` | Rate limiting middleware | Queueing (ADR 0002) |

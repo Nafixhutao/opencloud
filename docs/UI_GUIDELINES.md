@@ -4,7 +4,7 @@ Design and interaction rules for the OpenCloud dashboard and admin panel. The
 implementation stack and component conventions are in [`FRONTEND.md`](FRONTEND.md);
 this is about how the product should look and behave.
 
-**Stack:** Tailwind CSS · shadcn/ui · Lucide React.
+**Stack:** Tailwind CSS · shadcn/ui (dashboard/admin) · Astryx (marketing — [ADR 0007](adr/0007-astryx-alongside-shadcn.md)) · Lucide React.
 
 ---
 
@@ -24,8 +24,9 @@ this is about how the product should look and behave.
 
 ## 2. Consistency & design tokens
 
-- Use **shadcn/ui** primitives as the baseline; compose, don't reinvent. No second
-  component library.
+- Use **shadcn/ui** primitives as the baseline in the dashboard/admin; the
+  marketing surface uses **Astryx** ([ADR 0007](adr/0007-astryx-alongside-shadcn.md)).
+  One system per route group — never mix them on a screen.
 - One spacing scale, one type scale, one color palette — defined in the Tailwind
   config and used via tokens, not ad-hoc values.
 - **Lucide React** is the only icon set; consistent sizes (`size-4`/`size-5`) and

@@ -21,19 +21,19 @@ rules are not optional and are never "simplified away" (see [`../CLAUDE.md`](../
 
 ## 2. Authentication
 
-- **JWT access tokens**, short-lived (~15 min), carrying `sub`, `account_id`,
-  `role`, `exp`. Verified by `middleware/auth` on every protected route.
-- **Refresh tokens**, long-lived, **rotated** on each use, stored server-side in
-  Redis so they can be revoked. Reuse of a revoked token revokes the whole chain.
-- **Passwords** hashed with **argon2id** (`golang.org/x/crypto` — see
-  [`BACKEND.md`](BACKEND.md#13-approved-dependencies); never plaintext, never
-  reversible).
-- **Social login (Google, GitHub)** via the OAuth authorization-code flow,
-  handled by the backend, which then issues the same JWT/refresh pair — one
-  session model for all login methods. `state` parameter is mandatory (CSRF);
-  auto-linking to an existing user only on a **provider-verified** email.
-  Details: [ADR 0005](adr/0005-oauth-social-login.md). Enforce a sensible minimum policy; throttle and lock on repeated
-  failures.
+Authentication is owned by **better-auth** in the Next.js BFF, not the Go backend
+([ADR 0006](adr/0006-better-auth-identity-provider.md)).
+
+- **better-auth** handles email/password, Google/GitHub social login, sessions,
+  and email verification. Passwords are hashed by better-auth (scrypt default);
+  the Go backend holds **no** password or OAuth code. `state`/PKCE and
+  provider-verified-email auto-linking are better-auth's.
+- **JWT** is issued by better-auth's `jwt` plugin — asymmetric, exposed at a
+  **JWKS** endpoint — carrying `sub` plus custom claims (`account_id`, `role`).
+  The Go backend is a **resource server**: `middleware/auth` validates the JWT
+  against the cached JWKS on every protected route; it **issues no tokens**.
+- **Sessions** (rotation and revocation) live in better-auth (`auth.session`),
+  short-lived by config.
 - **Sensitive actions** (delete account, change billing, role change) require
   re-authentication or 2FA where configured.
 

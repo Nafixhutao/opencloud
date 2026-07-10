@@ -1,6 +1,8 @@
 # ADR 0005: Social login (Google & GitHub) alongside password auth
 
-- **Status:** Accepted
+- **Status:** **Superseded by [ADR 0006](0006-better-auth-identity-provider.md)**
+  (2026-07-05) — auth moved from the Go backend to better-auth in the Next.js
+  BFF. The record below is kept for history; do not implement it.
 - **Date:** 2026-07-03
 - **Deciders:** Core team
 

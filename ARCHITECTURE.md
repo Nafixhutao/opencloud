@@ -104,7 +104,7 @@ recovery, rate-limit) and **config** (Viper, loaded once at startup). Details:
 
 ```
 GET /api/v1/sites
- → middleware: recover → request-id → log → rate-limit → authenticate (JWT) → authorize
+ → middleware: recover → request-id → log → rate-limit → authenticate (validate better-auth JWT — ADR 0006) → authorize
  → handler: parse query params
  → service: SiteService.List(ctx, accountID, filters)
  → repository: SELECT … WHERE account_id = $1   (scoped, indexed, paginated)
@@ -137,7 +137,8 @@ service rolls back or marks `failed` — never leaves orphaned state). See
 PostgreSQL is the **system of record** (and the job queue); Redis is a disposable cache.
 
 - `accounts` — the tenant boundary. Every customer-owned row carries `account_id`.
-- `users` — belong to an account; carry a `role` (`customer`, `admin`).
+- `auth.user` — identity (email, `role`), owned by **better-auth** in the `auth`
+  schema, not a Bun-managed table ([ADR 0006](docs/adr/0006-better-auth-identity-provider.md)).
 - `plans` / `subscriptions` — what a customer is entitled to.
 - `nodes` — hosting servers running Hestia.
 - `sites`, `domains`, `databases`, `mailboxes`, `dns_zones`, `certificates` —
@@ -189,7 +190,7 @@ Isolation is the platform's #1 invariant, enforced at three layers:
 | **PostgreSQL** | Strong constraints + transactions for the system of record — and the job queue (`SKIP LOCKED`), so enqueueing is transactional with the write that triggers it. |
 | **Redis** | Cache, sessions, and rate limiting. |
 | **Viper/Zap** | Standard, structured config + logging. |
-| **Next.js** | SSR dashboard + BFF for secure token handling. |
+| **Next.js** | SSR dashboard + BFF; hosts **better-auth** (identity provider — ADR 0006), holds the JWT in an httpOnly cookie. |
 | **shadcn/ui + Tailwind** | Own the components; no heavyweight UI dependency. |
 | **Hestia** | Proven multi-tenant hosting stack we orchestrate, not rebuild. |
 | **Cloudflare** | Free authoritative DNS (zones via API) + Tunnel ingress — self-hosted nodes reachable behind CGNAT, DDoS/WAF at the edge ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)). |

@@ -51,32 +51,13 @@ CREATE TABLE accounts (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- users: belong to an account, carry a role
-CREATE TABLE users (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id    UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT,                          -- NULL for OAuth-only users (ADR 0005)
-    role          TEXT NOT NULL DEFAULT 'customer'
-                  CHECK (role IN ('customer','admin')),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_users_account_id ON users(account_id);
-
--- user_identities: linked OAuth logins (Google, GitHub — ADR 0005).
--- A user may have several; password + socials coexist on one user.
-CREATE TABLE user_identities (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    provider         TEXT NOT NULL CHECK (provider IN ('google','github')),
-    provider_user_id TEXT NOT NULL,              -- provider's stable subject/id
-    email            TEXT,                       -- email as reported by the provider
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (provider, provider_user_id)
-);
-CREATE INDEX idx_user_identities_user_id ON user_identities(user_id);
+-- Identity (users, sessions, OAuth links, email verification) is owned by
+-- **better-auth** in a separate `auth` schema — `auth.user`, `auth.session`,
+-- `auth.account`, `auth.verification` — managed by better-auth's own migrations,
+-- NOT Bun (ADR 0006). Bun owns only the `public.*` domain tables here. `role`
+-- lives on `auth.user`; the tenant boundary stays `public.accounts`. Domain rows
+-- reference `auth.user.id` by id (no cross-schema FK). Note: better-auth's
+-- `auth.account` (a provider credential link) is not the tenant `public.accounts`.
 
 -- nodes: hosting servers running Hestia
 CREATE TABLE nodes (
@@ -128,7 +109,7 @@ CREATE INDEX idx_jobs_claim ON jobs(status, run_at);  -- matches the worker's cl
 CREATE TABLE audit_logs (
     id          BIGSERIAL PRIMARY KEY,
     account_id  UUID REFERENCES accounts(id) ON DELETE SET NULL,
-    actor_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+    actor_id    UUID,   -- references auth.user.id (better-auth — ADR 0006); no cross-schema FK
     action      TEXT NOT NULL,
     target      TEXT,
     metadata    JSONB,
