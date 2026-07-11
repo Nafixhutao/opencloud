@@ -100,6 +100,16 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CLAUDE.md`, `docs/BACKEND.md`, `docs/DATABASE.md` (adds `jobs.run_at` +
   claim index), `docs/HOSTING.md`, `ROADMAP.md`.
 
+### Removed
+- Deleted the leftover starter frontend so the dashboard/marketing UI can be
+  rebuilt from a clean, planned base (Astryx + shadcn per ADR 0006/0007): removed
+  `src/` (a stray "AI gateway" template — `App.tsx`, its components, `index.css`,
+  `assets/`), the `app/page.tsx`/`app/layout.tsx` entry that imported it, and the
+  OpenCloud logo + template icon assets under `public/` (`logo*.png/svg`,
+  `favicon.svg`, `icons.svg`). Kept the partner brand SVGs in `public/brands/` and
+  the frontend toolchain (`package.json`, `next.config.ts`, `tsconfig.json`,
+  `postcss`, oxlint). The frontend does not build until it is rebuilt — intended.
+
 ### Changed
 - GSAP (`@gsap/react`) and Geist fonts (`@fontsource`) — already in use by the
   landing page — are now part of the documented frontend stack (GSAP scoped to
