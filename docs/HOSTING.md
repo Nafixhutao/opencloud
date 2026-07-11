@@ -50,6 +50,30 @@ type Provisioner interface {
 }
 ```
 
+```go
+// SiteSpec / DBSpec are the inputs a provisioner call carries. All customer-supplied
+// fields are allowlist-validated (SECURITY.md §5) before they reach a node.
+type SiteSpec struct {
+    Domain     string // FQDN, allowlist-validated
+    HestiaUser string // owning account's Hestia/Linux user — owns the vhost + PHP-FPM pool
+    PHPVersion string // e.g. "8.3"; empty = node default
+    DocRoot    string // document-root subpath; empty = Hestia default (public_html)
+}
+
+type DBSpec struct {
+    HestiaUser string // owning account's Hestia user
+    Name       string // database name, prefix-scoped per Hestia convention
+    DBUser     string // database user to create
+    // password is provisioner-generated, returned to the customer once, never
+    // stored in plaintext (SECURITY.md §13)
+}
+```
+
+The `HestiaUser` (per-account Linux user on the node) is the one field not yet in the
+schema — where the account→Hestia-user mapping is stored or derived is settled in the
+**Phase 2 Hestia spike** ([`../ROADMAP.md`](../ROADMAP.md)) before provisioning is built,
+flagged here rather than committing a column prematurely.
+
 ## 3. Node topology
 
 ```

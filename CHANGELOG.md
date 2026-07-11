@@ -33,6 +33,11 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   (which primitives `add` in which phase).
 
 ### Added
+- `docs/HOSTING.md` now defines the `SiteSpec`/`DBSpec` provisioner inputs that the
+  `Provisioner` interface already referenced, closing a blueprint gap flagged in a
+  docs audit. Flags `SiteSpec.HestiaUser` (account→Hestia-user mapping) as the one
+  field still to be settled in the Phase 2 Hestia spike rather than adding a schema
+  column prematurely.
 - ADR 0006: **better-auth is the identity provider** (supersedes ADR 0005) — auth
   moves from the Go backend into the Next.js BFF. better-auth owns email/password
   + Google/GitHub social + sessions and four `auth.*` tables (`user`, `session`,
