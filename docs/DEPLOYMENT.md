@@ -104,9 +104,11 @@ curl -fsS localhost:8080/readyz       # readiness gate
 
 - Production secrets come from the orchestrator's secret store, injected as env
   vars — never baked into images or committed.
-- Changing a secret (e.g. rotating `JWT_SECRET`) is a deliberate, documented
-  operation; rotating the JWT signing key invalidates active access tokens
-  (clients refresh).
+- Changing a secret is a deliberate, documented operation. The JWT signing key
+  lives in **better-auth** (BFF), not the Go API (ADR 0006): rotating
+  `BETTER_AUTH_SECRET` invalidates active sessions/tokens (clients re-authenticate),
+  and the Go API picks up the new signing key automatically from the JWKS at
+  `AUTH_JWKS_URL` — no API secret to rotate for auth.
 
 ## 10. Post-deploy verification
 

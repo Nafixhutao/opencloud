@@ -26,7 +26,7 @@ docker-compose.yml
 ├── frontend     # Next.js (port 3000)
 ├── api          # Go API (port 8080)        depends_on: postgres, redis
 ├── worker       # Go job worker             depends_on: postgres, redis
-├── postgres     # PostgreSQL 16 (volume: pgdata)
+├── postgres     # PostgreSQL 18 (volume: pgdata)
 ├── redis        # Redis 8 (volume: redisdata)
 ├── prometheus   # scrapes api /metrics + node exporters (port 9090)
 └── grafana      # dashboards (port 3001)    depends_on: prometheus
@@ -54,13 +54,13 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 |---|---|---|
 | `ENV` | all | `development` / `staging` / `production` |
 | `HTTP_ADDR` | api | listen address, e.g. `:8080` |
-| `DATABASE_URL` | api, worker | PostgreSQL DSN |
+| `DATABASE_URL` | api, worker, frontend | PostgreSQL DSN (BFF reuses it for better-auth's `auth.*` tables — ADR 0006) |
 | `REDIS_URL` | api, worker | Redis connection |
-| `JWT_SECRET` | api | access-token signing key |
-| `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | api | token lifetimes |
-| `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | api | Google login (ADR 0005) |
-| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | api | GitHub login (ADR 0005) |
-| `OAUTH_REDIRECT_BASE_URL` | api | public base URL for OAuth callbacks |
+| `AUTH_JWKS_URL` | api | better-auth JWKS endpoint the API validates JWTs against; issues none (ADR 0006) |
+| `BETTER_AUTH_SECRET` | frontend | better-auth encryption/hashing key (≥32 chars) — ADR 0006 |
+| `BETTER_AUTH_URL` | frontend | better-auth base URL (BFF origin) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | frontend | GitHub social login via better-auth (ADR 0006) |
 | `HESTIA_API_URL` | api, worker | hosting node API base |
 | `HESTIA_API_KEY` | api, worker | node API credential |
 | `LOG_LEVEL` | all | `debug`/`info`/`warn`/`error` |

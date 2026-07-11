@@ -4,7 +4,7 @@ PostgreSQL is the **system of record** — and the job queue (ADR 0002); Redis i
 a disposable cache, session store, and rate limiter. Data access rules are part of the contract
 ([`../CLAUDE.md`](../CLAUDE.md)); this is the deep dive.
 
-**Stack:** PostgreSQL 16 · Bun ORM (`uptrace/bun`) · Redis 8.
+**Stack:** PostgreSQL 18 · Bun ORM (`uptrace/bun`) · Redis 8.
 
 ---
 
