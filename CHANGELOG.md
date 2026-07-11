@@ -13,7 +13,22 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 
 ## [Unreleased]
 
+### Added
+- `docs/BACKEND.md` §13 names the concrete **JWKS fetcher** the resource-server
+  auth path needs: `MicahParks/keyfunc/v3` (auto-refreshing JWK Set client) supplies
+  the `jwt.Keyfunc` that `golang-jwt/jwt/v5` uses to verify better-auth's JWTs — the
+  `+ JWKS` in the earlier entry was left unnamed (ADR 0006). Library choice verified
+  via Context7: `keyfunc/v3` is the golang-jwt-native JWK Set wrapper.
+
 ### Fixed
+- Config layer brought in line with **ADR 0006** (better-auth), which the earlier
+  update missed: `.env.example`, `docs/INFRASTRUCTURE.md` §3, and
+  `docs/DEPLOYMENT.md` §9 dropped the superseded Go-owned auth vars
+  (`JWT_SECRET`, `JWT_ACCESS_TTL/REFRESH_TTL`, `OAUTH_*`, the
+  `/api/v1/auth/oauth/{provider}/callback` URL) and now describe the resource-server
+  split — the Go API validates JWTs via `AUTH_JWKS_URL`; better-auth in the BFF owns
+  `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` and the `GOOGLE_/GITHUB_CLIENT_*` social
+  credentials. Env names verified against better-auth's official docs.
 - Doc consistency with accepted ADRs: `docs/DATABASE.md` intro no longer lists
   Redis as a job queue (the queue is the Postgres `jobs` table — ADR 0002);
   `docs/SECURITY.md` names argon2id as the password hash (matching
@@ -22,6 +37,12 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Changed
+- Version pins refreshed to current stable (greenfield — verified this cycle):
+  **PostgreSQL 16 → 18** (`docs/DATABASE.md`, `docs/INFRASTRUCTURE.md`; 18.4 is the
+  current series, 16 still supported but a new project should start on 18) and the
+  **Go floor 1.22 → 1.25** (`docs/BACKEND.md`, `README.md`; 1.25/1.26 are the
+  maintained releases). Redis 8, React 19, Next.js 16, and Tailwind v4 were already
+  current and unchanged.
 - Planned Redis version bumped **7 → 8** (`docs/DATABASE.md`,
   `docs/INFRASTRUCTURE.md`) — current supported series, tri-licensed incl.
   AGPLv3; the cache/session/rate-limit usage is unchanged.

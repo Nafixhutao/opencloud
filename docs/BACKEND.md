@@ -4,7 +4,7 @@ The OpenCloud backend is a Go service that acts as the **system of record** and
 orchestrates Hestia nodes. This document is the deep dive; the contract lives in
 [`../CLAUDE.md`](../CLAUDE.md) and the system map in [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
-**Stack:** Go 1.22+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
+**Stack:** Go 1.25+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
 
 ---
 
@@ -243,7 +243,8 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 
 | Library | Use for | Not for |
 |---|---|---|
-| `golang-jwt/jwt/v5` (+ JWKS) | Validate better-auth JWTs; the backend issues no tokens (ADR 0006) | — |
+| `golang-jwt/jwt/v5` | Verify better-auth JWT signature/claims; the backend issues no tokens (ADR 0006) | Fetching JWKS (it only takes a `Keyfunc`) |
+| `MicahParks/keyfunc/v3` | Supplies the `jwt.Keyfunc` from better-auth's JWKS — auto-refreshing HTTP client + cache (ADR 0006) | — |
 | `google/uuid` | Entity + job IDs | — |
 | `prometheus/client_golang` | `/metrics` endpoint, counters/histograms | — |
 | `go-redis/redis_rate` | Rate limiting middleware | Queueing (ADR 0002) |

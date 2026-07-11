@@ -81,7 +81,7 @@ opencloud/
 ### Prerequisites
 
 - **Docker** 24+ and **Docker Compose** v2
-- **Go** 1.22+ (for backend dev outside Docker)
+- **Go** 1.25+ (for backend dev outside Docker)
 - **Node.js** 20+ and **npm** (for frontend dev)
 - A Linux host running **Hestia Control Panel** for real provisioning
   (optional for UI/backend dev — the provisioner can run against a fake)
@@ -129,7 +129,8 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | Redis connection string |
-| `JWT_SECRET` | Signing key for access tokens |
+| `AUTH_JWKS_URL` | better-auth JWKS the API validates JWTs against (issues none — ADR 0006) |
+| `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | better-auth (BFF) identity provider config |
 | `HESTIA_API_URL` / `HESTIA_API_KEY` | Hosting node access |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
 
