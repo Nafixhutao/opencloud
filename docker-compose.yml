@@ -19,7 +19,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18+ stores data in version-specific subdirs; the mount goes at
+      # /var/lib/postgresql (not /var/lib/postgresql/data — that errors on 18+).
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U opencloud -d opencloud"]
       interval: 5s
