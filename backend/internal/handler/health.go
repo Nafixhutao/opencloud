@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/uptrace/bun"
+	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/cache"
 	"github.com/nazxf/opencloud/backend/internal/database"
@@ -22,12 +23,13 @@ var errNotConfigured = errors.New("not configured")
 type Health struct {
 	db  *bun.DB
 	rdb *redis.Client
+	log *zap.Logger
 }
 
 // NewHealth builds the health handler. rdb/db may be nil in tests that only
 // exercise liveness.
-func NewHealth(db *bun.DB, rdb *redis.Client) *Health {
-	return &Health{db: db, rdb: rdb}
+func NewHealth(db *bun.DB, rdb *redis.Client, log *zap.Logger) *Health {
+	return &Health{db: db, rdb: rdb, log: log}
 }
 
 // Live handles GET /healthz — the process is up. Always 200.
@@ -43,14 +45,16 @@ func (h *Health) Ready(c *gin.Context) {
 	ok := true
 
 	if err := checkDB(c.Request.Context(), h.db); err != nil {
-		checks["postgres"] = err.Error()
+		h.log.Warn("readiness check failed", zap.String("dependency", "postgres"), zap.Error(err))
+		checks["postgres"] = "error"
 		ok = false
 	} else {
 		checks["postgres"] = "ok"
 	}
 
 	if err := checkRedis(c.Request.Context(), h.rdb); err != nil {
-		checks["redis"] = err.Error()
+		h.log.Warn("readiness check failed", zap.String("dependency", "redis"), zap.Error(err))
+		checks["redis"] = "error"
 		ok = false
 	} else {
 		checks["redis"] = "ok"

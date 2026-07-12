@@ -95,7 +95,7 @@ Full variable reference: [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md).
 ## 5. HTTP layer (Gin)
 
 - Routes are versioned under `/api/v1` and grouped by domain in `server/`.
-- Middleware order: `recovery → request-id → logger → cors → ratelimit → auth`.
+- Middleware order: `request-id → logger → recovery → cors → ratelimit → auth`.
 - Handlers **bind + validate** request DTOs (`binding` tags), call one service
   method, and map the result to the standard envelope. Nothing else.
 

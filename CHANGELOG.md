@@ -23,7 +23,7 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   fail-fast on missing `DATABASE_URL`/`REDIS_URL`), `logging` (Zap structured
   JSON), `database` (pgx pool + Bun/pgdialect + `InTx` helper), `cache` (go-redis
   v9), `metrics` (Prometheus registry + HTTP instrumentation), `middleware`
-  (recovery → request-id → logger), `handler` (`/healthz`, `/readyz` with
+  (request-id → logger → recovery), `handler` (`/healthz`, `/readyz` with
   Postgres+Redis checks, fail-closed 503), `server` (DI wiring, `/metrics`,
   `/api/v1` group), and `app` (shared bootstrap). Health handler covered by tests.
   Dependencies are all from the approved list in `docs/BACKEND.md` §13 (no new
@@ -42,6 +42,18 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   via Context7: `keyfunc/v3` is the golang-jwt-native JWK Set wrapper.
 
 ### Fixed
+- Restored a minimal Next.js App Router shell so frontend lint, type-check, and
+  production build can run while the full marketing surface is rebuilt.
+- Reordered HTTP middleware so recovered panics are included in request logs and
+  Prometheus 5xx metrics; added regression coverage for the behavior.
+- Readiness responses no longer expose raw PostgreSQL or Redis errors, and the
+  HTTP server now enforces read, write, idle, header-read, and header-size limits.
+- Prometheus HTTP method labels are bounded to standard methods (unknown methods
+  collapse to `OTHER`), and response status labels now match the documented
+  `2xx`/`4xx`/`5xx` class format.
+- Inbound request IDs are length- and character-validated before entering logs.
+- Local Compose ports now bind to loopback instead of every host interface.
+
 - `docs/TESTING.md` §2 auth-testing targets corrected for **ADR 0006**: the Go
   backend tests **JWT validation** (signature, `exp`/`iss`/`aud`, forged/expired
   rejection) + RBAC — not token issue/refresh/rotation or password hashing, which
@@ -60,6 +72,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `docs/BACKEND.md` §13, was "bcrypt or argon2id"); `docs/HOSTING.md`
   provisioner interface drops the vestigial `node` parameter from
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
+
+### Security
+- Forced the vulnerable PostCSS copy nested under Next.js to 8.5.10; `npm audit`
+  now reports zero known production dependency vulnerabilities.
 
 ### Changed
 - Version pins refreshed to current stable (greenfield — verified this cycle):

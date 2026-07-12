@@ -86,7 +86,7 @@ opencloud/
 - A Linux host running **Hestia Control Panel** for real provisioning
   (optional for UI/backend dev — the provisioner can run against a fake)
 
-### Run the full stack (Docker)
+### Run the backend stack (Docker)
 
 ```bash
 git clone <repo-url> opencloud
@@ -95,14 +95,12 @@ cp .env.example .env          # then edit secrets
 docker compose up --build
 ```
 
-Services come up at:
+The current Compose stack starts the API, worker, PostgreSQL, and Redis. The
+frontend and monitoring services are added in later roadmap items.
 
 | Service | URL |
 |---|---|
-| Frontend (dashboard) | http://localhost:3000 |
 | Backend API | http://localhost:8080/api/v1 |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3001 |
 
 ### Run services individually (local dev)
 
@@ -149,7 +147,7 @@ npm run lint                        # oxlint
 npm run build                       # production build
 
 # Stack
-docker compose logs -f backend      # tail a service
+docker compose logs -f api          # tail the API service
 docker compose down                 # stop everything
 ```
 

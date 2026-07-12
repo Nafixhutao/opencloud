@@ -10,9 +10,10 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
 ## Current status
 
-The frontend marketing/landing surface exists on the Next.js App Router at the
-repo root (Vite fully removed). The Go backend, datastores, and provisioning are
-greenfield. We are in **Phase 0 → Phase 1**.
+A minimal frontend shell exists on the Next.js App Router at the repo root (Vite
+fully removed); the marketing and dashboard surfaces are still planned. The Go
+backend scaffold and local datastores are wired, while the domain schema and
+provisioning remain greenfield. We are in **Phase 0 → Phase 1**.
 
 ---
 
@@ -21,15 +22,16 @@ greenfield. We are in **Phase 0 → Phase 1**.
 Stand up the skeleton everything else hangs off.
 
 - ✅ Documentation set + conventions (`CLAUDE.md`, `docs/`)
-- ✅ Frontend migration to Next.js App Router; legacy Vite artifacts removed
-- ⏳ Go backend scaffold: `cmd/api`, `cmd/worker`, layered packages, config (Viper), logging (Zap)
-- ⏳ PostgreSQL + Redis wired via Docker Compose
-- ⏳ Bun migration tooling + initial domain schema (`public.accounts`, …); identity
+- ✅ Minimal Next.js App Router shell; legacy Vite artifacts removed
+- ✅ Go backend scaffold: `cmd/api`, `cmd/worker`, layered packages, config (Viper), logging (Zap)
+- ✅ PostgreSQL + Redis wired via Docker Compose
+- 🚧 Bun migration tooling complete; initial domain schema (`public.accounts`, …) pending. Identity
   tables (`auth.*`) are owned by better-auth's migrations, not Bun (ADR 0006)
-- ⏳ Health/readiness endpoints + Prometheus metrics endpoint
+- ✅ Health/readiness endpoints + Prometheus metrics endpoint
 - ⏳ Hestia integration spike (local VM): validate API auth/key-scoping and
   idempotency assumptions (ADR 0001) before Phase 2 builds on them
-- 🚧 CI: frontend (oxlint · tsc · build · audit) ✅; Go jobs land with the backend scaffold
+- ✅ CI: frontend (oxlint · tsc · build · audit) and backend
+  (gofmt · lint · vet · test · vulnerability scan · Docker build)
 
 **Exit criteria:** `docker compose up` brings up dashboard + API + datastores; a
 user can register and log in.

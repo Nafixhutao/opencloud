@@ -1,5 +1,5 @@
 // Package middleware holds cross-cutting Gin middleware. Order at wiring time:
-// recovery → request-id → logger (auth, cors, ratelimit land in later phases —
+// request-id → logger → recovery (auth, cors, ratelimit land in later phases —
 // BACKEND.md §5).
 package middleware
 
@@ -18,19 +18,38 @@ const requestIDHeader = "X-Request-ID"
 
 const contextRequestID = "request_id"
 
+const maxRequestIDLength = 128
+
 // RequestID assigns each request a correlation id (honoring an inbound
 // X-Request-ID) and echoes it back on the response. Every log line downstream
 // carries it (BACKEND.md §11).
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.GetHeader(requestIDHeader)
-		if id == "" {
+		if !validRequestID(id) {
 			id = uuid.NewString()
 		}
 		c.Set(contextRequestID, id)
 		c.Header(requestIDHeader, id)
 		c.Next()
 	}
+}
+
+// validRequestID accepts common UUID, trace-id and proxy request-id formats
+// while preventing arbitrary or oversized user-controlled values reaching logs.
+func validRequestID(id string) bool {
+	if id == "" || len(id) > maxRequestIDLength {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		b := id[i]
+		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
+			(b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.' || b == ':' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // RequestIDOf returns the correlation id set by RequestID, or "" if unset.

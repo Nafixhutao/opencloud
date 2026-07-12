@@ -3,6 +3,7 @@
 package metrics
 
 import (
+	"net/http"
 	"strconv"
 	"time"
 
@@ -49,6 +50,28 @@ func (m *Metrics) Registry() *prometheus.Registry { return m.reg }
 // ObserveHTTP records one request. route is the matched pattern (low
 // cardinality), not the raw path.
 func (m *Metrics) ObserveHTTP(route, method string, status int, dur time.Duration) {
-	m.httpRequests.WithLabelValues(route, method, strconv.Itoa(status)).Inc()
+	method = normalizeMethod(method)
+	statusClass := normalizeStatusClass(status)
+	m.httpRequests.WithLabelValues(route, method, statusClass).Inc()
 	m.httpDuration.WithLabelValues(route, method).Observe(dur.Seconds())
+}
+
+// normalizeMethod prevents user-defined HTTP methods from creating unbounded
+// Prometheus label cardinality.
+func normalizeMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodConnect,
+		http.MethodOptions, http.MethodTrace:
+		return method
+	default:
+		return "OTHER"
+	}
+}
+
+func normalizeStatusClass(status int) string {
+	if status < 100 || status > 599 {
+		return "other"
+	}
+	return strconv.Itoa(status/100) + "xx"
 }
