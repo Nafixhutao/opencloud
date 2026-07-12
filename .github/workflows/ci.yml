@@ -23,3 +23,28 @@ jobs:
 
   # backend job (gofmt · golangci-lint · go test · govulncheck · docker build)
   # lands with the Go scaffold — see docs/DEPLOYMENT.md §2 and ROADMAP.md Phase 0.
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+      - run: go vet ./...
+      - run: go test ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: docker build
+        run: docker build -t opencloud-backend:ci .
+

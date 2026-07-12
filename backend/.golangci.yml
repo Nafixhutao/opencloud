@@ -1,0 +1,13 @@
+# Minimal golangci-lint config. Defaults plus a few high-signal linters; expand
+# as the codebase grows (docs/CODING_STANDARDS.md).
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - revive

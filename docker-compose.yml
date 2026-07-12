@@ -1,0 +1,72 @@
+# OpenCloud local stack. Brings up Postgres, Redis, the Go API and the job
+# worker. Frontend and Prometheus/Grafana are added in a later item (see
+# ROADMAP.md Phase 0 / docs/INFRASTRUCTURE.md).
+#
+#   docker compose up --build
+#
+# Config comes from .env (copy from .env.example). Service hostnames below
+# override the localhost URLs in .env for in-network addressing.
+
+name: opencloud
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: opencloud
+      POSTGRES_PASSWORD: opencloud
+      POSTGRES_DB: opencloud
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencloud -d opencloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    command: ["/app/api"]
+    env_file: .env
+    environment:
+      # In-network addresses override .env's localhost values.
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No container healthcheck: the distroless image has no shell/curl. Liveness
+    # and readiness are exposed at /healthz and /readyz for orchestrators and
+    # load balancers to probe directly (docs/INFRASTRUCTURE.md §7).
+
+  worker:
+    build: ./backend
+    command: ["/app/worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -1,0 +1,6 @@
+# Build context trimming — keep the image lean and secret-free.
+.git
+.env
+*.md
+Dockerfile
+.dockerignore
