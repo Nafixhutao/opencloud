@@ -28,8 +28,8 @@ type Server struct {
 }
 
 // New builds the router, mounts middleware and routes, and returns a Server
-// ready to Run. Middleware order: recovery → request-id → logger
-// (auth/cors/ratelimit land in later phases — BACKEND.md §5).
+// ready to Run. Middleware order: request-id → logger → recovery. Logger
+// wraps recovery so recovered panics are recorded as completed 500 requests.
 func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *metrics.Metrics) *Server {
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
@@ -37,13 +37,13 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 
 	r := gin.New()
 	r.Use(
-		middleware.Recovery(log),
 		middleware.RequestID(),
 		middleware.Logger(log, m),
+		middleware.Recovery(log),
 	)
 
 	// Operational endpoints (unversioned, no auth).
-	health := handler.NewHealth(db, rdb)
+	health := handler.NewHealth(db, rdb, log)
 	r.GET("/healthz", health.Live)
 	r.GET("/readyz", health.Ready)
 	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(m.Registry(), promhttp.HandlerOpts{})))
@@ -58,6 +58,10 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 			Addr:              cfg.HTTPAddr,
 			Handler:           r,
 			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			MaxHeaderBytes:    1 << 20,
 		},
 	}
 }

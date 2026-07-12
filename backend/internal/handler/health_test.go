@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/handler"
 )
@@ -15,7 +16,7 @@ import (
 func init() { gin.SetMode(gin.TestMode) }
 
 func TestLive_AlwaysOK(t *testing.T) {
-	h := handler.NewHealth(nil, nil)
+	h := handler.NewHealth(nil, nil, zap.NewNop())
 	r := gin.New()
 	r.GET("/healthz", h.Live)
 
@@ -32,7 +33,7 @@ func TestLive_AlwaysOK(t *testing.T) {
 func TestReady_UnavailableWhenDepsUnwired(t *testing.T) {
 	// nil db/redis stand in for unreachable dependencies: /readyz must fail
 	// closed with 503 rather than reporting ready.
-	h := handler.NewHealth(nil, nil)
+	h := handler.NewHealth(nil, nil, zap.NewNop())
 	r := gin.New()
 	r.GET("/readyz", h.Ready)
 
@@ -47,6 +48,6 @@ func TestReady_UnavailableWhenDepsUnwired(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "unready", body.Status)
-	require.NotEqual(t, "ok", body.Checks["postgres"])
-	require.NotEqual(t, "ok", body.Checks["redis"])
+	require.Equal(t, "error", body.Checks["postgres"])
+	require.Equal(t, "error", body.Checks["redis"])
 }

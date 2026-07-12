@@ -104,7 +104,7 @@ recovery, rate-limit) and **config** (Viper, loaded once at startup). Details:
 
 ```
 GET /api/v1/sites
- → middleware: recover → request-id → log → rate-limit → authenticate (validate better-auth JWT — ADR 0006) → authorize
+ → middleware: request-id → log → recover → rate-limit → authenticate (validate better-auth JWT — ADR 0006) → authorize
  → handler: parse query params
  → service: SiteService.List(ctx, accountID, filters)
  → repository: SELECT … WHERE account_id = $1   (scoped, indexed, paginated)
