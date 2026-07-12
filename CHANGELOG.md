@@ -14,6 +14,27 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Go backend scaffold** (`backend/`, first ROADMAP Phase 0 code item): layered
+  module `github.com/nazxf/opencloud/backend` with three entrypoints — `cmd/api`
+  (Gin HTTP server, graceful SIGTERM shutdown), `cmd/worker` (job-loop skeleton
+  polling the future Postgres `jobs` queue — ADR 0002), and `cmd/migrate`
+  (`up`/`down`/`status` via Bun's migrator; registry empty until the first schema
+  migration, so `up` is a no-op). Internal packages: `config` (Viper → typed,
+  fail-fast on missing `DATABASE_URL`/`REDIS_URL`), `logging` (Zap structured
+  JSON), `database` (pgx pool + Bun/pgdialect + `InTx` helper), `cache` (go-redis
+  v9), `metrics` (Prometheus registry + HTTP instrumentation), `middleware`
+  (recovery → request-id → logger), `handler` (`/healthz`, `/readyz` with
+  Postgres+Redis checks, fail-closed 503), `server` (DI wiring, `/metrics`,
+  `/api/v1` group), and `app` (shared bootstrap). Health handler covered by tests.
+  Dependencies are all from the approved list in `docs/BACKEND.md` §13 (no new
+  libraries); versions verified via Context7.
+- **`docker-compose.yml`** (repo root): `postgres:18`, `redis:8`, `api`, `worker`
+  services with health-gated startup ordering. Frontend and Prometheus/Grafana
+  services deferred to a later item.
+- **`backend/Dockerfile`**: multi-stage static build → distroless nonroot image
+  carrying all three binaries; `.dockerignore` and `backend/.golangci.yml` added.
+- **Backend CI job** in `.github/workflows/ci.yml` (replacing the placeholder):
+  gofmt · golangci-lint · `go vet` · `go test` · govulncheck · docker build.
 - `docs/BACKEND.md` §13 names the concrete **JWKS fetcher** the resource-server
   auth path needs: `MicahParks/keyfunc/v3` (auto-refreshing JWK Set client) supplies
   the `jwt.Keyfunc` that `golang-jwt/jwt/v5` uses to verify better-auth's JWTs — the
