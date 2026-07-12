@@ -56,14 +56,13 @@ func Load() (*Config, error) {
 	}
 
 	// .env is optional (present in dev, absent in prod where env is injected).
+	// A missing file surfaces as *fs.PathError (errors.Is fs.ErrNotExist), never
+	// viper.ConfigFileNotFoundError — proven in config_test.go — so one check
+	// suffices; any other error (e.g. malformed .env) is real.
 	v.SetConfigFile(".env")
 	v.SetConfigType("env")
-	if err := v.ReadInConfig(); err != nil {
-		// A missing .env is fine; anything else (e.g. malformed) is a real error.
-		var notFound viper.ConfigFileNotFoundError
-		if !errors.As(err, &notFound) && !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("read .env: %w", err)
-		}
+	if err := v.ReadInConfig(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("read .env: %w", err)
 	}
 
 	v.AutomaticEnv() // real env vars override .env

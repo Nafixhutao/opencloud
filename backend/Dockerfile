@@ -25,4 +25,6 @@ COPY --from=build /out/api /out/worker /out/migrate /app/
 
 USER nonroot:nonroot
 EXPOSE 8080
-ENTRYPOINT ["/app/api"]
+# CMD (not ENTRYPOINT): compose `command:` fully replaces it, so the worker
+# service runs /app/worker instead of appending it as an arg to /app/api.
+CMD ["/app/api"]
