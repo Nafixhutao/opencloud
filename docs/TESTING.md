@@ -23,7 +23,9 @@ proves the whole thing holds together.
 
 Prioritize by risk. These get real coverage:
 
-- **Auth** — token issue/refresh/rotation/revocation, password hashing, RBAC.
+- **Auth** — JWT validation against the JWKS (signature, `exp`/`iss`/`aud`,
+  rejection of forged/expired tokens), RBAC. Token issuance, refresh/rotation, and
+  password hashing live in better-auth (BFF), not the Go backend — ADR 0006.
 - **Tenant scoping** — every repository rejects cross-account access.
 - **Money** — billing/usage math, integer-cent handling.
 - **Provisioning** — service orchestration, job retries, compensating cleanup.

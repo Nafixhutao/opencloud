@@ -21,6 +21,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   via Context7: `keyfunc/v3` is the golang-jwt-native JWK Set wrapper.
 
 ### Fixed
+- `docs/TESTING.md` §2 auth-testing targets corrected for **ADR 0006**: the Go
+  backend tests **JWT validation** (signature, `exp`/`iss`/`aud`, forged/expired
+  rejection) + RBAC — not token issue/refresh/rotation or password hashing, which
+  are better-auth's (BFF), not the backend's.
 - Config layer brought in line with **ADR 0006** (better-auth), which the earlier
   update missed: `.env.example`, `docs/INFRASTRUCTURE.md` §3, and
   `docs/DEPLOYMENT.md` §9 dropped the superseded Go-owned auth vars
