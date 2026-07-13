@@ -35,6 +35,13 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   carrying all three binaries; `.dockerignore` and `backend/.golangci.yml` added.
 - **Backend CI job** in `.github/workflows/ci.yml` (replacing the placeholder):
   gofmt · golangci-lint · `go vet` · `go test` · govulncheck · docker build.
+- **First domain migration** `20260713120000_create_accounts` (ROADMAP Phase 0):
+  creates `public.accounts` — the tenant boundary (`docs/DATABASE.md` §3) with the
+  `active`/`suspended`/`closed` status CHECK. The `migrations` package now embeds
+  its `*.sql` files and registers them via Bun's `Migrations.Discover`, so
+  `migrate up` applies real schema. `auth.*` identity tables stay owned by
+  better-auth's own migrations, not Bun (ADR 0006). Verified end to end against
+  Postgres 18: up → idempotent re-up → down round-trips cleanly.
 - `docs/BACKEND.md` §13 names the concrete **JWKS fetcher** the resource-server
   auth path needs: `MicahParks/keyfunc/v3` (auto-refreshing JWK Set client) supplies
   the `jwt.Keyfunc` that `golang-jwt/jwt/v5` uses to verify better-auth's JWTs — the
