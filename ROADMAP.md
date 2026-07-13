@@ -25,8 +25,9 @@ Stand up the skeleton everything else hangs off.
 - ✅ Minimal Next.js App Router shell; legacy Vite artifacts removed
 - ✅ Go backend scaffold: `cmd/api`, `cmd/worker`, layered packages, config (Viper), logging (Zap)
 - ✅ PostgreSQL + Redis wired via Docker Compose
-- 🚧 Bun migration tooling complete; initial domain schema (`public.accounts`, …) pending. Identity
-  tables (`auth.*`) are owned by better-auth's migrations, not Bun (ADR 0006)
+- ✅ Bun migration tooling complete; initial domain schema `public.accounts` created
+  (first migration). Identity tables (`auth.*`) are owned by better-auth's
+  migrations, not Bun (ADR 0006)
 - ✅ Health/readiness endpoints + Prometheus metrics endpoint
 - ⏳ Hestia integration spike (local VM): validate API auth/key-scoping and
   idempotency assumptions (ADR 0001) before Phase 2 builds on them
