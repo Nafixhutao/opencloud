@@ -38,7 +38,11 @@ func main() {
 	}
 	defer db.Close()
 
-	migrator := migrate.NewMigrator(db, migrations.Migrations)
+	migrator := migrate.NewMigrator(
+		db,
+		migrations.Migrations,
+		migrate.WithMarkAppliedOnSuccess(true),
+	)
 	if err := migrator.Init(ctx); err != nil {
 		deps.Log.Fatal("migrator init", zap.Error(err))
 	}
