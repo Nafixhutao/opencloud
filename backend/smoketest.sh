@@ -1,32 +1,57 @@
 #!/usr/bin/env bash
-# Local smoke test for the compose stack (run inside one WSL session so dockerd
-# does not get torn down between steps). Not committed — dev convenience only.
-set -e
-cd /mnt/d/opencloud
+# Local smoke test for the Compose stack. It uses its own project name so its
+# containers and volumes never overlap the developer's normal `opencloud` stack.
+set -Eeuo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+project=${SMOKETEST_PROJECT_NAME:-opencloud-smoketest}
+if [[ $project == opencloud ]]; then
+  echo "refusing to use the development Compose project" >&2
+  exit 2
+fi
+compose=(docker compose --project-name "$project")
+
+cleanup() {
+  "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 echo "=== rebuild ==="
-docker compose build api worker >/dev/null 2>&1 && echo "built"
+"${compose[@]}" build migrate api worker
 
 echo "=== up ==="
-docker compose up -d >/dev/null 2>&1
+"${compose[@]}" up -d
 
 echo "=== wait for /readyz (up to 40s) ==="
-ready=no
+ready=false
 for i in $(seq 1 40); do
-  code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/readyz || true)
-  if [ "$code" = "200" ]; then echo "ready after ${i}s"; ready=yes; break; fi
+  if curl -fsS http://localhost:8080/readyz >/dev/null; then
+    echo "ready after ${i}s"
+    ready=true
+    break
+  fi
   sleep 1
 done
+if [[ $ready != true ]]; then
+  "${compose[@]}" logs api migrate >&2
+  echo "stack did not become ready" >&2
+  exit 1
+fi
 
-echo "=== /healthz ==="; curl -s -w " [%{http_code}]\n" http://localhost:8080/healthz || true
-echo "=== /readyz  ==="; curl -s -w " [%{http_code}]\n" http://localhost:8080/readyz || true
-echo "=== /metrics (first line) ==="; curl -s http://localhost:8080/metrics | head -1 || true
+echo "=== probes ==="
+curl -fsS http://localhost:8080/healthz
+echo
+curl -fsS http://localhost:8080/readyz
+echo
+curl -fsS http://localhost:9090/metrics >/dev/null
 
-echo "=== COMMAND column (worker must run /app/worker) ==="
-docker compose ps --format "{{.Service}} | {{.Command}} | {{.Status}}"
+echo "=== worker command ==="
+worker_command=$("${compose[@]}" ps worker --format '{{.Command}}')
+grep -F '/app/worker' <<<"$worker_command"
 
-echo "=== worker log line ==="
-docker compose logs worker 2>&1 | grep -iE "worker started|api listening" | head -2
+echo "=== worker started ==="
+worker_logs=$("${compose[@]}" logs worker 2>&1)
+grep -F 'worker started' <<<"$worker_logs"
 
-echo "=== teardown ==="
-docker compose down -v >/dev/null 2>&1 && echo "down"
+echo "smoke test passed"

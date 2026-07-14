@@ -62,26 +62,23 @@ opencloud/
 ├── ROADMAP.md            # phased plan
 ├── CHANGELOG.md          # release history
 ├── app/                  # Next.js App Router (dashboard + landing)
-├── src/                  # components, styles, assets
 ├── public/               # static assets
 ├── next.config.ts        # Next.js config
 ├── package.json          # frontend dependencies + scripts
-├── backend/              # Go control plane (planned)
-├── deploy/               # prometheus, grafana, nginx, hestia bootstrap
+├── backend/              # Go control plane
 ├── docs/                 # detailed topic docs (see below)
-└── docker-compose.yml    # control plane + datastores + monitoring
+└── docker-compose.yml    # backend + migration gate + datastores
 ```
 
-> **Status:** the Next.js frontend lives at the repo root (migrated off Vite); the
-> Go backend is greenfield. `backend/`, `deploy/`, and `docker-compose.yml` above
-> describe the target layout. See [`ROADMAP.md`](ROADMAP.md) for what's built.
+> **Status:** the repo contains a minimal Next.js shell and the Phase 0 Go
+> backend scaffold. See [`ROADMAP.md`](ROADMAP.md) for what is implemented.
 
 ## Quick Start
 
 ### Prerequisites
 
 - **Docker** 24+ and **Docker Compose** v2
-- **Go** 1.25+ (for backend dev outside Docker)
+- **Go** 1.26+ (for backend dev outside Docker)
 - **Node.js** 20+ and **npm** (for frontend dev)
 - A Linux host running **Hestia Control Panel** for real provisioning
   (optional for UI/backend dev — the provisioner can run against a fake)
@@ -95,12 +92,13 @@ cp .env.example .env          # then edit secrets
 docker compose up --build
 ```
 
-The current Compose stack starts the API, worker, PostgreSQL, and Redis. The
-frontend and monitoring services are added in later roadmap items.
+The current Compose stack runs migrations, then starts the API, worker,
+PostgreSQL, and Redis. Frontend and monitoring services land in later phases.
 
 | Service | URL |
 |---|---|
 | Backend API | http://localhost:8080/api/v1 |
+| Internal metrics | http://localhost:9090/metrics |
 
 ### Run services individually (local dev)
 
@@ -127,7 +125,9 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | Redis connection string |
+| `METRICS_ADDR` | Separate internal Prometheus listener (default `:9090`) |
 | `AUTH_JWKS_URL` | better-auth JWKS the API validates JWTs against (issues none — ADR 0006) |
+| `AUTH_ISSUER` / `AUTH_AUDIENCE` | Optional JWT issuer and audience validation |
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | better-auth (BFF) identity provider config |
 | `HESTIA_API_URL` / `HESTIA_API_KEY` | Hosting node access |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
@@ -137,10 +137,10 @@ See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
 ## Common Tasks
 
 ```bash
-# Backend
-go test ./...                       # run tests
-golangci-lint run                   # lint
-go run ./cmd/migrate up             # apply DB migrations
+# Backend (from repo root)
+(cd backend && go test ./...)                       # run tests
+(cd backend && golangci-lint run)                   # lint
+(cd backend && go run ./cmd/migrate up)             # apply DB migrations
 
 # Frontend
 npm run lint                        # oxlint

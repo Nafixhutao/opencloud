@@ -11,8 +11,8 @@ in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md); this covers the release process.
 
 | Artifact | Built from | Contents |
 |---|---|---|
-| `opencloud-backend` image | `backend/Dockerfile` (multi-stage) | Go binary serving both `api` and `worker` (selected by command) |
-| `opencloud-frontend` image | `Dockerfile` (repo root) | Next.js standalone build |
+| `opencloud-backend` image | `backend/Dockerfile` (multi-stage) | `api`, `worker`, and `migrate` binaries |
+| `opencloud-frontend` image | planned root `Dockerfile` | Next.js standalone build (not implemented yet) |
 
 Images are immutable and tagged by version + git SHA (e.g.
 `opencloud-backend:1.4.0-ab12cd3`). The same image promotes through staging → prod.
@@ -22,9 +22,9 @@ Images are immutable and tagged by version + git SHA (e.g.
 Runs on every PR and on merge to `main`. **Merges are blocked unless CI is green.**
 
 ```
-1. Backend:  gofmt check · golangci-lint · go test ./... · govulncheck · docker build
+1. Backend:  gofmt check · golangci-lint · go test ./... · migration round trip · govulncheck · docker build
 2. Frontend: oxlint · tsc --noEmit · npm run build · npm audit
-3. On main:  build + push tagged images
+3. Image publishing and automatic deployment are added with the release pipeline.
 ```
 
 See [`TESTING.md`](TESTING.md) for the test layers and [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -47,7 +47,7 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
 
 - Migrations run as an explicit deploy step, **before** the new app version starts:
   ```bash
-  go run ./cmd/migrate up
+  (cd backend && go run ./cmd/migrate up)
   ```
 - Production is **forward-only**; never edit a shipped migration — add a new one.
 - Migrations must be **backward-compatible** with the currently-running app version
@@ -62,9 +62,9 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
 
 ```bash
 git pull                              # or check out the release tag
-docker compose pull                   # fetch new images (or build)
-go run ./cmd/migrate up               # via a one-shot migrate container
-docker compose up -d --no-deps api worker frontend
+docker compose build
+docker compose run --rm migrate       # explicit, fail-fast deploy gate
+docker compose up -d api worker       # also depends on successful migrate
 docker compose ps                     # verify health
 curl -fsS localhost:8080/readyz       # readiness gate
 ```
@@ -95,8 +95,8 @@ curl -fsS localhost:8080/readyz       # readiness gate
 ## 8. Hosting node provisioning
 
 - Hosting nodes are **not** part of the app deploy — they run Hestia on the host.
-- A new node is bootstrapped with the scripts in `deploy/hestia/` (install Hestia,
-  apply Fail2ban + UFW + hardening), then registered in the `nodes` table.
+- Reproducible `deploy/hestia/` bootstrap scripts land with Phase 6. Until then,
+  node setup is not represented as an implemented repository artifact.
 - Node OS and Hestia upgrades follow their own maintenance window, draining the
   node first ([`HOSTING.md`](HOSTING.md)).
 

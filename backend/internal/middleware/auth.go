@@ -111,7 +111,7 @@ func bearerToken(c *gin.Context) (string, bool) {
 
 func abortUnauthorized(c *gin.Context, msg string) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-		"error": gin.H{"code": "unauthorized", "message": msg},
+		"error": gin.H{"code": "UNAUTHENTICATED", "message": msg},
 	})
 }
 

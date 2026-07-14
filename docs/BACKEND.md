@@ -4,7 +4,7 @@ The OpenCloud backend is a Go service that acts as the **system of record** and
 orchestrates Hestia nodes. This document is the deep dive; the contract lives in
 [`../CLAUDE.md`](../CLAUDE.md) and the system map in [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
-**Stack:** Go 1.25+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
+**Stack:** Go 1.26+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
 
 ---
 
@@ -80,13 +80,16 @@ func main() {
 
 ```go
 type Config struct {
-    Env        string `mapstructure:"ENV"`
-    HTTPAddr   string `mapstructure:"HTTP_ADDR"`
+    Env         string `mapstructure:"ENV"`
+    HTTPAddr    string `mapstructure:"HTTP_ADDR"`
+    MetricsAddr string `mapstructure:"METRICS_ADDR"`
     DatabaseURL string `mapstructure:"DATABASE_URL"`
-    RedisURL   string `mapstructure:"REDIS_URL"`
-    AuthJWKSURL string `mapstructure:"AUTH_JWKS_URL"`   // better-auth JWKS — validate JWTs (ADR 0006)
-    Hestia     HestiaConfig
-    LogLevel   string `mapstructure:"LOG_LEVEL"`
+    RedisURL    string `mapstructure:"REDIS_URL"`
+    AuthJWKSURL string `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS — validate JWTs (ADR 0006)
+    AuthIssuer   string `mapstructure:"AUTH_ISSUER"`
+    AuthAudience string `mapstructure:"AUTH_AUDIENCE"`
+    Hestia      HestiaConfig
+    LogLevel    string `mapstructure:"LOG_LEVEL"`
 }
 ```
 
@@ -215,7 +218,7 @@ func (ProvisionSite) Kind() string { return "provision_site" }
 - A single `respondError` maps typed errors → HTTP status + envelope, so every
   endpoint behaves identically.
 - **Never leak internals** (SQL, stack traces, Hestia output) to clients; log the
-  detail, return a clean message + stable `code`. Full policy: [`API.md`](API.md#errors).
+  detail, return a clean message + stable `code`. Full policy: [`API.md`](API.md#5-errors).
 
 ## 11. Logging (Zap)
 

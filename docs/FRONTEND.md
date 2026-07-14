@@ -16,10 +16,9 @@ Lucide React · GSAP (`@gsap/react`) · Geist fonts via `@fontsource`.
 **Vitest + Testing Library** (tests — [`TESTING.md`](TESTING.md#6-frontend-tests)).
 Anything else follows the `CLAUDE.md` §5.4 approval rule.
 
-> **Migration note:** the app has migrated off Vite to the Next.js App Router and now
-> lives at the **repo root** (not under `frontend/`). Landing-page components still
-> live in `src/`; port them into `app/`/`components/` as the dashboard grows. The
-> Vite config and `verify-*.mjs` scratch files have been removed — don't reintroduce them.
+> **Migration note:** the app has migrated off Vite to a minimal Next.js App
+> Router shell at the repo root. Add `components/` and `lib/` when their first
+> consumers land; the removed Vite and `src/` scaffolds stay removed.
 
 ---
 
@@ -78,7 +77,7 @@ export default async function SitesPage() {
   Components never call `fetch` directly.
 - The Next.js server (route handlers + server components) is the **BFF**: it holds
   the JWT in an httpOnly cookie and attaches it to backend calls. Tokens never
-  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#tokens). (Auth is the
+  reach client JavaScript. See [`SECURITY.md`](SECURITY.md#3-tokens-in-the-frontend). (Auth is the
   exception: sign-in/session go through the **better-auth** client, not
   `lib/api-client.ts` — better-auth is mounted at `app/api/auth/[...all]/route.ts`
   and owns the flow — [ADR 0006](adr/0006-better-auth-identity-provider.md).)
@@ -121,9 +120,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   never mix the two within one route group.
 - Generated primitives may be edited, but keep the shadcn structure so upstream
   updates stay mergeable.
-- **Tailwind only.** No CSS-in-JS, no ad-hoc stylesheets beyond `globals.css`.
-  Compose class names with the `cn()` helper; share patterns via Tailwind config,
-  not copy-paste.
+- **Dashboard/admin:** Tailwind only, with no CSS-in-JS or ad-hoc stylesheets
+  beyond `globals.css`. Marketing may use Astryx's compiled StyleX setup per
+  ADR 0007. Compose shared Tailwind class names with `cn()`.
 - **Lucide React** for icons — one set, imported per-icon (tree-shaken).
 - **GSAP** (`@gsap/react`, `ScrollTrigger`) is for the marketing/landing surface
   only. Dashboard interactions use CSS/Tailwind transitions; don't add a second

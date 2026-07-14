@@ -56,6 +56,30 @@ func TestLoad_NoEnvFile_SucceedsFromEnvVars(t *testing.T) {
 	}
 }
 
+func TestLoadForMigration_DoesNotRequireRedis(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+
+	cfg, err := LoadForMigration()
+	if err != nil {
+		t.Fatalf("LoadForMigration() unexpectedly required Redis: %v", err)
+	}
+	if cfg.DatabaseURL == "" {
+		t.Fatal("DATABASE_URL was not loaded")
+	}
+}
+
+func TestLoad_RequiresRedis(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded without REDIS_URL")
+	}
+}
+
 // TestValidateAPI_ProductionRequiresIssuerAudience guards the security fix:
 // only the production API requires iss/aud, while development stays lenient.
 func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {

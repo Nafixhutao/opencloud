@@ -1,0 +1,2 @@
+# Keep every detected text file deterministic when Windows and WSL share the checkout.
+* text=auto eol=lf

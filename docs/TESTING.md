@@ -101,8 +101,9 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
 
 ## 9. CI
 
-- The full unit suite + lint + type-check run on **every PR**; integration tests run
-  in CI against a Postgres service container. **Green is required to merge.**
+- Unit tests, lint, and type-check run on every PR. CI also runs the Bun migration
+  up/idempotent-up/down/up round trip against a disposable PostgreSQL service.
+  Repository integration suites are added when repositories land.
 - Pipeline details: [`DEPLOYMENT.md`](DEPLOYMENT.md#2-ci-pipeline).
 
 ## 10. Conventions

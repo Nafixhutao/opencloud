@@ -68,7 +68,8 @@ func (s *SiteService) Get(ctx context.Context, acct, id uuid.UUID) (*model.Site,
 - **Server Components by default**; `"use client"` only for interactivity, at the leaves.
 - **No business logic in components** — push it into `lib/` or the backend.
 - Prefer `type`/`interface` for reused shapes; don't redeclare API types inline.
-- Compose styles with Tailwind + `cn()`; no CSS-in-JS, no second UI library.
+- Dashboard/admin use Tailwind + `cn()`; marketing may use Astryx/StyleX. Never
+  mix component systems within a route group (ADR 0007).
 - One Lucide icon set, imported per-icon.
 - Lint with **oxlint**; type-check with `tsc --noEmit`.
 

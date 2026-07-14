@@ -24,7 +24,7 @@ WORKDIR /app
 COPY --from=build /out/api /out/worker /out/migrate /app/
 
 USER nonroot:nonroot
-EXPOSE 8080
+EXPOSE 8080 9090
 # CMD (not ENTRYPOINT): compose `command:` fully replaces it, so the worker
 # service runs /app/worker instead of appending it as an arg to /app/api.
 CMD ["/app/api"]

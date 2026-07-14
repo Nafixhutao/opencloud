@@ -16,6 +16,7 @@ import (
 type Config struct {
 	Env         string `mapstructure:"ENV"`
 	HTTPAddr    string `mapstructure:"HTTP_ADDR"`
+	MetricsAddr string `mapstructure:"METRICS_ADDR"`
 	LogLevel    string `mapstructure:"LOG_LEVEL"`
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
 	RedisURL    string `mapstructure:"REDIS_URL"`
@@ -50,6 +51,7 @@ func load(requireRedis bool) (*Config, error) {
 
 	v.SetDefault("ENV", "development")
 	v.SetDefault("HTTP_ADDR", ":8080")
+	v.SetDefault("METRICS_ADDR", ":9090")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("RATE_LIMIT_RPS", 10)
 
@@ -57,7 +59,7 @@ func load(requireRedis bool) (*Config, error) {
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
 	// config from real env vars (prod, where .env is absent) would be dropped.
 	for _, key := range []string{
-		"ENV", "HTTP_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
+		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
 		"HESTIA_API_URL", "HESTIA_API_KEY",
 	} {

@@ -175,8 +175,8 @@ This is the third isolation layer described in
 ## 9. Node hardening
 
 Every node runs **Fail2ban** and **UFW** with only required ports open, plus the
-standard hardening in [`SECURITY.md`](SECURITY.md). Node bootstrap/hardening is
-scripted under `deploy/hestia/` so a new node is reproducible.
+standard hardening in [`SECURITY.md`](SECURITY.md). Reproducible bootstrap scripts
+under `deploy/hestia/` land with the Phase 6 hardening work.
 
 ## 10. Failure & reconciliation
 

@@ -13,7 +13,9 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 A minimal frontend shell exists on the Next.js App Router at the repo root (Vite
 fully removed); the marketing and dashboard surfaces are still planned. The Go
 backend scaffold and local datastores are wired, while the domain schema and
-provisioning remain greenfield. We are in **Phase 0 → Phase 1**.
+provisioning remain greenfield. We are still in **Phase 0 (Foundations)** because
+its dashboard/auth exit criteria are not complete; the backend JWT middleware is
+an early Phase 1 slice already in progress.
 
 ---
 

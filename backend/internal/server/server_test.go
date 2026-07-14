@@ -18,7 +18,7 @@ func TestRecoveredPanicIsObserved(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	m := metrics.New()
-	s := New(&config.Config{HTTPAddr: ":0"}, zap.NewNop(), nil, nil, m)
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, m)
 	r := s.http.Handler.(*gin.Engine)
 	r.GET("/panic", func(_ *gin.Context) { panic("boom") })
 
@@ -50,10 +50,28 @@ func TestRecoveredPanicIsObserved(t *testing.T) {
 func TestHTTPTimeoutsAreConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	s := New(&config.Config{HTTPAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New())
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New())
 	require.Equal(t, 10*time.Second, s.http.ReadHeaderTimeout)
 	require.Equal(t, 30*time.Second, s.http.ReadTimeout)
 	require.Equal(t, 30*time.Second, s.http.WriteTimeout)
 	require.Equal(t, 60*time.Second, s.http.IdleTimeout)
 	require.Equal(t, 1<<20, s.http.MaxHeaderBytes)
+}
+
+func TestMetricsUsesSeparateListener(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New())
+
+	public := httptest.NewRecorder()
+	s.http.Handler.ServeHTTP(public, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusNotFound, public.Code)
+
+	internal := httptest.NewRecorder()
+	s.metrics.Handler.ServeHTTP(internal, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, internal.Code)
+
+	other := httptest.NewRecorder()
+	s.metrics.Handler.ServeHTTP(other, httptest.NewRequest(http.MethodGet, "/not-metrics", nil))
+	require.Equal(t, http.StatusNotFound, other.Code)
 }

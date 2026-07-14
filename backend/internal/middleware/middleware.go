@@ -4,6 +4,7 @@
 package middleware
 
 import (
+	"runtime/debug"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -70,9 +71,10 @@ func Recovery(log *zap.Logger) gin.HandlerFunc {
 			zap.Any("error", err),
 			zap.String("request_id", RequestIDOf(c)),
 			zap.String("path", c.FullPath()),
+			zap.ByteString("stack", debug.Stack()),
 		)
 		c.AbortWithStatusJSON(500, gin.H{
-			"error": gin.H{"code": "internal", "message": "internal server error"},
+			"error": gin.H{"code": "INTERNAL", "message": "internal server error"},
 		})
 	})
 }

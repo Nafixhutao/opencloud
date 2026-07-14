@@ -76,7 +76,7 @@ Base URL: `/api/v1` · Format: JSON · Auth: JWT (see [`SECURITY.md`](SECURITY.m
 `code` is a **stable, machine-readable** string (clients branch on it).
 `message` is human-readable. `details` is optional, used for validation.
 
-## 5. Errors {#errors}
+## 5. Errors
 
 - The backend maps typed errors (`apperr.*`) → status + envelope centrally; see
   [`BACKEND.md`](BACKEND.md#10-error-handling).
@@ -179,4 +179,4 @@ better-auth JWT, and the current user/tenant is read from its claims.
 |---|---|---|
 | `GET` | `/healthz` | liveness |
 | `GET` | `/readyz` | readiness (DB + Redis reachable) |
-| `GET` | `/metrics` | Prometheus metrics (internal network only) |
+| `GET` | `:9090/metrics` | Prometheus metrics (separate internal listener) |

@@ -39,7 +39,7 @@ better-auth's JWTs.**
 
 - Enable the **`jwt` plugin**; better-auth signs asymmetric JWTs and exposes a
   **JWKS endpoint**. The BFF attaches the JWT to backend calls (still in an
-  httpOnly cookie, per [`../SECURITY.md`](../SECURITY.md#tokens) — tokens never
+  httpOnly cookie, per [`../SECURITY.md`](../SECURITY.md#3-tokens-in-the-frontend) — tokens never
   reach client JS).
 - Go validates each JWT against the cached JWKS (`golang-jwt/jwt/v5` + a JWKS
   fetcher). Go keeps **no** password/OAuth code and issues **no** tokens.
@@ -81,7 +81,7 @@ passkey, SSO available as plugins); one well-tested auth surface.
 **Harder / accepted cost:**
 - Identity now lives in the **TypeScript/BFF layer**, not Go. Go is no longer the
   system of record for identity — a real departure from the original architecture
-  ([`../ARCHITECTURE.md`](../ARCHITECTURE.md)); Go trusts an externally-issued JWT.
+  ([`../../ARCHITECTURE.md`](../../ARCHITECTURE.md)); Go trusts an externally-issued JWT.
 - Two migration systems against one database (better-auth CLI for `auth.*`, Bun
   for `public.*`); the split must stay disciplined.
 - A new trust boundary (Go → BFF JWKS) and a new dependency on the BFF being
