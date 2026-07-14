@@ -115,6 +115,29 @@ func abortUnauthorized(c *gin.Context, msg string) {
 	})
 }
 
+// RequireRole gates a route to callers whose validated token carries one of the
+// allowed roles (SECURITY §4 — RBAC is enforced server-side, not in the UI). It
+// must run after Auth, which sets the role on the context. A caller without a
+// matching role gets 403 Forbidden — "authenticated but not allowed" (API §3);
+// this is distinct from the 404 used for tenant resources the caller can't see.
+//
+// Cross-account admin access is a separate, explicitly audited path (SECURITY
+// §4) — RequireRole only checks the role, it does not widen account scoping.
+func RequireRole(allowed ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := Role(c)
+		for _, want := range allowed {
+			if role == want {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"error": gin.H{"code": "FORBIDDEN", "message": "insufficient permissions"},
+		})
+	}
+}
+
 // AccountID returns the tenant account from a validated token, or uuid.Nil if
 // the request did not pass Auth. Handlers pass this into services (BACKEND §5).
 func AccountID(c *gin.Context) uuid.UUID {

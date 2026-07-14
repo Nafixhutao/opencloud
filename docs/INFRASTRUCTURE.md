@@ -57,6 +57,8 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `DATABASE_URL` | api, worker, frontend | PostgreSQL DSN (BFF reuses it for better-auth's `auth.*` tables — ADR 0006) |
 | `REDIS_URL` | api, worker | Redis connection |
 | `AUTH_JWKS_URL` | api | better-auth JWKS endpoint the API validates JWTs against; issues none (ADR 0006) |
+| `AUTH_ISSUER` | api | expected JWT issuer; required in production |
+| `AUTH_AUDIENCE` | api | expected JWT audience; required in production |
 | `BETTER_AUTH_SECRET` | frontend | better-auth encryption/hashing key (≥32 chars) — ADR 0006 |
 | `BETTER_AUTH_URL` | frontend | better-auth base URL (BFF origin) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |

@@ -55,3 +55,70 @@ func TestLoad_NoEnvFile_SucceedsFromEnvVars(t *testing.T) {
 		t.Fatalf("env vars not picked up: db=%q redis=%q", cfg.DatabaseURL, cfg.RedisURL)
 	}
 }
+
+// TestValidateAPI_ProductionRequiresIssuerAudience guards the security fix:
+// only the production API requires iss/aud, while development stays lenient.
+func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      string
+		issuer   string
+		audience string
+		wantErr  bool
+	}{
+		{name: "production without iss or aud fails", env: "production", wantErr: true},
+		{name: "production without iss fails", env: "production", audience: "https://auth.example.com", wantErr: true},
+		{name: "production without aud fails", env: "production", issuer: "https://auth.example.com", wantErr: true},
+		{name: "production with iss and aud succeeds", env: "production", issuer: "https://auth.example.com", audience: "https://auth.example.com"},
+		{name: "development without iss or aud succeeds", env: "development"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("ENV", tt.env)
+			t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+			t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+			t.Setenv("AUTH_ISSUER", tt.issuer)
+			t.Setenv("AUTH_AUDIENCE", tt.audience)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() unexpectedly failed: %v", err)
+			}
+			err = cfg.ValidateAPI()
+			if tt.wantErr && err == nil {
+				t.Fatal("ValidateAPI() succeeded with incomplete production auth config")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("ValidateAPI() unexpectedly failed: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_ProductionWorkerDoesNotRequireAPIAuth(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("AUTH_ISSUER", "")
+	t.Setenv("AUTH_AUDIENCE", "")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("worker config unexpectedly required API auth: %v", err)
+	}
+}
+
+func TestLoadForMigration_ProductionRequiresOnlyDatabase(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("AUTH_ISSUER", "")
+	t.Setenv("AUTH_AUDIENCE", "")
+
+	if _, err := LoadForMigration(); err != nil {
+		t.Fatalf("migration config required an unrelated service setting: %v", err)
+	}
+}

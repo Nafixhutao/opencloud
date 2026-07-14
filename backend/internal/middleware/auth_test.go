@@ -221,3 +221,73 @@ func TestAuth(t *testing.T) {
 		})
 	}
 }
+
+// roleRouter mounts Auth then RequireRole(allowed...) so we exercise the real
+// chain: a token's role claim flows through Auth onto the context, then gates.
+func roleRouter(kf jwt.Keyfunc, allowed ...string) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.Auth(kf, testIssuer, testAudience), middleware.RequireRole(allowed...))
+	r.GET("/admin", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	return r
+}
+
+func TestRequireRole(t *testing.T) {
+	t.Parallel()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	kf := keyfuncFor(&key.PublicKey)
+
+	tokenWithRole := func(role string) string {
+		c := baseClaims()
+		c.Role = role
+		return "Bearer " + signRS256(t, key, testKID, c)
+	}
+
+	tests := []struct {
+		name       string
+		allowed    []string
+		role       string
+		wantStatus int
+	}{
+		{name: "admin allowed on admin route", allowed: []string{"admin"}, role: "admin", wantStatus: http.StatusOK},
+		{name: "customer forbidden on admin route", allowed: []string{"admin"}, role: "customer", wantStatus: http.StatusForbidden},
+		{name: "one of several roles matches", allowed: []string{"admin", "customer"}, role: "customer", wantStatus: http.StatusOK},
+		{name: "empty role forbidden", allowed: []string{"admin"}, role: "", wantStatus: http.StatusForbidden},
+		{name: "unknown role forbidden", allowed: []string{"admin"}, role: "superuser", wantStatus: http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+			req.Header.Set("Authorization", tokenWithRole(tt.role))
+			rec := httptest.NewRecorder()
+			roleRouter(kf, tt.allowed...).ServeHTTP(rec, req)
+
+			require.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus == http.StatusForbidden {
+				require.Contains(t, rec.Body.String(), `"code":"FORBIDDEN"`)
+			}
+		})
+	}
+}
+
+// TestRequireRole_WithoutAuth documents that RequireRole is a no-privilege gate
+// on its own: with no Auth ahead of it the role is empty, so it forbids.
+func TestRequireRole_WithoutAuth(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.RequireRole("admin"))
+	r.GET("/admin", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}

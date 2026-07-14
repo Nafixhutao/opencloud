@@ -35,10 +35,17 @@ type HestiaConfig struct {
 	APIKey string `mapstructure:"HESTIA_API_KEY"`
 }
 
-// Load reads configuration from the environment (with .env in dev) into a
-// Config. Required-but-missing values fail fast so the process never boots
-// half-configured.
+// Load reads API/worker configuration, including both datastores.
 func Load() (*Config, error) {
+	return load(true)
+}
+
+// LoadForMigration reads the subset needed by the migration command.
+func LoadForMigration() (*Config, error) {
+	return load(false)
+}
+
+func load(requireRedis bool) (*Config, error) {
 	v := viper.New()
 
 	v.SetDefault("ENV", "development")
@@ -74,22 +81,45 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	if err := cfg.validate(); err != nil {
+	if err := cfg.validate(requireRedis); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-func (c *Config) validate() error {
+func (c *Config) validate(requireRedis bool) error {
 	var missing []string
 	if c.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
 	}
-	if c.RedisURL == "" {
+	if requireRedis && c.RedisURL == "" {
 		missing = append(missing, "REDIS_URL")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required config: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// ValidateAPI enforces settings used only by the HTTP API.
+func (c *Config) ValidateAPI() error {
+	if !c.IsProduction() {
+		return nil
+	}
+
+	var missing []string
+	// In production, iss/aud validation must not be a silent no-op: an empty
+	// value makes Auth skip that check, so a token merely signed by the trusted
+	// JWKS would pass regardless of who it was issued for. Fail fast instead
+	// (better-auth always emits iss/aud — default the BFF base URL, ADR 0006).
+	if c.AuthIssuer == "" {
+		missing = append(missing, "AUTH_ISSUER")
+	}
+	if c.AuthAudience == "" {
+		missing = append(missing, "AUTH_AUDIENCE")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required API config: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

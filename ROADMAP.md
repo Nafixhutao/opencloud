@@ -53,6 +53,8 @@ user can register and log in.
 - Social login (Google + GitHub) + email/password via better-auth
   (ADR 0006 — supersedes ADR 0005)
 - RBAC (`customer`, `admin`) enforced in middleware
+  — 🚧 backend `middleware.RequireRole` landed (403 on mismatch); role-gated
+  routes wired when the first admin/customer endpoint lands
 - Account + user management (signup, login, profile, password reset)
 - Admin panel shell with role-gated routes
 - Audit logging for sensitive actions
