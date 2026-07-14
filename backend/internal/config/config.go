@@ -16,6 +16,7 @@ import (
 type Config struct {
 	Env         string `mapstructure:"ENV"`
 	HTTPAddr    string `mapstructure:"HTTP_ADDR"`
+	MetricsAddr string `mapstructure:"METRICS_ADDR"`
 	LogLevel    string `mapstructure:"LOG_LEVEL"`
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
 	RedisURL    string `mapstructure:"REDIS_URL"`
@@ -35,14 +36,22 @@ type HestiaConfig struct {
 	APIKey string `mapstructure:"HESTIA_API_KEY"`
 }
 
-// Load reads configuration from the environment (with .env in dev) into a
-// Config. Required-but-missing values fail fast so the process never boots
-// half-configured.
+// Load reads API/worker configuration, including both datastores.
 func Load() (*Config, error) {
+	return load(true)
+}
+
+// LoadForMigration reads the subset needed by the migration command.
+func LoadForMigration() (*Config, error) {
+	return load(false)
+}
+
+func load(requireRedis bool) (*Config, error) {
 	v := viper.New()
 
 	v.SetDefault("ENV", "development")
 	v.SetDefault("HTTP_ADDR", ":8080")
+	v.SetDefault("METRICS_ADDR", ":9090")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("RATE_LIMIT_RPS", 10)
 
@@ -50,7 +59,7 @@ func Load() (*Config, error) {
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
 	// config from real env vars (prod, where .env is absent) would be dropped.
 	for _, key := range []string{
-		"ENV", "HTTP_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
+		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
 		"HESTIA_API_URL", "HESTIA_API_KEY",
 	} {
@@ -74,18 +83,18 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	if err := cfg.validate(); err != nil {
+	if err := cfg.validate(requireRedis); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
 }
 
-func (c *Config) validate() error {
+func (c *Config) validate(requireRedis bool) error {
 	var missing []string
 	if c.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
 	}
-	if c.RedisURL == "" {
+	if requireRedis && c.RedisURL == "" {
 		missing = append(missing, "REDIS_URL")
 	}
 	if len(missing) > 0 {

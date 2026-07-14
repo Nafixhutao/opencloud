@@ -55,3 +55,27 @@ func TestLoad_NoEnvFile_SucceedsFromEnvVars(t *testing.T) {
 		t.Fatalf("env vars not picked up: db=%q redis=%q", cfg.DatabaseURL, cfg.RedisURL)
 	}
 }
+
+func TestLoadForMigration_DoesNotRequireRedis(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+
+	cfg, err := LoadForMigration()
+	if err != nil {
+		t.Fatalf("LoadForMigration() unexpectedly required Redis: %v", err)
+	}
+	if cfg.DatabaseURL == "" {
+		t.Fatal("DATABASE_URL was not loaded")
+	}
+}
+
+func TestLoad_RequiresRedis(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded without REDIS_URL")
+	}
+}

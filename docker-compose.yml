@@ -1,11 +1,11 @@
-# OpenCloud local stack. Brings up Postgres, Redis, the Go API and the job
-# worker. Frontend and Prometheus/Grafana are added in a later item (see
-# ROADMAP.md Phase 0 / docs/INFRASTRUCTURE.md).
+# OpenCloud local stack. Brings up Postgres and Redis, runs migrations, then
+# starts the Go API and worker. Frontend and Prometheus/Grafana are added later
+# (see ROADMAP.md Phase 0 / docs/INFRASTRUCTURE.md).
 #
 #   docker compose up --build
 #
-# Config comes from .env (copy from .env.example). Service hostnames below
-# override the localhost URLs in .env for in-network addressing.
+# Compose reads interpolation values from .env (copy from .env.example), while
+# each service receives only its explicit allowlist below.
 
 name: opencloud
 
@@ -38,19 +38,40 @@ services:
       timeout: 3s
       retries: 10
 
-  api:
+  migrate:
     build: ./backend
-    command: ["/app/api"]
-    env_file: .env
+    command: ["/app/migrate", "up"]
     environment:
-      # In-network addresses override .env's localhost values.
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
       DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+
+  api:
+    build: ./backend
+    command: ["/app/api"]
+    environment:
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      HTTP_ADDR: ":8080"
+      METRICS_ADDR: ":9090"
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL:-}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
+      HESTIA_API_URL: ${HESTIA_API_URL:-}
+      HESTIA_API_KEY: ${HESTIA_API_KEY:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     # No container healthcheck: the distroless image has no shell/curl. Liveness
@@ -60,13 +81,16 @@ services:
   worker:
     build: ./backend
     command: ["/app/worker"]
-    env_file: .env
     environment:
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
       DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
       REDIS_URL: redis://redis:6379/0
+      HESTIA_API_URL: ${HESTIA_API_URL:-}
+      HESTIA_API_KEY: ${HESTIA_API_KEY:-}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
 

@@ -8,7 +8,7 @@
 
 The dashboard standardized on **shadcn/ui + Tailwind** as the single component
 system, with an explicit "no second component library, no CSS-in-JS" rule
-([`../CLAUDE.md`](../CLAUDE.md) §6, [`../FRONTEND.md §5`](../FRONTEND.md#5-components--styling)).
+([`../../CLAUDE.md`](../../CLAUDE.md) §6, [`../FRONTEND.md §5`](../FRONTEND.md#5-components--styling)).
 
 We are adopting **[Astryx](https://github.com/facebook/astryx)** — a React +
 StyleX design system (customizable foundations, components, templates, themes;
@@ -73,6 +73,6 @@ ergonomics; the two never fight because they never share a screen.
 **Harder / accepted cost:** two component systems and a **StyleX build toolchain**
 (babel + postcss) added to the marketing build; contributors must know which
 system a route group uses; larger dependency surface. This **relaxes** the
-"single component library / no CSS-in-JS" rule ([`../CLAUDE.md`](../CLAUDE.md) §6,
+"single component library / no CSS-in-JS" rule ([`../../CLAUDE.md`](../../CLAUDE.md) §6,
 [`../FRONTEND.md §5`](../FRONTEND.md#5-components--styling)) to a **per-route-group
 boundary** — the rule still holds *within* a route group.

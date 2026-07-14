@@ -1,10 +1,15 @@
 package middleware
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestValidRequestID(t *testing.T) {
@@ -28,4 +33,21 @@ func TestValidRequestID(t *testing.T) {
 			require.Equal(t, tt.want, validRequestID(tt.id))
 		})
 	}
+}
+
+func TestRecoveryReturnsContractErrorAndLogsStack(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.ErrorLevel)
+	r := gin.New()
+	r.Use(RequestID(), Recovery(zap.New(core)))
+	r.GET("/panic", func(_ *gin.Context) { panic("boom") })
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/panic", nil))
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), `"code":"INTERNAL"`)
+	entries := logs.FilterMessage("panic recovered").All()
+	require.Len(t, entries, 1)
+	require.NotEmpty(t, entries[0].ContextMap()["stack"])
 }

@@ -37,7 +37,7 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 - **Sensitive actions** (delete account, change billing, role change) require
   re-authentication or 2FA where configured.
 
-## 3. Tokens in the frontend {#tokens}
+## 3. Tokens in the frontend
 
 - Tokens live in **httpOnly, Secure, SameSite cookies** — **never** `localStorage`
   or client-readable JS.
@@ -104,8 +104,7 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 - Hosting nodes: per-customer Linux users, PHP-FPM pools, and MariaDB users for
   OS-level isolation ([`HOSTING.md`](HOSTING.md#5-isolation-on-the-node)).
 - SSH: key-only, no root login, bastion-restricted. Automatic security updates.
-- Node bootstrap (Fail2ban + UFW + hardening) is scripted under `deploy/hestia/`
-  for reproducibility.
+- Node bootstrap scripts under `deploy/hestia/` land with Phase 6 hardening.
 
 ## 11. Dependency & supply-chain security
 
@@ -131,7 +130,7 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 ## 14. Secure SDLC
 
 - Threat-aware code review on every PR; security-sensitive changes flagged.
-- Secrets scanning in CI to catch accidental commits.
+- Secrets scanning is added before production credentials enter the repository.
 - No security control is removed to "simplify" — if a change weakens one, call it
   out explicitly and get sign-off.
 

@@ -60,8 +60,22 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
   signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
   missing/malformed headers.
+- **Migration deployment gate:** Compose now runs a one-shot `migrate` service
+  before API/worker startup, and CI verifies up/idempotent-up/down/up against a
+  disposable PostgreSQL 18 service.
+- **WSL-safe checkout rules:** `.gitattributes` keeps Go, shell, SQL, and YAML
+  files on LF across Windows/WSL checkouts.
 
 ### Fixed
+- The smoke test now uses an isolated Compose project, cleans up through a trap,
+  and fails when readiness, metrics, or worker startup checks fail.
+- API/worker receive only their service-specific environment variables; migration
+  config requires PostgreSQL but no longer requires Redis.
+- Prometheus metrics moved from the public API router to a separate `:9090`
+  listener; recovered panics now log a stack trace and return the documented
+  `INTERNAL` error code. JWT failures use `UNAUTHENTICATED` consistently.
+- Stale paths, commands, CI claims, anchors, and ADR links in project docs now
+  match the implemented repository.
 - Restored a minimal Next.js App Router shell so frontend lint, type-check, and
   production build can run while the full marketing surface is rebuilt.
 - Reordered HTTP middleware so recovered panics are included in request logs and

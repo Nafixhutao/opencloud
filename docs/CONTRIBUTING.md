@@ -19,7 +19,7 @@ first; this document is the workflow around them.
 cp .env.example .env          # fill in dev values
 docker compose up --build     # full stack
 # or run pieces directly:
-cd backend && go run ./cmd/api
+(cd backend && go run ./cmd/api)
 npm install && npm run dev    # frontend (repo root)
 ```
 
@@ -57,10 +57,10 @@ npm install && npm run dev    # frontend (repo root)
 Run the checks CI will run:
 
 ```bash
-# backend
-gofmt -l .            # must print nothing
-golangci-lint run
-go test ./...
+# backend (from repo root)
+(cd backend && test -z "$(gofmt -l .)")
+(cd backend && golangci-lint run)
+(cd backend && go test ./...)
 
 # frontend
 npm run lint

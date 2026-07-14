@@ -216,7 +216,7 @@ func TestAuth(t *testing.T) {
 				require.Equal(t, "user_abc123", body.UserID)
 				require.Equal(t, "customer", body.Role)
 			} else {
-				require.Contains(t, rec.Body.String(), `"unauthorized"`)
+				require.Contains(t, rec.Body.String(), `"UNAUTHENTICATED"`)
 			}
 		})
 	}

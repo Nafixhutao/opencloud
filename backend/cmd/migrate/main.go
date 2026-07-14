@@ -1,6 +1,5 @@
-// Command migrate runs Bun database migrations: `up`, `down`, `status`
-// (BACKEND.md §3). Migrations are registered in the migrations package; until
-// the first schema migration lands the registry is empty and `up` is a no-op.
+// Command migrate runs Bun database migrations: `up`, `down`, and `status`
+// (BACKEND.md §3). Migrations are registered in the migrations package.
 package main
 
 import (

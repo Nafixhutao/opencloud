@@ -23,21 +23,18 @@ host for performance and OS-level tenant isolation.
 
 ```
 docker-compose.yml
-├── frontend     # Next.js (port 3000)
-├── api          # Go API (port 8080)        depends_on: postgres, redis
-├── worker       # Go job worker             depends_on: postgres, redis
 ├── postgres     # PostgreSQL 18 (volume: pgdata)
-├── redis        # Redis 8 (volume: redisdata)
-├── prometheus   # scrapes api /metrics + node exporters (port 9090)
-└── grafana      # dashboards (port 3001)    depends_on: prometheus
+├── redis        # Redis 8 (disposable cache)
+├── migrate      # one-shot Bun migrations; depends_on: postgres
+├── api          # Go API (:8080) + internal metrics (:9090)
+└── worker       # Go job worker; starts after migrate succeeds
 ```
 
-- `api` and `worker` share the same image (different command); built from
-  `backend/Dockerfile` (multi-stage: build → minimal runtime image).
-- `frontend` is built from the repo-root `Dockerfile` (Next.js standalone output).
-- Datastores use named volumes so data survives `docker compose down`.
-- Internal services talk over the Compose network; only the frontend, API, and
-  Grafana are exposed to the host.
+- `api`, `worker`, and `migrate` use `backend/Dockerfile`; the image carries all
+  three binaries and each service selects one command.
+- PostgreSQL uses a named volume. Redis is disposable by design.
+- API and metrics ports bind to host loopback for local development.
+- Frontend, Prometheus, and Grafana services land in later roadmap phases.
 
 ### Dockerfile conventions
 - **Multi-stage** builds; final image is minimal (distroless/alpine) and runs as a
@@ -54,9 +51,12 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 |---|---|---|
 | `ENV` | all | `development` / `staging` / `production` |
 | `HTTP_ADDR` | api | listen address, e.g. `:8080` |
-| `DATABASE_URL` | api, worker, frontend | PostgreSQL DSN (BFF reuses it for better-auth's `auth.*` tables — ADR 0006) |
+| `METRICS_ADDR` | api | separate internal metrics listener, e.g. `:9090` |
+| `DATABASE_URL` | api, worker, migrate, frontend | PostgreSQL DSN (BFF reuses it for better-auth's `auth.*` tables — ADR 0006) |
 | `REDIS_URL` | api, worker | Redis connection |
 | `AUTH_JWKS_URL` | api | better-auth JWKS endpoint the API validates JWTs against; issues none (ADR 0006) |
+| `AUTH_ISSUER` | api | expected JWT issuer; optional when the identity provider omits it |
+| `AUTH_AUDIENCE` | api | expected JWT audience; optional when the identity provider omits it |
 | `BETTER_AUTH_SECRET` | frontend | better-auth encryption/hashing key (≥32 chars) — ADR 0006 |
 | `BETTER_AUTH_URL` | frontend | better-auth base URL (BFF origin) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
@@ -83,7 +83,8 @@ Configuration differs **only** by environment variables, not by code paths.
 
 ## 5. Monitoring (Prometheus + Grafana)
 
-- The API exposes **Prometheus metrics** at `/metrics` (internal network only).
+- The API process exposes Prometheus metrics on the separate internal listener
+  configured by `METRICS_ADDR` (`:9090/metrics` locally), not on the public API.
 - Prometheus scrapes the API, the worker, and node exporters on hosting nodes.
 - Grafana dashboards visualize:
   - **Control plane:** request rate/latency/errors (RED), queue depth + job
@@ -114,8 +115,8 @@ Configuration differs **only** by environment variables, not by code paths.
 
 ## 8. Networking & host security
 
-- A reverse proxy (Nginx in `deploy/nginx/`) terminates TLS for the control plane
-  and routes to frontend/API.
+- A reverse proxy configuration under `deploy/nginx/` is added with the production
+  deployment work; it terminates TLS and routes only frontend/API traffic.
 - **UFW** on every host allows only required ports (HTTP/HTTPS, SSH from bastion,
   internal scrape ports on the private network).
 - **Fail2ban** bans abusive IPs (SSH, auth endpoints). Hardening details:

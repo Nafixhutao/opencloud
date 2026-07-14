@@ -21,10 +21,23 @@ jobs:
       - run: npm run build
       - run: npm audit --audit-level=high
 
-  # backend job (gofmt · golangci-lint · go test · govulncheck · docker build)
-  # lands with the Go scaffold — see docs/DEPLOYMENT.md §2 and ROADMAP.md Phase 0.
+  # Backend checks and migration verification; see docs/DEPLOYMENT.md §2.
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: opencloud
+          POSTGRES_PASSWORD: opencloud
+          POSTGRES_DB: opencloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opencloud -d opencloud"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -43,6 +56,14 @@ jobs:
           working-directory: backend
       - run: go vet ./...
       - run: go test ./...
+      - name: migration round trip
+        env:
+          DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
+        run: |
+          go run ./cmd/migrate up
+          go run ./cmd/migrate up
+          go run ./cmd/migrate down
+          go run ./cmd/migrate up
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: docker build
