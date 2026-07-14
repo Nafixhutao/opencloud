@@ -103,5 +103,28 @@ func (c *Config) validate(requireRedis bool) error {
 	return nil
 }
 
+// ValidateAPI enforces settings used only by the HTTP API.
+func (c *Config) ValidateAPI() error {
+	if !c.IsProduction() {
+		return nil
+	}
+
+	var missing []string
+	// In production, iss/aud validation must not be a silent no-op: an empty
+	// value makes Auth skip that check, so a token merely signed by the trusted
+	// JWKS would pass regardless of who it was issued for. Fail fast instead
+	// (better-auth always emits iss/aud — default the BFF base URL, ADR 0006).
+	if c.AuthIssuer == "" {
+		missing = append(missing, "AUTH_ISSUER")
+	}
+	if c.AuthAudience == "" {
+		missing = append(missing, "AUTH_AUDIENCE")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required API config: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 // IsProduction reports whether the app runs with production semantics.
 func (c *Config) IsProduction() bool { return c.Env == "production" }
