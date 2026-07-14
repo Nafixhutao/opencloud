@@ -62,6 +62,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
   signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
   missing/malformed headers.
+- **RBAC middleware** `middleware.RequireRole(allowed...)` (ROADMAP Phase 1):
+  gates a route to callers whose validated token carries an allowed role
+  (`customer`/`admin` — RBAC enforced server-side, `docs/SECURITY.md` §4). Runs
+  after `Auth`; a non-matching role gets `403 Forbidden` ("authenticated but not
+  allowed", `docs/API.md` §3), distinct from the `404` used for tenant resources.
+  On its own (no `Auth` ahead) it forbids, so it can never be a privilege
+  escalation. Tests cover admin-allowed, customer-forbidden, multi-role match,
+  and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
 - Restored a minimal Next.js App Router shell so frontend lint, type-check, and
