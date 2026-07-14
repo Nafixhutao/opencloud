@@ -269,7 +269,7 @@ func TestRequireRole(t *testing.T) {
 
 			require.Equal(t, tt.wantStatus, rec.Code)
 			if tt.wantStatus == http.StatusForbidden {
-				require.Contains(t, rec.Body.String(), `"forbidden"`)
+				require.Contains(t, rec.Body.String(), `"code":"FORBIDDEN"`)
 			}
 		})
 	}

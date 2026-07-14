@@ -43,7 +43,13 @@ func (d *Deps) Close() {
 // only the DB, so it passes withStores=false and calls database.Connect itself.
 // On any error the caller gets a partially-built Deps it should Close.
 func Bootstrap(ctx context.Context, withStores bool) (*Deps, error) {
-	cfg, err := config.Load()
+	var cfg *config.Config
+	var err error
+	if withStores {
+		cfg, err = config.Load()
+	} else {
+		cfg, err = config.LoadForMigration()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

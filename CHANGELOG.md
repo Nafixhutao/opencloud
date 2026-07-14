@@ -55,9 +55,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   the request context via `AccountID`/`UserID`/`Role` helpers. `NewJWKS` builds the
   background-refreshing `jwt.Keyfunc` from `AUTH_JWKS_URL`. New config
   `AUTH_ISSUER`/`AUTH_AUDIENCE` — empty skips that check in dev, but **required in
-  production**: `config.Load` fails fast when either is empty under `ENV=production`
-  so iss/aud validation is never a silent no-op (Codex review, PR #11). Failures
-  return `401` in the standard error envelope without revealing which check failed.
+  production**: API startup fails fast when either is empty under `ENV=production`
+  so iss/aud validation is never a silent no-op (Codex review, PR #11). Worker and
+  migration startup do not require API-only auth config. Failures return `401` in
+  the standard error envelope without revealing which check failed.
   Not yet mounted on `/api/v1` — wired when the first protected endpoint lands.
   Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
   signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
@@ -72,6 +73,9 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
+- Scoped production issuer/audience validation to the API binary. Worker startup
+  no longer requires unused auth settings, and migrations require only PostgreSQL
+  configuration (Codex review, PR #13).
 - Restored a minimal Next.js App Router shell so frontend lint, type-check, and
   production build can run while the full marketing surface is rebuilt.
 - Reordered HTTP middleware so recovered panics are included in request logs and

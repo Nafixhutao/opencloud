@@ -22,6 +22,10 @@ func main() {
 		// Logger may not exist yet; fail loudly on stderr.
 		panic(err)
 	}
+	if err := deps.Cfg.ValidateAPI(); err != nil {
+		deps.Close()
+		panic(err)
+	}
 	defer deps.Close()
 
 	m := metrics.New()

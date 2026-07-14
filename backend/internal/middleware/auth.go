@@ -133,7 +133,7 @@ func RequireRole(allowed ...string) gin.HandlerFunc {
 			}
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"error": gin.H{"code": "forbidden", "message": "insufficient permissions"},
+			"error": gin.H{"code": "FORBIDDEN", "message": "insufficient permissions"},
 		})
 	}
 }

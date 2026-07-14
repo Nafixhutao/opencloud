@@ -56,39 +56,69 @@ func TestLoad_NoEnvFile_SucceedsFromEnvVars(t *testing.T) {
 	}
 }
 
-// TestLoad_ProductionRequiresIssuerAudience guards the security fix: in
-// production an empty AUTH_ISSUER/AUTH_AUDIENCE must fail boot, not silently
-// disable iss/aud validation in Auth. Development stays lenient.
-func TestLoad_ProductionRequiresIssuerAudience(t *testing.T) {
-	base := func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
-		t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+// TestValidateAPI_ProductionRequiresIssuerAudience guards the security fix:
+// only the production API requires iss/aud, while development stays lenient.
+func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      string
+		issuer   string
+		audience string
+		wantErr  bool
+	}{
+		{name: "production without iss or aud fails", env: "production", wantErr: true},
+		{name: "production without iss fails", env: "production", audience: "https://auth.example.com", wantErr: true},
+		{name: "production without aud fails", env: "production", issuer: "https://auth.example.com", wantErr: true},
+		{name: "production with iss and aud succeeds", env: "production", issuer: "https://auth.example.com", audience: "https://auth.example.com"},
+		{name: "development without iss or aud succeeds", env: "development"},
 	}
 
-	t.Run("production without iss/aud fails", func(t *testing.T) {
-		base(t)
-		t.Setenv("ENV", "production")
-		if _, err := Load(); err == nil {
-			t.Fatal("expected Load() to fail in production with empty AUTH_ISSUER/AUTH_AUDIENCE")
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("ENV", tt.env)
+			t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+			t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+			t.Setenv("AUTH_ISSUER", tt.issuer)
+			t.Setenv("AUTH_AUDIENCE", tt.audience)
 
-	t.Run("production with iss/aud succeeds", func(t *testing.T) {
-		base(t)
-		t.Setenv("ENV", "production")
-		t.Setenv("AUTH_ISSUER", "https://auth.example.com")
-		t.Setenv("AUTH_AUDIENCE", "https://auth.example.com")
-		if _, err := Load(); err != nil {
-			t.Fatalf("Load() failed in production with iss/aud set: %v", err)
-		}
-	})
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() unexpectedly failed: %v", err)
+			}
+			err = cfg.ValidateAPI()
+			if tt.wantErr && err == nil {
+				t.Fatal("ValidateAPI() succeeded with incomplete production auth config")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("ValidateAPI() unexpectedly failed: %v", err)
+			}
+		})
+	}
+}
 
-	t.Run("development without iss/aud succeeds", func(t *testing.T) {
-		base(t)
-		t.Setenv("ENV", "development")
-		if _, err := Load(); err != nil {
-			t.Fatalf("Load() should not require iss/aud in development: %v", err)
-		}
-	})
+func TestLoad_ProductionWorkerDoesNotRequireAPIAuth(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("AUTH_ISSUER", "")
+	t.Setenv("AUTH_AUDIENCE", "")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("worker config unexpectedly required API auth: %v", err)
+	}
+}
+
+func TestLoadForMigration_ProductionRequiresOnlyDatabase(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("AUTH_ISSUER", "")
+	t.Setenv("AUTH_AUDIENCE", "")
+
+	if _, err := LoadForMigration(); err != nil {
+		t.Fatalf("migration config required an unrelated service setting: %v", err)
+	}
 }
