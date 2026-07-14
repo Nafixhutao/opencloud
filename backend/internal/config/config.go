@@ -22,6 +22,8 @@ type Config struct {
 
 	// Wired in later phases; loaded now so config never churns when they land.
 	AuthJWKSURL  string       `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
+	AuthIssuer   string       `mapstructure:"AUTH_ISSUER"`   // expected JWT iss (empty = skip check)
+	AuthAudience string       `mapstructure:"AUTH_AUDIENCE"` // expected JWT aud (empty = skip check)
 	CORSOrigins  string       `mapstructure:"CORS_ORIGINS"`
 	RateLimitRPS int          `mapstructure:"RATE_LIMIT_RPS"`
 	Hestia       HestiaConfig `mapstructure:",squash"`
@@ -49,7 +51,7 @@ func Load() (*Config, error) {
 	// config from real env vars (prod, where .env is absent) would be dropped.
 	for _, key := range []string{
 		"ENV", "HTTP_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
-		"AUTH_JWKS_URL", "CORS_ORIGINS", "RATE_LIMIT_RPS",
+		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
 		"HESTIA_API_URL", "HESTIA_API_KEY",
 	} {
 		_ = v.BindEnv(key)

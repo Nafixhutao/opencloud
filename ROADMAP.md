@@ -48,6 +48,8 @@ user can register and log in.
   component system per route group.
 - **better-auth** owns sessions + JWT (httpOnly cookies, JWKS); the Go backend
   validates JWTs and issues none (ADR 0006)
+  — 🚧 backend JWT-validation middleware landed (`middleware.Auth` + JWKS via
+  `keyfunc/v3`); better-auth BFF side pending
 - Social login (Google + GitHub) + email/password via better-auth
   (ADR 0006 — supersedes ADR 0005)
 - RBAC (`customer`, `admin`) enforced in middleware
