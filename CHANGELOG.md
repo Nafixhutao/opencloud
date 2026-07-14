@@ -47,6 +47,19 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   the `jwt.Keyfunc` that `golang-jwt/jwt/v5` uses to verify better-auth's JWTs — the
   `+ JWKS` in the earlier entry was left unnamed (ADR 0006). Library choice verified
   via Context7: `keyfunc/v3` is the golang-jwt-native JWK Set wrapper.
+- **JWT auth middleware** (`backend/internal/middleware/auth.go`, ROADMAP Phase 1):
+  `Auth` makes the Go API a resource server (ADR 0006) — it validates a bearer JWT
+  against better-auth's JWKS (asymmetric algs only; HMAC/`none` rejected), enforces
+  `exp` and, when configured, `iss`/`aud`, then puts the caller's `user_id` (sub),
+  tenant `account_id` (UUID — the `docs/SECURITY.md` §4 scoping key) and `role` on
+  the request context via `AccountID`/`UserID`/`Role` helpers. `NewJWKS` builds the
+  background-refreshing `jwt.Keyfunc` from `AUTH_JWKS_URL`. New optional config
+  `AUTH_ISSUER`/`AUTH_AUDIENCE` (empty skips that check, for dev). Failures return
+  `401` in the standard error envelope without revealing which check failed.
+  Not yet mounted on `/api/v1` — wired when the first protected endpoint lands.
+  Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
+  signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
+  missing/malformed headers.
 
 ### Fixed
 - Restored a minimal Next.js App Router shell so frontend lint, type-check, and
