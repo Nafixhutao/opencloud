@@ -55,3 +55,40 @@ func TestLoad_NoEnvFile_SucceedsFromEnvVars(t *testing.T) {
 		t.Fatalf("env vars not picked up: db=%q redis=%q", cfg.DatabaseURL, cfg.RedisURL)
 	}
 }
+
+// TestLoad_ProductionRequiresIssuerAudience guards the security fix: in
+// production an empty AUTH_ISSUER/AUTH_AUDIENCE must fail boot, not silently
+// disable iss/aud validation in Auth. Development stays lenient.
+func TestLoad_ProductionRequiresIssuerAudience(t *testing.T) {
+	base := func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
+		t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	}
+
+	t.Run("production without iss/aud fails", func(t *testing.T) {
+		base(t)
+		t.Setenv("ENV", "production")
+		if _, err := Load(); err == nil {
+			t.Fatal("expected Load() to fail in production with empty AUTH_ISSUER/AUTH_AUDIENCE")
+		}
+	})
+
+	t.Run("production with iss/aud succeeds", func(t *testing.T) {
+		base(t)
+		t.Setenv("ENV", "production")
+		t.Setenv("AUTH_ISSUER", "https://auth.example.com")
+		t.Setenv("AUTH_AUDIENCE", "https://auth.example.com")
+		if _, err := Load(); err != nil {
+			t.Fatalf("Load() failed in production with iss/aud set: %v", err)
+		}
+	})
+
+	t.Run("development without iss/aud succeeds", func(t *testing.T) {
+		base(t)
+		t.Setenv("ENV", "development")
+		if _, err := Load(); err != nil {
+			t.Fatalf("Load() should not require iss/aud in development: %v", err)
+		}
+	})
+}

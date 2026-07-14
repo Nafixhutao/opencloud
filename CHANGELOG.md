@@ -53,9 +53,11 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `exp` and, when configured, `iss`/`aud`, then puts the caller's `user_id` (sub),
   tenant `account_id` (UUID — the `docs/SECURITY.md` §4 scoping key) and `role` on
   the request context via `AccountID`/`UserID`/`Role` helpers. `NewJWKS` builds the
-  background-refreshing `jwt.Keyfunc` from `AUTH_JWKS_URL`. New optional config
-  `AUTH_ISSUER`/`AUTH_AUDIENCE` (empty skips that check, for dev). Failures return
-  `401` in the standard error envelope without revealing which check failed.
+  background-refreshing `jwt.Keyfunc` from `AUTH_JWKS_URL`. New config
+  `AUTH_ISSUER`/`AUTH_AUDIENCE` — empty skips that check in dev, but **required in
+  production**: `config.Load` fails fast when either is empty under `ENV=production`
+  so iss/aud validation is never a silent no-op (Codex review, PR #11). Failures
+  return `401` in the standard error envelope without revealing which check failed.
   Not yet mounted on `/api/v1` — wired when the first protected endpoint lands.
   Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
   signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
