@@ -14,6 +14,16 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Dashboard in the Compose stack** (ROADMAP Phase 0 exit criteria): root
+  `Dockerfile` (multi-stage — `runner` serves the Next.js `output: 'standalone'`
+  build as non-root on :3000; `auth-migrate` runs `npm run auth:migrate`) plus
+  two new Compose services: one-shot `auth-migrate` (Better Auth identity
+  tables, after Bun's `migrate` creates the `auth` schema — ADR 0006) and
+  `dashboard` (starts after `auth-migrate` succeeds, loopback-bound
+  `127.0.0.1:3000`). Compose now fails fast when `BETTER_AUTH_SECRET` is unset.
+  `backend/smoketest.sh` also builds/probes the dashboard and asserts the
+  `auth.*` tables exist. Docs updated: `README.md`, `docs/INFRASTRUCTURE.md` §2,
+  `docs/DEPLOYMENT.md` §1/§5.
 - **Go backend scaffold** (`backend/`, first ROADMAP Phase 0 code item): layered
   module `github.com/nazxf/opencloud/backend` with three entrypoints — `cmd/api`
   (Gin HTTP server, graceful SIGTERM shutdown), `cmd/worker` (job-loop skeleton

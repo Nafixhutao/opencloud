@@ -67,7 +67,8 @@ opencloud/
 ├── package.json          # frontend dependencies + scripts
 ├── backend/              # Go control plane
 ├── docs/                 # detailed topic docs (see below)
-└── docker-compose.yml    # backend + migration gate + datastores
+├── Dockerfile            # dashboard + auth-migrate image targets
+└── docker-compose.yml    # dashboard + backend + migration gates + datastores
 ```
 
 > **Status:** the repo contains a minimal Next.js shell and the Phase 0 Go
@@ -83,7 +84,7 @@ opencloud/
 - A Linux host running **Hestia Control Panel** for real provisioning
   (optional for UI/backend dev — the provisioner can run against a fake)
 
-### Run the backend stack (Docker)
+### Run the stack (Docker)
 
 ```bash
 git clone <repo-url> opencloud
@@ -92,11 +93,12 @@ cp .env.example .env          # then edit secrets
 docker compose up --build
 ```
 
-The current Compose stack runs migrations, then starts the API, worker,
-PostgreSQL, and Redis. Frontend and monitoring services land in later phases.
+The Compose stack runs the Bun and Better Auth migrations, then starts the API,
+worker, dashboard, PostgreSQL, and Redis. Monitoring services land in later phases.
 
 | Service | URL |
 |---|---|
+| Dashboard | http://localhost:3000 |
 | Backend API | http://localhost:8080/api/v1 |
 | Internal metrics | http://localhost:9090/metrics |
 

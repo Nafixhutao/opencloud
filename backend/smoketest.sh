@@ -12,13 +12,17 @@ if [[ $project == opencloud ]]; then
 fi
 compose=(docker compose --project-name "$project")
 
+# Compose requires BETTER_AUTH_SECRET (dashboard/auth-migrate); supply a
+# throwaway value so the smoke test never depends on a developer's .env.
+export BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-smoketest-only-secret-at-least-32-chars}
+
 cleanup() {
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 echo "=== rebuild ==="
-"${compose[@]}" build migrate api worker
+"${compose[@]}" build migrate api worker auth-migrate dashboard
 
 echo "=== up ==="
 "${compose[@]}" up -d
@@ -45,6 +49,31 @@ echo
 curl -fsS http://localhost:8080/readyz
 echo
 curl -fsS http://localhost:9090/metrics >/dev/null
+
+echo "=== wait for dashboard (up to 40s) ==="
+dashboard_ready=false
+for i in $(seq 1 40); do
+  if curl -fsS http://localhost:3000 >/dev/null; then
+    echo "dashboard ready after ${i}s"
+    dashboard_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ $dashboard_ready != true ]]; then
+  "${compose[@]}" logs dashboard auth-migrate >&2
+  echo "dashboard did not become ready" >&2
+  exit 1
+fi
+
+echo "=== auth tables exist ==="
+auth_tables=$("${compose[@]}" exec -T postgres \
+  psql -U opencloud -d opencloud -Atc \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'auth'")
+if (( auth_tables < 4 )); then
+  echo "expected >=4 better-auth tables in the auth schema, found ${auth_tables}" >&2
+  exit 1
+fi
 
 echo "=== worker command ==="
 worker_command=$("${compose[@]}" ps worker --format '{{.Command}}')
