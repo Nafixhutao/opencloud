@@ -101,8 +101,9 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
 
 ## 9. CI
 
-- Unit tests, lint, and type-check run on every PR. CI also runs the Bun migration
-  up/idempotent-up/down/up round trip against a disposable PostgreSQL service.
+- Unit tests, lint, and type-check run on every PR. CI runs the Bun migration
+  up/idempotent-up/down/up round trip and applies Better Auth migrations twice
+  against disposable PostgreSQL services.
   Repository integration suites are added when repositories land.
 - Pipeline details: [`DEPLOYMENT.md`](DEPLOYMENT.md#2-ci-pipeline).
 

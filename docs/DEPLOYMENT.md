@@ -3,7 +3,7 @@
 How OpenCloud is built, released, and rolled back. Packaging and environments are
 in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md); this covers the release process.
 
-**Stack:** Docker · Docker Compose · CI (build/lint/test) · Bun migrations.
+**Stack:** Docker · Docker Compose · CI (build/lint/test) · Bun + Better Auth migrations.
 
 ---
 
@@ -23,7 +23,7 @@ Runs on every PR and on merge to `main`. **Merges are blocked unless CI is green
 
 ```
 1. Backend:  gofmt check · golangci-lint · go test ./... · migration round trip · govulncheck · docker build
-2. Frontend: oxlint · tsc --noEmit · npm run build · npm audit
+2. Frontend: Better Auth migration · oxlint · tsc --noEmit · npm run build · npm audit
 3. Image publishing and automatic deployment are added with the release pipeline.
 ```
 
@@ -48,7 +48,10 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
 - Migrations run as an explicit deploy step, **before** the new app version starts:
   ```bash
   (cd backend && go run ./cmd/migrate up)
+  npm run auth:migrate
   ```
+- Bun runs first to create the `auth` namespace. Better Auth's migration API then manages
+  only the identity tables inside that schema (ADR 0006).
 - Production is **forward-only**; never edit a shipped migration — add a new one.
 - Migrations must be **backward-compatible** with the currently-running app version
   so a deploy (or rollback) never breaks live traffic. The pattern for breaking

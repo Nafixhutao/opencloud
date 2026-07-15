@@ -63,6 +63,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   Table-driven tests cover valid, expired, missing-expiry, wrong iss/aud, bad
   signature, unknown kid, HMAC, missing/invalid `account_id`, missing sub, and
   missing/malformed headers.
+- **Better Auth BFF foundation** (ROADMAP Phase 0/1 boundary): Next.js now mounts
+  `/api/auth/*`, enables email/password sessions, and connects Better Auth to an
+  isolated PostgreSQL `auth` schema. Bun bootstraps the namespace; Better Auth's
+  programmatic migration API owns and idempotently migrates its identity tables.
 - **Migration deployment gate:** Compose now runs a one-shot `migrate` service
   before API/worker startup, and CI verifies up/idempotent-up/down/up against a
   disposable PostgreSQL 18 service.

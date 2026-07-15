@@ -143,6 +143,7 @@ See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
 (cd backend && go run ./cmd/migrate up)             # apply DB migrations
 
 # Frontend
+npm run auth:migrate                # migrate Better Auth tables (after Bun)
 npm run lint                        # oxlint
 npm run build                       # production build
 
