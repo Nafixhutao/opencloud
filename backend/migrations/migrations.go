@@ -1,7 +1,7 @@
 // Package migrations holds the Bun migration registry. SQL migration files in
 // this directory (<timestamp>_<name>.up.sql / .down.sql) are embedded and
-// discovered at init. The auth.* tables are owned by better-auth's own
-// migrations, not Bun (ADR 0006) — migrations here touch only public.*.
+// discovered at init. Bun bootstraps the auth schema, but its tables remain
+// owned by better-auth's own migrations (ADR 0006).
 package migrations
 
 import (

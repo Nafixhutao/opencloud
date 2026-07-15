@@ -54,7 +54,8 @@ CREATE TABLE accounts (
 -- Identity (users, sessions, OAuth links, email verification) is owned by
 -- **better-auth** in a separate `auth` schema — `auth.user`, `auth.session`,
 -- `auth.account`, `auth.verification` — managed by better-auth's own migrations,
--- NOT Bun (ADR 0006). Bun owns only the `public.*` domain tables here. `role`
+-- NOT Bun (ADR 0006). Bun only bootstraps the empty `auth` schema; it owns the
+-- `public.*` domain tables here. `role`
 -- lives on `auth.user`; the tenant boundary stays `public.accounts`. Domain rows
 -- reference `auth.user.id` by id (no cross-schema FK). Note: better-auth's
 -- `auth.account` (a provider credential link) is not the tenant `public.accounts`.
@@ -143,7 +144,9 @@ type Site struct {
 
 ## 5. Migrations
 
-- Tooling: Bun migrate, run via `cmd/migrate` (`up`, `down`, `status`).
+- Domain migrations use Bun via `cmd/migrate` (`up`, `down`, `status`). Bun also
+  creates the empty `auth` namespace; Better Auth's migration API exclusively owns the
+  tables inside it.
 - Files are **timestamped** and live in `backend/migrations/`:
   `20260630120000_create_sites.up.sql` / `.down.sql`.
 - **Never edit a shipped migration** — add a new one. Production is forward-only.
@@ -153,9 +156,10 @@ type Site struct {
   [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ```bash
-go run ./cmd/migrate up        # apply pending
-go run ./cmd/migrate status    # show state
-go run ./cmd/migrate down      # roll back one (dev)
+go run ./cmd/migrate up             # domain tables + auth namespace
+npm run auth:migrate                # auth tables; run from repo root
+go run ./cmd/migrate status         # show Bun-managed state
+go run ./cmd/migrate down           # roll back one Bun migration (dev)
 ```
 
 ## 6. Indexing & performance

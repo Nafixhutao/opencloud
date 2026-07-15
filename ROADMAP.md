@@ -51,7 +51,9 @@ user can register and log in.
 - **better-auth** owns sessions + JWT (httpOnly cookies, JWKS); the Go backend
   validates JWTs and issues none (ADR 0006)
   — 🚧 backend JWT-validation middleware landed (`middleware.Auth` + JWKS via
-  `keyfunc/v3`); better-auth BFF side pending
+  `keyfunc/v3`); BFF foundation (PostgreSQL `auth` schema, email/password,
+  session handler/client) landed; JWT/JWKS tenant claims and login/register UI
+  pending
 - Social login (Google + GitHub) + email/password via better-auth
   (ADR 0006 — supersedes ADR 0005)
 - RBAC (`customer`, `admin`) enforced in middleware

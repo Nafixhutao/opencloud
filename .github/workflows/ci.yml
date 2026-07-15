@@ -9,6 +9,24 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: opencloud
+          POSTGRES_PASSWORD: opencloud
+          POSTGRES_DB: opencloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opencloud -d opencloud"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
+      BETTER_AUTH_SECRET: ci-only-secret-at-least-32-characters
+      BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +34,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: better-auth migration
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS auth'
+          npm run auth:migrate
+          npm run auth:migrate
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'auth'")" -ge 4
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('user', 'session', 'account', 'verification')")" -eq 0
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
@@ -68,4 +93,3 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: docker build
         run: docker build -t opencloud-backend:ci .
-
