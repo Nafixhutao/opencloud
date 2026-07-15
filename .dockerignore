@@ -1,0 +1,13 @@
+# Build context trimming for the root (frontend) Dockerfile — keep the image
+# lean and secret-free. The backend image builds from ./backend, which has its
+# own .dockerignore.
+.git
+.github
+node_modules
+.next
+out
+backend
+docs
+*.md
+.env
+.env.*

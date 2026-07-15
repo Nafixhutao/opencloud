@@ -12,7 +12,8 @@ in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md); this covers the release process.
 | Artifact | Built from | Contents |
 |---|---|---|
 | `opencloud-backend` image | `backend/Dockerfile` (multi-stage) | `api`, `worker`, and `migrate` binaries |
-| `opencloud-frontend` image | planned root `Dockerfile` | Next.js standalone build (not implemented yet) |
+| `opencloud-frontend` image | root `Dockerfile` (`runner` target) | Next.js standalone server |
+| `opencloud-auth-migrate` image | root `Dockerfile` (`auth-migrate` target) | Better Auth migration runtime |
 
 Images are immutable and tagged by version + git SHA (e.g.
 `opencloud-backend:1.4.0-ab12cd3`). The same image promotes through staging → prod.
@@ -66,8 +67,9 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
 ```bash
 git pull                              # or check out the release tag
 docker compose build
-docker compose run --rm migrate       # explicit, fail-fast deploy gate
-docker compose up -d api worker       # also depends on successful migrate
+docker compose run --rm migrate       # explicit, fail-fast deploy gate (Bun)
+docker compose run --rm auth-migrate  # Better Auth identity tables (ADR 0006)
+docker compose up -d api worker dashboard
 docker compose ps                     # verify health
 curl -fsS localhost:8080/readyz       # readiness gate
 ```

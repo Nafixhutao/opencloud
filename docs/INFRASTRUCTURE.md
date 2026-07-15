@@ -23,18 +23,23 @@ host for performance and OS-level tenant isolation.
 
 ```
 docker-compose.yml
-├── postgres     # PostgreSQL 18 (volume: pgdata)
-├── redis        # Redis 8 (disposable cache)
-├── migrate      # one-shot Bun migrations; depends_on: postgres
-├── api          # Go API (:8080) + internal metrics (:9090)
-└── worker       # Go job worker; starts after migrate succeeds
+├── postgres      # PostgreSQL 18 (volume: pgdata)
+├── redis         # Redis 8 (disposable cache)
+├── migrate       # one-shot Bun migrations; depends_on: postgres
+├── auth-migrate  # one-shot Better Auth migrations (auth.* — ADR 0006); after migrate
+├── api           # Go API (:8080) + internal metrics (:9090)
+├── worker        # Go job worker; starts after migrate succeeds
+└── dashboard     # Next.js standalone (:3000); starts after auth-migrate succeeds
 ```
 
 - `api`, `worker`, and `migrate` use `backend/Dockerfile`; the image carries all
   three binaries and each service selects one command.
+- `dashboard` and `auth-migrate` use the root `Dockerfile` (multi-stage; the
+  `runner` target serves the standalone Next.js build, the `auth-migrate` target
+  runs `npm run auth:migrate`).
 - PostgreSQL uses a named volume. Redis is disposable by design.
-- API and metrics ports bind to host loopback for local development.
-- Frontend, Prometheus, and Grafana services land in later roadmap phases.
+- API, metrics, and dashboard ports bind to host loopback for local development.
+- Prometheus and Grafana services land in later roadmap phases.
 
 ### Dockerfile conventions
 - **Multi-stage** builds; final image is minimal (distroless/alpine) and runs as a

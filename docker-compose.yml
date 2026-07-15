@@ -1,6 +1,6 @@
-# OpenCloud local stack. Brings up Postgres and Redis, runs migrations, then
-# starts the Go API and worker. Frontend and Prometheus/Grafana are added later
-# (see ROADMAP.md Phase 0 / docs/INFRASTRUCTURE.md).
+# OpenCloud local stack. Brings up Postgres and Redis, runs the Bun and Better
+# Auth migrations, then starts the Go API, worker, and the Next.js dashboard.
+# Prometheus/Grafana are added later (see ROADMAP.md / docs/INFRASTRUCTURE.md).
 #
 #   docker compose up --build
 #
@@ -49,6 +49,20 @@ services:
       postgres:
         condition: service_healthy
 
+  # One-shot Better Auth migration for the auth.* identity tables (ADR 0006).
+  # Runs after Bun's migrate has created the empty `auth` schema.
+  auth-migrate:
+    build:
+      context: .
+      target: auth-migrate
+    environment:
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (copy .env.example)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   api:
     build: ./backend
     command: ["/app/api"]
@@ -93,6 +107,21 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (copy .env.example)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      API_URL: http://api:8080
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
