@@ -125,31 +125,5 @@
     }
   html {
     @apply font-sans;
-    overflow-x: clip;
     }
-  body {
-    overflow-x: clip;
-    }
-}
-
-@keyframes auth-path-drift {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    opacity: 0.85;
-    transform: translate3d(0, -0.5rem, 0);
-  }
-}
-
-.auth-floating-paths {
-  animation: auth-path-drift 18s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .auth-floating-paths {
-    animation: none;
-  }
 }
