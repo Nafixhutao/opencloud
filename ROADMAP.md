@@ -48,14 +48,18 @@ user can register and log in.
   at once. Landing stays GSAP-only — no GSAP in `app/(dashboard)`/`app/(admin)`.
   The **marketing** surface adopts **Astryx** when reworked (ADR 0007); one
   component system per route group.
+  — ✅ initialized with the login/register screens (`button input label card
+  field`; the registry ships `field` instead of the old `form` wrapper)
 - **better-auth** owns sessions + JWT (httpOnly cookies, JWKS); the Go backend
   validates JWTs and issues none (ADR 0006)
   — 🚧 backend JWT-validation middleware landed (`middleware.Auth` + JWKS via
   `keyfunc/v3`); BFF foundation (PostgreSQL `auth` schema, email/password,
-  session handler/client) landed; JWT/JWKS tenant claims and login/register UI
-  pending
+  session handler/client) landed; `jwt()` plugin (JWKS at `/api/auth/jwks`) and
+  login/register UI landed; JWT tenant claims (`account_id`/`role`) pending
 - Social login (Google + GitHub) + email/password via better-auth
   (ADR 0006 — supersedes ADR 0005)
+  — 🚧 provider integration and conditional UI landed; production OAuth
+  credentials are still pending
 - RBAC (`customer`, `admin`) enforced in middleware
   — 🚧 backend `middleware.RequireRole` landed (403 on mismatch); role-gated
   routes wired when the first admin/customer endpoint lands

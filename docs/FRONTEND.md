@@ -11,7 +11,7 @@ Lucide React · GSAP (`@gsap/react`) · Geist fonts via `@fontsource`.
 
 **Approved for the dashboard phase** (add when the need lands, not before):
 **TanStack Query** (server state + job-status polling) · **react-hook-form + zod**
-(forms — what shadcn/ui `Form` is built on) · **TanStack Table** (data tables) ·
+(forms — wired through shadcn/ui `Field` primitives) · **TanStack Table** (data tables) ·
 **Recharts** (usage charts — what shadcn/ui charts are built on) ·
 **Vitest + Testing Library** (tests — [`TESTING.md`](TESTING.md#6-frontend-tests)).
 Anything else follows the `CLAUDE.md` §5.4 approval rule.
@@ -28,6 +28,7 @@ Anything else follows the `CLAUDE.md` §5.4 approval rule.
 . (repo root)
 ├── app/
 │   ├── (marketing)/        # public landing pages
+│   ├── (auth)/             # login/register (shadcn/ui — ADR 0007)
 │   ├── (dashboard)/        # authenticated customer area
 │   │   ├── layout.tsx       # shell: nav, auth guard
 │   │   ├── sites/           # route = folder; page.tsx, loading.tsx, error.tsx
@@ -41,7 +42,9 @@ Anything else follows the `CLAUDE.md` §5.4 approval rule.
 │   └── ...                 # feature components
 ├── lib/
 │   ├── api-client.ts       # typed fetch wrapper → backend
-│   ├── auth.ts             # server-side session/token helpers
+│   ├── auth.ts             # better-auth server configuration
+│   ├── auth-client.ts      # browser auth client
+│   ├── session.ts          # request-scoped server session helper
 │   ├── utils.ts            # cn() and friends
 │   └── hooks/              # client hooks
 ├── public/
@@ -49,8 +52,11 @@ Anything else follows the `CLAUDE.md` §5.4 approval rule.
 └── package.json
 ```
 
-Route groups `(marketing)`, `(dashboard)`, `(admin)` separate the three audiences
-without affecting URLs.
+Route groups `(marketing)`, `(auth)`, `(dashboard)`, `(admin)` separate the
+audiences without affecting URLs; `(auth)` holds the login/register screens
+(shadcn/ui per [ADR 0007](adr/0007-astryx-alongside-shadcn.md)). Both routes
+share one responsive authentication shell; Google/GitHub actions render only
+when the corresponding Better Auth credentials are complete.
 
 ## 2. Rendering model
 
@@ -149,21 +155,22 @@ first authenticated screen; primitives are added as each need lands
 
 | Phase | `add` | For |
 |---|---|---|
-| **1 Auth** | `button input label card form dialog sonner dropdown-menu avatar badge skeleton` | login/register/profile, app shell, toasts |
+| **1 Auth** | `button input label card field dialog sonner dropdown-menu avatar badge skeleton` | login/register/profile, app shell, toasts |
 | **2 Provisioning** | `table alert-dialog select tooltip progress sheet` | site/DB lists, async status, destructive delete |
 | **3 Domains/DNS/SSL** | `alert accordion switch` | cert/DNS status, DNS records |
 | **4 Email/FTP/cron** | `checkbox tabs` | account toggles |
 | **5 Billing** | `chart` | usage charts, invoices |
 
-`Form` wires react-hook-form + zod via `@hookform/resolvers/zod` — one pattern for
-every form (§6); the backend always re-validates. GSAP stays landing-only —
-dashboard motion is Tailwind + `tailwindcss-animate` (§5), not a second lib. The
-table above is the **dashboard/admin** (shadcn) surface; `app/(marketing)` uses
-**Astryx** components/templates instead ([ADR 0007](adr/0007-astryx-alongside-shadcn.md)).
+`Field` primitives wire react-hook-form + zod via `@hookform/resolvers/zod` — one
+pattern for every form (§6); the backend always re-validates. GSAP stays
+landing-only — dashboard motion is Tailwind + `tw-animate-css` (§5), not a second
+lib. The table above is the **dashboard/admin** (shadcn) surface;
+`app/(marketing)` uses **Astryx** components/templates instead
+([ADR 0007](adr/0007-astryx-alongside-shadcn.md)).
 
 ## 6. Forms & validation
 
-- Forms use **react-hook-form + zod** through the shadcn/ui `Form` primitives —
+- Forms use **react-hook-form + zod** through the shadcn/ui `Field` primitives —
   one pattern for every form; the zod schema is the single client-side
   definition of a form's shape.
 - Client-side validation is UX only — the backend **always** re-validates.
