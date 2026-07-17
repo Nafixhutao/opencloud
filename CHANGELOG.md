@@ -14,6 +14,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Efferd `auth-5` login shell:** registered the `@efferd` shadcn registry and
+  adapted its split authentication layout to OpenCloud branding and the existing
+  Better Auth email/social flows. Decorative paths use reduced-motion-aware CSS,
+  so the block adds no runtime animation dependency.
+- **Dependency adoption blueprint** (`docs/DEPENDENCIES.md`): centralizes the
+  adopted, phase-planned, conditional, and deliberately excluded frontend,
+  backend, testing, and API-contract tooling. Planned libraries are installed
+  only with their first real consumer and still require dependency approval.
 - **Reference-led authentication redesign:** `/login` and `/register` now share
   a responsive near-black shell with an honest OpenCloud capability panel,
   accessible email/password forms, and conditional Google/GitHub actions.

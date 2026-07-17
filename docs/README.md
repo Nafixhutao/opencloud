@@ -10,6 +10,7 @@ This folder holds the per-topic depth.
 |---|---|
 | [`BACKEND.md`](BACKEND.md) | Go control plane — layering, packages, conventions |
 | [`FRONTEND.md`](FRONTEND.md) | Next.js dashboard — rendering, data, components |
+| [`DEPENDENCIES.md`](DEPENDENCIES.md) | Dependency adoption blueprint — status, phase, and install gates |
 | [`DATABASE.md`](DATABASE.md) | PostgreSQL schema, migrations, Redis |
 | [`API.md`](API.md) | REST conventions + endpoint reference |
 | [`HOSTING.md`](HOSTING.md) | Hestia and the hosting data plane |
