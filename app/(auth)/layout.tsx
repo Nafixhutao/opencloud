@@ -24,7 +24,7 @@ export default async function AuthLayout({ children }: Readonly<{ children: Reac
       <div className="grid min-h-[calc(100svh-0.375rem)] lg:grid-cols-[57fr_43fr]">
         <section
           aria-label="OpenCloud account access"
-          className="flex min-h-[calc(100svh-0.375rem)] items-center justify-center overflow-y-auto px-6 py-10 sm:px-10"
+          className="flex min-h-[calc(100svh-0.375rem)] items-center justify-center overflow-y-auto px-6 py-10 sm:px-10 lg:items-start lg:pt-28"
         >
           <div className="w-full max-w-[20rem]">
             <Link
@@ -41,7 +41,7 @@ export default async function AuthLayout({ children }: Readonly<{ children: Reac
 
         <aside
           aria-label="About OpenCloud"
-          className="relative hidden min-h-[calc(100svh-0.375rem)] grid-rows-[minmax(7rem,0.72fr)_minmax(14rem,1.3fr)_minmax(5rem,0.52fr)_minmax(7rem,0.66fr)] border-l border-[oklch(0.955_0.006_90/0.1)] lg:grid"
+          className="relative hidden min-h-[calc(100svh-0.375rem)] grid-rows-[24%_36%_16%_24%] border-l border-[oklch(0.955_0.006_90/0.1)] lg:grid"
         >
           <div
             aria-hidden="true"
@@ -63,7 +63,7 @@ export default async function AuthLayout({ children }: Readonly<{ children: Reac
               <Cloud className="size-5" strokeWidth={2} />
               OpenCloud
             </div>
-            <h2 className="mt-7 max-w-[25rem] text-2xl leading-[1.15] font-semibold tracking-[-0.035em] xl:text-[1.75rem]">
+            <h2 className="mt-7 max-w-[25rem] text-xl leading-[1.18] font-medium tracking-[-0.03em] xl:text-[1.35rem]">
               Hosting operations, without the control-panel clutter.
             </h2>
             <p className="mt-4 max-w-[28rem] text-sm leading-6 text-[oklch(0.72_0.01_260)]">
@@ -73,7 +73,7 @@ export default async function AuthLayout({ children }: Readonly<{ children: Reac
 
           <div className="border-b border-[oklch(0.955_0.006_90/0.1)]" />
 
-          <section className="relative flex flex-col justify-center py-5 pr-8 pl-[calc(4.5%+1.5rem)] xl:pr-12">
+          <section className="relative flex flex-col justify-start pt-4 pr-8 pl-[calc(4.5%+1.5rem)] xl:pr-12">
             <p className="text-xs font-medium text-[oklch(0.68_0.012_260)]">One workspace for</p>
             <div className="mt-4 grid grid-cols-4 gap-3">
               {capabilities.map(({ label, icon: Icon }) => (
