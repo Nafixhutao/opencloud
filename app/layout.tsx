@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 
 // oxlint-disable-next-line react/only-export-components -- Next.js reads this layout export.
 export const metadata: Metadata = {
-  title: 'OpenCloud',
+  title: 'Cevra',
   description: 'A modern shared-hosting control plane.',
 };
 

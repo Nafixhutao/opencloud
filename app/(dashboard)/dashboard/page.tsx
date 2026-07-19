@@ -14,13 +14,13 @@ import { getSession } from '@/lib/session';
 
 // oxlint-disable-next-line react/only-export-components -- Next.js reads this page export.
 export const metadata: Metadata = {
-  title: 'Dashboard · OpenCloud',
+  title: 'Dashboard · Cevra',
 };
 
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) {
-    redirect('/login');
+    redirect('/');
   }
 
   return (

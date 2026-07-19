@@ -14,31 +14,25 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
-- **Efferd `auth-5` template:** registered the `@efferd` shadcn registry and
-  imported the block unchanged for later evaluation. It is not wired into the
-  OpenCloud auth routes, so the existing login/register design is unchanged.
+- **Simple login/register UI:** minimal email/password forms at `/login` and
+  `/register` using existing Better Auth client methods (no social providers,
+  no extra chrome). Dashboard redirects unauthenticated users to `/login`.
+
 - **Dependency adoption blueprint** (`docs/DEPENDENCIES.md`): centralizes the
   adopted, phase-planned, conditional, and deliberately excluded frontend,
   backend, testing, and API-contract tooling. Planned libraries are installed
   only with their first real consumer and still require dependency approval.
-- **Reference-led authentication redesign:** `/login` and `/register` now share
-  a responsive near-black shell with an honest OpenCloud capability panel,
-  accessible email/password forms, and conditional Google/GitHub actions.
-  Better Auth only enables a provider when both non-placeholder credentials are
-  configured; Compose passes those values to the BFF and migration service.
-- **Login/register UI + JWKS** (ROADMAP Phase 0 exit criteria, ADR 0006/0007):
+- **Auth foundation + JWKS** (ROADMAP Phase 0 exit criteria, ADR 0006/0007):
   Better Auth `jwt()` plugin in `lib/auth.ts` — public keys at
   `/api/auth/jwks`, session JWTs via `GET /api/auth/token` (EdDSA, iss/aud =
   `BETTER_AUTH_URL`, matching `.env.example`). shadcn/ui initialized (Tailwind
   v4, `components.json`, `app/globals.css` tokens, `@/*` path alias) with
-  per-need primitives (`button input label card field`). New routes:
-  `app/(auth)/login` + `register` (react-hook-form + zod →
-  `authClient.signIn.email`/`signUp.email`), `app/(dashboard)/dashboard`
-  (server-side session guard, sign-out), landing links. New deps (approved
-  list): `react-hook-form`, `zod`, `@hookform/resolvers` + shadcn runtime
-  (`@base-ui/react`, `class-variance-authority`, `clsx`, `tailwind-merge`,
-  `tw-animate-css`), with the `shadcn` CLI as development tooling. Docs updated: `docs/FRONTEND.md` §1,
-  `ROADMAP.md` Phase 1 status.
+  per-need primitives (`button input label card field`). Dashboard route
+  `app/(dashboard)/dashboard` with server-side session guard and sign-out.
+  New deps (approved list): `react-hook-form`, `zod`, `@hookform/resolvers` +
+  shadcn runtime (`@base-ui/react`, `class-variance-authority`, `clsx`,
+  `tailwind-merge`, `tw-animate-css`), with the `shadcn` CLI as development
+  tooling. Docs updated: `docs/FRONTEND.md` §1, `ROADMAP.md` Phase 1 status.
 - **Dashboard in the Compose stack** (ROADMAP Phase 0 exit criteria): root
   `Dockerfile` (multi-stage — `runner` serves the Next.js `output: 'standalone'`
   build as non-root on :3000; `auth-migrate` runs `npm run auth:migrate`) plus

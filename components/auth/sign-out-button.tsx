@@ -20,10 +20,10 @@ export function SignOutButton() {
         setError(result.error.message ?? 'Could not sign out. Try again.');
         return;
       }
-      router.push('/login');
+      router.push('/');
       router.refresh();
     } catch {
-      setError('Could not reach OpenCloud. Check your connection and try again.');
+      setError('Could not reach Cevra. Check your connection and try again.');
     } finally {
       setPending(false);
     }

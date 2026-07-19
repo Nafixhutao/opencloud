@@ -3,7 +3,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { jwt } from 'better-auth/plugins';
 import { Pool } from 'pg';
 
-import { socialProviders } from '@/lib/social-providers';
+import { socialProviders } from './social-providers';
 
 const databaseUrl = process.env.DATABASE_URL;
 const secret = process.env.BETTER_AUTH_SECRET;
