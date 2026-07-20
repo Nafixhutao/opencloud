@@ -14,9 +14,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
-- **Simple login/register UI:** minimal email/password forms at `/login` and
-  `/register` using existing Better Auth client methods (no social providers,
-  no extra chrome). Dashboard redirects unauthenticated users to `/login`.
+- **Geist Light auth and dashboard experience:** responsive `/login` and
+  `/register` flows use Better Auth email/password plus conditionally-enabled
+  Google/GitHub providers, shared Zod validation, actionable callback errors,
+  and a restrained developer-tool interface with traceable deployment states.
+  `/dashboard` now ships a responsive authenticated shell, resource overview,
+  guided deployment rail, honest empty states, loading skeletons, and error
+  recovery. Unauthenticated traffic and sign-out return to `/login`; focused
+  auth validation runs via `npm run test:auth`.
 
 - **Dependency adoption blueprint** (`docs/DEPENDENCIES.md`): centralizes the
   adopted, phase-planned, conditional, and deliberately excluded frontend,

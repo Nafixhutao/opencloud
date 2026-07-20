@@ -20,7 +20,7 @@ export function SignOutButton() {
         setError(result.error.message ?? 'Could not sign out. Try again.');
         return;
       }
-      router.push('/');
+      router.push('/login');
       router.refresh();
     } catch {
       setError('Could not reach Cevra. Check your connection and try again.');
@@ -30,20 +30,20 @@ export function SignOutButton() {
   }
 
   return (
-    <div className="flex flex-col items-start gap-2">
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
+    <div>
+      {error ? (
+        <p role="alert" className="sr-only">
           {error}
         </p>
-      )}
+      ) : null}
       <Button
         type="button"
         variant="outline"
-        className="h-11"
+        size="sm"
         onClick={onSignOut}
         disabled={pending}
       >
-        {pending ? 'Signing out…' : 'Sign out'}
+        {pending ? 'Signing Out…' : error ? 'Try Sign Out Again' : 'Sign Out'}
       </Button>
     </div>
   );

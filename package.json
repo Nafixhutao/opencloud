@@ -6,6 +6,7 @@
   "scripts": {
     "auth:check-providers": "jiti scripts/check-social-providers.ts",
     "auth:migrate": "jiti scripts/migrate-auth.ts",
+    "test:auth": "node --experimental-strip-types --test lib/auth-validation.test.ts",
     "dev": "next dev",
     "build": "next build",
     "lint": "oxlint",

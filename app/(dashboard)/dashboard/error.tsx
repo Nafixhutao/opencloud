@@ -4,16 +4,15 @@ import { Button } from '@/components/ui/button';
 
 export default function DashboardError({ reset }: { reset: () => void }) {
   return (
-    <main className="flex min-h-svh w-full items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm space-y-4 text-center">
-        <h1 className="text-lg font-medium">Something went wrong</h1>
-        <p className="text-sm text-muted-foreground">
-          The dashboard could not be loaded. Try again, and contact support if the problem
-          persists.
+    <main className="mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-[1200px] items-center px-6 py-16 sm:px-8">
+      <div className="flex w-full max-w-2xl flex-col items-start gap-5">
+        <p className="label-meta text-destructive">Dashboard Unavailable</p>
+        <h1 className="heading-page">The Dashboard Didn&apos;t Load</h1>
+        <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+          The workspace could not be loaded. Retry the dashboard, then contact support if
+          the problem continues.
         </p>
-        <Button className="h-11" onClick={reset}>
-          Try again
-        </Button>
+        <Button onClick={reset}>Retry Dashboard</Button>
       </div>
     </main>
   );
