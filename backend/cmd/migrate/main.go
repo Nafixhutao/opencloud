@@ -35,7 +35,11 @@ func main() {
 	if err != nil {
 		deps.Log.Fatal("connect postgres", zap.Error(err))
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			deps.Log.Error("close postgres", zap.Error(err))
+		}
+	}()
 
 	migrator := migrate.NewMigrator(
 		db,

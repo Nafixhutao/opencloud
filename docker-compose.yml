@@ -82,8 +82,6 @@ services:
       AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
-      HESTIA_API_URL: ${HESTIA_API_URL:-}
-      HESTIA_API_KEY: ${HESTIA_API_KEY:-}
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
@@ -104,7 +102,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
       REDIS_URL: redis://redis:6379/0
+      PROVISIONER_BACKEND: ${PROVISIONER_BACKEND:-docker}
+      DOCKER_SOCKET: ${DOCKER_SOCKET:-/var/run/docker.sock}
+      CADDY_API_URL: ${CADDY_API_URL:-http://127.0.0.1:2019}
       HESTIA_API_URL: ${HESTIA_API_URL:-}
+      HESTIA_ACCESS_KEY: ${HESTIA_ACCESS_KEY:-}
+      HESTIA_SECRET_KEY: ${HESTIA_SECRET_KEY:-}
       HESTIA_API_KEY: ${HESTIA_API_KEY:-}
     depends_on:
       migrate:

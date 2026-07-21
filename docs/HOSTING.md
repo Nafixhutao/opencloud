@@ -1,188 +1,139 @@
-# Hosting Stack — Hestia & the Data Plane
+# Hosting stack — Docker, Caddy, and provider fallbacks
 
-OpenCloud orchestrates a proven hosting stack rather than building one. The
-**data plane** is one or more Linux nodes running **Hestia Control Panel**, which
-manages Nginx, Apache, PHP-FPM, MariaDB, BIND9, and Certbot. The Go control plane
-drives it exclusively through the **provisioner**.
-
-See [ADR 0001](adr/0001-hestia-as-provisioning-backend.md) for the "orchestrate,
-don't fork" decision, and [`BACKEND.md`](BACKEND.md#8-provisioner) for the
-provisioner package.
-
----
+OpenCloud owns the customer experience and hosting control plane. For the MVP,
+the data plane runs customer sites as Docker containers and routes domains
+through Caddy (ADR 0008). Hestia is preserved as a fallback adapter rather than
+installed on the live control-plane host.
 
 ## 1. Components
 
-| Component | Role on a node |
+| Component | Responsibility |
 |---|---|
-| **Hestia Control Panel** | Manages all of the below via its API/CLI; owns per-customer Linux users, quotas, and isolation. |
-| **Nginx** | Front-end reverse proxy + static file serving; terminates HTTP(S). |
-| **Apache HTTP Server** | Application server behind Nginx for PHP apps (`.htaccess` compatibility). |
-| **PHP-FPM** | Runs PHP per site, with per-customer pools for isolation. |
-| **MariaDB** | Customer databases and DB users. |
-| **BIND9** | Installed with Hestia; **fallback only** — production DNS is Cloudflare ([ADR 0003](adr/0003-cloudflare-dns-and-ingress.md)). |
-| **Certbot** | Let's Encrypt certificate issuance and renewal. |
+| **Docker Engine** | Site containers, private networks, persistent volumes, runtime resource policy |
+| **Caddy** | Public ingress, reverse proxy, automatic HTTPS, certificate renewal |
+| **OpenCloud worker** | Sole caller of hosting backends; executes retryable jobs |
+| **PostgreSQL** | System of record for sites, domains, desired state, and jobs |
+| **Cloudflare** | Authoritative DNS and optional tunnel/edge path (ADR 0003) |
 
-> Nginx → Apache → PHP-FPM is the standard layered setup: Nginx handles TLS,
-> static assets, and proxying; Apache + PHP-FPM run the dynamic PHP application.
+The Phase 0 spike is disposable and proves the host can create one constrained
+container, route a real hostname through Caddy, repeat the operation without
+duplicates, and clean up only OpenCloud-labeled resources. The production
+provisioner, job queue, and customer site APIs land in Phase 2.
 
-## 2. How OpenCloud talks to Hestia
+## 2. Provisioner boundary
 
-- The **provisioner** is the only component that touches a node. It uses Hestia's
-  API (and CLI where the API is thin) over an authenticated, TLS channel. It is
-  also the sole caller of the **Cloudflare API** for customer DNS zones/records
-  ([ADR 0003](adr/0003-cloudflare-dns-and-ingress.md)).
-- Every provisioner operation is **idempotent**: creating a site/DB/zone that
-  already exists succeeds rather than errors. This makes job retries and drift
-  reconciliation safe.
-- No raw shell string interpolation — commands are built from typed, validated
-  arguments. Customer-supplied values (domains, DB names) are validated before
-  they reach a node. See [`SECURITY.md`](SECURITY.md).
-- Credentials for node access come from config (Viper) and are never logged.
+Only the provisioner talks to Docker, Caddy, Cloudflare, or a fallback Hestia
+node. Handlers and services depend on capabilities, never provider payloads.
 
 ```go
-type Provisioner interface {
-    CreateSite(ctx context.Context, node model.Node, spec SiteSpec) error
-    DeleteSite(ctx context.Context, node model.Node, domain string) error
-    CreateDatabase(ctx context.Context, node model.Node, spec DBSpec) error
-    CreateDNSZone(ctx context.Context, zone string) error // Cloudflare API, not a node (ADR 0003)
-    IssueCertificate(ctx context.Context, node model.Node, domain string) error
+type SiteProvisioner interface {
+    CreateSite(ctx context.Context, spec SiteSpec) error
+    DeleteSite(ctx context.Context, ref SiteRef) error
+    SuspendSite(ctx context.Context, ref SiteRef) error
+    ResumeSite(ctx context.Context, ref SiteRef) error
+    SiteStatus(ctx context.Context, ref SiteRef) (SiteState, error)
 }
 ```
 
-```go
-// SiteSpec / DBSpec are the inputs a provisioner call carries. All customer-supplied
-// fields are allowlist-validated (SECURITY.md §5) before they reach a node.
-type SiteSpec struct {
-    Domain     string // FQDN, allowlist-validated
-    HestiaUser string // owning account's Hestia/Linux user — owns the vhost + PHP-FPM pool
-    PHPVersion string // e.g. "8.3"; empty = node default
-    DocRoot    string // document-root subpath; empty = Hestia default (public_html)
-}
+The backend is selected with `PROVISIONER_BACKEND=docker|hestia|fake`:
 
-type DBSpec struct {
-    HestiaUser string // owning account's Hestia user
-    Name       string // database name, prefix-scoped per Hestia convention
-    DBUser     string // database user to create
-    // password is provisioner-generated, returned to the customer once, never
-    // stored in plaintext (SECURITY.md §13)
-}
+- `docker` is the MVP default.
+- `hestia` is the documented fallback and requires a dedicated clean node.
+- `fake` is permitted only in development/tests and is rejected in production.
+
+Every operation is idempotent. An already-correct resource is success; deleting
+an absent managed resource is success; a conflicting unmanaged resource is an
+error requiring operator review.
+
+## 3. Docker object ownership
+
+OpenCloud creates deterministic objects using the site UUID and labels every
+object with at least:
+
+- `opencloud.managed=true`
+- `opencloud.account_id=<uuid>`
+- `opencloud.site_id=<uuid>`
+
+The provisioner may mutate or remove an object only after all ownership labels
+match the requested tenant and site. It never uses global prune commands.
+
+Each site receives a dedicated network and persistent volume. Launch templates
+run non-root with a read-only root filesystem where possible, dropped Linux
+capabilities, `no-new-privileges`, PID/CPU/memory limits, and no arbitrary host
+mounts. Arbitrary user Dockerfiles remain out of launch scope until isolated
+build workers, image scanning, and policy enforcement exist.
+
+## 4. Site lifecycle
+
+All customer-facing writes are asynchronous through the PostgreSQL `jobs` table:
+
+```text
+create:
+  desired row + job -> ensure network/volume -> ensure container -> ensure Caddy route
+  -> health check -> active
+
+suspend:
+  remove/disable public route -> stop container -> keep volume -> suspended
+
+resume:
+  start container -> health check -> restore route -> active
+
+delete:
+  remove route -> remove matching container/network -> retain or delete volume by policy
+  -> delete database credentials -> deleted
 ```
 
-The `HestiaUser` (per-account Linux user on the node) is the one field not yet in the
-schema — where the account→Hestia-user mapping is stored or derived is settled in the
-**Phase 2 Hestia spike** ([`../ROADMAP.md`](../ROADMAP.md)) before provisioning is built,
-flagged here rather than committing a column prematurely.
+If a worker loses the response after a successful operation, its retry inspects
+the deterministic object and converges instead of creating a duplicate.
 
-## 3. Node topology
+## 5. Domains and HTTPS
 
-```
-                 OpenCloud control plane (Go API + worker)
-                                │  provisioner (Hestia API/CLI, TLS)
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                        ▼
-   Hestia node 1           Hestia node 2            Hestia node N
-   ─────────────          ─────────────            ─────────────
-   Nginx / Apache         Nginx / Apache           Nginx / Apache
-   PHP-FPM pools          PHP-FPM pools            PHP-FPM pools
-   MariaDB                MariaDB                  MariaDB
-   BIND9                  BIND9                    BIND9
-   Certbot                Certbot                  Certbot
-   Fail2ban + UFW         Fail2ban + UFW           Fail2ban + UFW
-```
+Caddy remains the only public listener on ports 80/443. Site containers publish
+no public ports; Caddy reaches an internal/loopback upstream.
 
-- Each node is registered in the `nodes` table with capacity/usage.
-- New accounts are placed on the least-loaded online node (simple scheduler; see
-  [`../ROADMAP.md`](../ROADMAP.md) Phase 2/7).
-- Nodes can be set to `draining` to stop new placements before maintenance.
+For customer-controlled domains, Caddy's On-Demand TLS permission endpoint must
+query an indexed OpenCloud domain record and return success only for an active,
+verified domain. This prevents arbitrary certificate issuance. Caddy config
+updates are serialized; each update is validated before reload and must preserve
+unrelated platform routes.
 
-## 4. Provisioning flows
+Cloudflare remains authoritative DNS under ADR 0003. Customers bring a domain,
+complete ownership/DNS verification, and then OpenCloud authorizes Caddy to serve
+it.
 
-All flows are **asynchronous** (queued via the `jobs` table, run by the worker) and update the
-resource's `status`. The control plane reconciles its state with the node's.
+## 6. Databases and persistent files
 
-### Create a site
-```
-1. service inserts sites row (status=provisioning) + enqueues provision_site
-2. worker → provisioner.CreateSite:
-     - create Hestia web domain (Nginx vhost + Apache + PHP-FPM pool)
-     - set document root, PHP version
-3. success → status=active ; failure → retry → status=failed + cleanup
-```
+The Phase 2 design supports a managed PostgreSQL/MariaDB service or isolated
+database containers with scoped users. Credentials are generated by the
+provisioner, shown once, and never logged or stored in plaintext.
 
-### Add a domain + SSL
-```
-1. attach domain to site (DNS zone via the Cloudflare API — ADR 0003)
-2. enqueue issue_certificate
-3. provisioner.IssueCertificate (Certbot) → store cert metadata, status=active
-4. renewal handled on the node by Certbot; control plane tracks expiry
-```
+Site files live in named volumes. Backups must include the volume plus a
+consistent database dump; a backup is not considered operational until a restore
+has been rehearsed.
 
-### Provision a database
-```
-1. service inserts databases row (status=provisioning)
-2. provisioner.CreateDatabase: MariaDB database + scoped DB user
-3. credentials returned to the customer once, not stored in plaintext
-```
+## 7. Security boundary
 
-### Suspend / delete
-```
-suspend: provisioner disables the web domain (503), keeps data → status=suspended
-delete:  provisioner removes site/DB/zone, then control plane hard-deletes rows
-```
+Docker daemon access is root-equivalent. It is never mounted into the dashboard
+or public API. The production worker reaches it through a hardened local boundary
+(rootless engine or restricted socket proxy/authorization policy chosen during
+Phase 2 hardening), and only typed operations are exposed to job handlers.
 
-## 5. Isolation on the node
+Customer input never becomes a shell command, container name, label selector,
+mount path, or raw Caddy JSON. Domains, image/template IDs, resource limits, and
+environment keys are validated before provisioning.
 
-Hestia provides OS-level multi-tenancy that complements application/DB scoping:
+## 8. Hestia fallback
 
-- **Separate Linux user per customer**, with home-directory permissions.
-- **Per-customer PHP-FPM pools** so one site can't read another's processes/files.
-- **Per-customer MariaDB users** scoped to their own databases.
-- Resource quotas (disk, optionally CPU/memory) enforced per account.
+ADR 0001 is retained as historical context. Hestia becomes active only through a
+new/superseding decision after its access-key scope, idempotency, backup, and
+migration checks pass on a dedicated non-production node. The full triggers and
+migration runbook are in [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md).
 
-This is the third isolation layer described in
-[`../ARCHITECTURE.md`](../ARCHITECTURE.md#8-multi-tenancy--isolation).
+## 9. Failure and reconciliation
 
-## 6. SSL / certificates
-
-- Issuance and renewal use **Certbot** (Let's Encrypt) on the node.
-- The control plane records certificate domain, issuer, and expiry; renewal alerts
-  fire before expiry (monitoring — [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md)).
-- HTTPS is enforced (HSTS) for customer sites and the dashboard.
-
-## 7. DNS & ingress (Cloudflare — ADR 0003)
-
-- Customer zones live in the platform's Cloudflare account. Customers **bring
-  their own domain** and point it at the Cloudflare-assigned nameservers.
-- Record changes go through the API (`/dns/zones/{id}/records`) → provisioner →
-  **Cloudflare API**. Propagation status is surfaced in the UI.
-- Inbound traffic (dashboard, API, customer sites) enters through **Cloudflare
-  Tunnel** (`cloudflared`, outbound-only) — no static IP or open inbound ports
-  required on our hardware. The tunnel carries HTTP(S) only: customer file
-  access starts with the web file manager, not raw FTP/SFTP.
-- BIND9 on the nodes is the documented **fallback** (self-hosted Hestia DNS
-  cluster, `v-add-remote-dns-host`) if Cloudflare must ever be dropped — see
-  [ADR 0003](adr/0003-cloudflare-dns-and-ingress.md).
-
-## 8. Backups
-
-- Hestia handles per-account backups on the node (web files, databases, mail).
-- Backup schedules and retention are configured per node and documented in a
-  runbook. Restores are rehearsed.
-- Control-plane data (PostgreSQL) is backed up separately — see
-  [`DATABASE.md`](DATABASE.md#9-backups).
-
-## 9. Node hardening
-
-Every node runs **Fail2ban** and **UFW** with only required ports open, plus the
-standard hardening in [`SECURITY.md`](SECURITY.md). Reproducible bootstrap scripts
-under `deploy/hestia/` land with the Phase 6 hardening work.
-
-## 10. Failure & reconciliation
-
-- Because the provisioner is idempotent, failed jobs retry safely.
-- A periodic **reconciliation job** compares control-plane state to each node's
-  actual state and repairs drift (e.g. a site marked active but missing on the
-  node), or flags it for an operator.
-- Partial provisioning is cleaned up by compensating actions — no orphaned
-  resources on a node or stale `active` rows in the DB.
+- Failed jobs retry with backoff; terminal failures enqueue compensating cleanup.
+- A reconciliation job compares PostgreSQL desired state with labeled Docker
+  objects and Caddy routes.
+- Unknown/unmanaged resources are reported, never adopted or deleted silently.
+- Metrics cover provisioning latency, retries, failures, container health, and
+  Caddy route/certificate errors without per-user high-cardinality labels.

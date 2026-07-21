@@ -12,10 +12,11 @@ update the doc, not a copy here.
 
 ## 1. What this project is
 
-OpenCloud is a custom **cloud shared-hosting platform** (a Hostinger/cPanel
-alternative) with a bespoke dashboard and a Go control plane, driving **Hestia
-Control Panel** as a provisioning backend. The Go backend is the system of
-record; Hestia is never exposed to customers.
+OpenCloud is a custom **cloud hosting platform** with a bespoke dashboard and a
+Go control plane. The MVP provisions isolated site containers through **Docker
+Engine** and publishes them through **Caddy**; Hestia is a documented fallback
+adapter (ADR 0008). The Go backend remains the system of record and provider
+details are never exposed to customers.
 
 Full context: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`ROADMAP.md`](ROADMAP.md)
@@ -27,7 +28,7 @@ Full context: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) �
 - **Frontend:** Next.js (App Router) · React · TypeScript · Tailwind CSS · shadcn/ui (dashboard/admin) · Astryx + StyleX (marketing — ADR 0007) · Lucide React · GSAP (marketing animations only)
   — approved libs (dashboard phase): TanStack Query · TanStack Table · react-hook-form + zod · Recharts · Vitest + Testing Library (tests)
 - **Auth:** better-auth in the Next.js BFF (identity provider — ADR 0006); the Go backend validates its JWTs via JWKS and issues none.
-- **Hosting:** Hestia · Nginx · Apache · PHP-FPM · MariaDB · Certbot · Cloudflare (DNS + Tunnel — ADR 0003) · BIND9 (fallback only)
+- **Hosting:** Docker Engine · Caddy · PostgreSQL/MariaDB · Cloudflare (DNS + optional Tunnel — ADR 0003); Hestia fallback (ADR 0001/0008)
 - **Platform:** Docker · Docker Compose · Prometheus · Grafana · Fail2ban · UFW
 
 Do **not** introduce technologies outside this list without explicit approval.
@@ -41,7 +42,7 @@ Do **not** introduce technologies outside this list without explicit approval.
 | Dashboard | the Next.js app (`app/` at repo root) | [`docs/FRONTEND.md`](docs/FRONTEND.md) |
 | Schema, migrations, Redis | DB or models | [`docs/DATABASE.md`](docs/DATABASE.md) |
 | REST conventions | endpoints | [`docs/API.md`](docs/API.md) |
-| Hestia / hosting stack | provisioner | [`docs/HOSTING.md`](docs/HOSTING.md) |
+| Hosting backends | provisioner | [`docs/HOSTING.md`](docs/HOSTING.md) |
 | Docker, monitoring, env | infra/config | [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) |
 | Auth, secrets, hardening | security-sensitive code | [`docs/SECURITY.md`](docs/SECURITY.md) |
 | Build, deploy, rollback | release process | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
@@ -58,23 +59,22 @@ Architecture decisions are recorded in [`docs/adr/`](docs/adr/).
 Customer/Admin → Cloudflare (DNS · Tunnel) → Next.js dashboard → Go/Gin API (/api/v1, JWT)
                                                ├─ PostgreSQL (Bun)   system of record · job queue
                                                ├─ Redis              cache · sessions · rate limits
-                                               └─ Provisioner ──→ Hestia node
-                                                              │      (Nginx · Apache · PHP-FPM ·
-                                                              │       MariaDB · Certbot)
+                                               └─ Provisioner ──→ Docker Engine · Caddy
+                                                              │      (site containers · routes · TLS)
                                                               └──→ Cloudflare API (DNS zones)
 ```
 
 **Backend layering — never skip a layer:**
 ```
 handler (Gin) → service (logic, transactions) → repository (Bun) → PostgreSQL
-                       └→ provisioner (only Hestia caller) → hosting node
+                       └→ provisioner (only hosting-backend caller) → data plane
 ```
 
 - Handlers translate HTTP ↔ domain; **no business logic, no DB access**.
 - Services own business rules and transactions; the only layer spanning repos/provisioner.
 - Repositories own all DB access; **every customer query is scoped by `account_id`**.
-- The provisioner is the **only** thing that talks to a hosting node or the
-  Cloudflare API, and it is idempotent.
+- The provisioner is the **only** thing that talks to Docker, Caddy, a fallback
+  hosting node, or the Cloudflare API, and it is idempotent.
 - Work that can exceed ~1s is **enqueued as a `jobs` row** (same transaction as the
   write that triggered it) and handled by the worker, not run inline.
 
@@ -111,7 +111,7 @@ handler (Gin) → service (logic, transactions) → repository (Bun) → Postgre
 - ❌ Editing a shipped migration instead of adding a new one.
 - ❌ Long-running work synchronously inside an HTTP handler.
 - ❌ Mixing component libraries **within a route group** — shadcn/ui owns `(dashboard)`/`(admin)`, Astryx owns `(marketing)` (ADR 0007); never both on one screen.
-- ❌ Leaking stack traces, SQL, or Hestia output to API clients.
+- ❌ Leaking stack traces, SQL, Docker/Caddy, or fallback-provider output to API clients.
 - ❌ Committing/pushing without the human's go-ahead; committing straight to `main`.
 
 ## 7. Quick command reference

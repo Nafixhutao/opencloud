@@ -60,7 +60,7 @@ CREATE TABLE accounts (
 -- reference `auth.user.id` by id (no cross-schema FK). Note: better-auth's
 -- `auth.account` (a provider credential link) is not the tenant `public.accounts`.
 
--- nodes: hosting servers running Hestia
+-- nodes: hosting capacity registered by backend driver (Docker or fallback Hestia)
 CREATE TABLE nodes (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     hostname    TEXT NOT NULL UNIQUE,
@@ -169,8 +169,8 @@ go run ./cmd/migrate down           # roll back one Bun migration (dev)
 - Paginate anything that can grow (keyset/cursor for large sets); never return
   unbounded lists.
 - Composite indexes match query shape (e.g. `(account_id, created_at DESC)`).
-- Open transactions late, commit early; **never hold a transaction across a Hestia
-  call** — provisioning is async and goes through the queue.
+- Open transactions late, commit early; **never hold a transaction across a
+  hosting-provider call** — provisioning is async and goes through the queue.
 
 ## 7. Multi-tenancy enforcement
 
@@ -202,4 +202,5 @@ Rules:
   runbook before they're needed.
 - Redis: persistence (AOF) is for warm restart convenience, not as a source of
   truth — recovery always assumes PostgreSQL is authoritative.
-- Customer data on nodes is backed up by Hestia; see [`HOSTING.md`](HOSTING.md).
+- Customer site volumes and databases are backed up by the active provider; see
+  [`HOSTING.md`](HOSTING.md).

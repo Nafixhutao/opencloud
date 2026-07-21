@@ -17,6 +17,8 @@ in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md); this covers the release process.
 
 Images are immutable and tagged by version + git SHA (e.g.
 `opencloud-backend:1.4.0-ab12cd3`). The same image promotes through staging → prod.
+The backend Dockerfile uses BuildKit cache mounts, so build hosts must provide a
+working `docker buildx` plugin; on Ubuntu 24.04 the package is `docker-buildx`.
 
 ## 2. CI pipeline
 
@@ -38,8 +40,8 @@ feature branch → PR (CI) → merge to main → deploy staging → verify → p
 ```
 
 - **development** — local Docker Compose; fake provisioner.
-- **staging** — mirrors production config against a test Hestia node; auto-deployed
-  from `main`.
+- **staging** — mirrors production config with disposable labeled Docker/Caddy
+  resources; auto-deployed from `main`.
 - **production** — promoted from a verified staging build; manual approval gate.
 
 Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTURE.md#3-configuration--environment-variables)).
@@ -97,13 +99,15 @@ curl -fsS localhost:8080/readyz       # readiness gate
 - **Data:** restore from PostgreSQL backups only as a last resort, following the
   rehearsed restore runbook ([`DATABASE.md`](DATABASE.md#9-backups)).
 
-## 8. Hosting node provisioning
+## 8. Hosting backend rollout
 
-- Hosting nodes are **not** part of the app deploy — they run Hestia on the host.
-- Reproducible `deploy/hestia/` bootstrap scripts land with Phase 6. Until then,
-  node setup is not represented as an implemented repository artifact.
-- Node OS and Hestia upgrades follow their own maintenance window, draining the
-  node first ([`HOSTING.md`](HOSTING.md)).
+- The Phase 0 Docker/Caddy spike is disposable and run explicitly from
+  `deploy/spikes/docker-caddy`; it is not part of every app deployment.
+- Phase 2 worker rollout grants hosting access only after ownership-label,
+  idempotency, resource-limit, and backup/restore checks pass in staging.
+- Docker daemon and Caddy admin access are never added to dashboard/API
+  containers. Scale-out or fallback Hestia nodes are drained before maintenance
+  ([`HOSTING.md`](HOSTING.md)).
 
 ## 9. Secrets & config at deploy time
 

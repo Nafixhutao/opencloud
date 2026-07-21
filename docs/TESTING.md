@@ -67,14 +67,18 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
 - Verify the things mocks can't: real SQL, constraints, indexes, `account_id`
   scoping actually filtering at the DB.
 
-## 5. Provisioner & Hestia
+## 5. Provisioner and hosting backends
 
-- The provisioner is tested against a **fake Hestia client** implementing the
-  `Provisioner` interface ([`BACKEND.md`](BACKEND.md#8-provisioner)).
-- **Never run provisioning tests against a production node.** A dedicated test node
-  may be used in staging e2e only.
+- Services are tested against a **fake provider-neutral provisioner** implementing
+  the same interface as Docker/Caddy and fallback Hestia
+  ([`BACKEND.md`](BACKEND.md#8-provisioner)).
+- CI never receives a Docker socket, Caddy admin endpoint, or real hosting-node
+  credentials. A disposable, explicitly labeled staging target may be used for a
+  controlled spike/e2e run only.
 - Test **idempotency** explicitly: calling create twice succeeds; retry after a
   simulated mid-failure converges to the right state.
+- Test ownership guards: an object with missing/mismatched OpenCloud labels is
+  never adopted, changed, or deleted.
 
 ## 6. Frontend tests
 

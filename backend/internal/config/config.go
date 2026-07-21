@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"sort"
 	"strings"
 
+	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/spf13/viper"
 )
 
@@ -22,18 +24,30 @@ type Config struct {
 	RedisURL    string `mapstructure:"REDIS_URL"`
 
 	// Wired in later phases; loaded now so config never churns when they land.
-	AuthJWKSURL  string       `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
-	AuthIssuer   string       `mapstructure:"AUTH_ISSUER"`   // expected JWT iss (empty = skip check)
-	AuthAudience string       `mapstructure:"AUTH_AUDIENCE"` // expected JWT aud (empty = skip check)
-	CORSOrigins  string       `mapstructure:"CORS_ORIGINS"`
-	RateLimitRPS int          `mapstructure:"RATE_LIMIT_RPS"`
-	Hestia       HestiaConfig `mapstructure:",squash"`
+	AuthJWKSURL  string            `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
+	AuthIssuer   string            `mapstructure:"AUTH_ISSUER"`   // expected JWT iss (empty = skip check)
+	AuthAudience string            `mapstructure:"AUTH_AUDIENCE"` // expected JWT aud (empty = skip check)
+	CORSOrigins  string            `mapstructure:"CORS_ORIGINS"`
+	RateLimitRPS int               `mapstructure:"RATE_LIMIT_RPS"`
+	Provisioner  ProvisionerConfig `mapstructure:",squash"`
 }
 
-// HestiaConfig holds the provisioner's node credentials (used from Phase 2).
+// ProvisionerConfig selects the hosting backend and carries only the connection
+// details the worker needs. Hestia stays available as a documented fallback.
+type ProvisionerConfig struct {
+	Backend      provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
+	DockerSocket string              `mapstructure:"DOCKER_SOCKET"`
+	CaddyAPIURL  string              `mapstructure:"CADDY_API_URL"`
+	Hestia       HestiaConfig        `mapstructure:",squash"`
+}
+
+// HestiaConfig holds fallback Hestia credentials. Access/secret keys are the
+// preferred scoped authentication mechanism; APIKey exists for legacy nodes.
 type HestiaConfig struct {
-	APIURL string `mapstructure:"HESTIA_API_URL"`
-	APIKey string `mapstructure:"HESTIA_API_KEY"`
+	APIURL    string `mapstructure:"HESTIA_API_URL"`
+	AccessKey string `mapstructure:"HESTIA_ACCESS_KEY"`
+	SecretKey string `mapstructure:"HESTIA_SECRET_KEY"`
+	APIKey    string `mapstructure:"HESTIA_API_KEY"`
 }
 
 // Load reads API/worker configuration, including both datastores.
@@ -54,6 +68,9 @@ func load(requireRedis bool) (*Config, error) {
 	v.SetDefault("METRICS_ADDR", ":9090")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("RATE_LIMIT_RPS", 10)
+	v.SetDefault("PROVISIONER_BACKEND", string(provisioner.BackendDocker))
+	v.SetDefault("DOCKER_SOCKET", "/var/run/docker.sock")
+	v.SetDefault("CADDY_API_URL", "http://127.0.0.1:2019")
 
 	// Explicitly bind every key: viper's Unmarshal only sees keys it already
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
@@ -61,7 +78,8 @@ func load(requireRedis bool) (*Config, error) {
 	for _, key := range []string{
 		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
-		"HESTIA_API_URL", "HESTIA_API_KEY",
+		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL",
+		"HESTIA_API_URL", "HESTIA_ACCESS_KEY", "HESTIA_SECRET_KEY", "HESTIA_API_KEY",
 	} {
 		_ = v.BindEnv(key)
 	}
@@ -122,6 +140,55 @@ func (c *Config) ValidateAPI() error {
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required API config: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// ValidateProvisioner enforces worker-only hosting backend configuration.
+func (c *Config) ValidateProvisioner() error {
+	backend, err := provisioner.ParseBackend(string(c.Provisioner.Backend))
+	if err != nil {
+		return err
+	}
+
+	switch backend {
+	case provisioner.BackendDocker:
+		return requireConfig(map[string]string{
+			"CADDY_API_URL": c.Provisioner.CaddyAPIURL,
+			"DOCKER_SOCKET": c.Provisioner.DockerSocket,
+		})
+	case provisioner.BackendHestia:
+		if err := requireConfig(map[string]string{"HESTIA_API_URL": c.Provisioner.Hestia.APIURL}); err != nil {
+			return err
+		}
+		hasAccessPair := c.Provisioner.Hestia.AccessKey != "" && c.Provisioner.Hestia.SecretKey != ""
+		if !hasAccessPair && c.Provisioner.Hestia.APIKey == "" {
+			return errors.New("missing required Hestia credentials: set HESTIA_ACCESS_KEY and HESTIA_SECRET_KEY")
+		}
+		if (c.Provisioner.Hestia.AccessKey == "") != (c.Provisioner.Hestia.SecretKey == "") {
+			return errors.New("HESTIA_ACCESS_KEY and HESTIA_SECRET_KEY must be set together")
+		}
+		return nil
+	case provisioner.BackendFake:
+		if c.IsProduction() {
+			return errors.New("PROVISIONER_BACKEND=fake is not allowed in production")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported provisioner backend %q", backend)
+	}
+}
+
+func requireConfig(values map[string]string) error {
+	var missing []string
+	for name, value := range values {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return fmt.Errorf("missing required provisioner config: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

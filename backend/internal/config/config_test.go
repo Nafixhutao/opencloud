@@ -146,3 +146,67 @@ func TestLoadForMigration_ProductionRequiresOnlyDatabase(t *testing.T) {
 		t.Fatalf("migration config required an unrelated service setting: %v", err)
 	}
 }
+
+func TestValidateProvisioner(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{
+			name: "Docker defaults are complete",
+			cfg: Config{Provisioner: ProvisionerConfig{
+				Backend:      "docker",
+				DockerSocket: "/var/run/docker.sock",
+				CaddyAPIURL:  "http://127.0.0.1:2019",
+			}},
+		},
+		{
+			name: "Hestia accepts scoped access pair",
+			cfg: Config{Provisioner: ProvisionerConfig{
+				Backend: "hestia",
+				Hestia: HestiaConfig{
+					APIURL:    "https://node.example.com:8083",
+					AccessKey: "access",
+					SecretKey: "secret",
+				},
+			}},
+		},
+		{
+			name: "Hestia rejects half an access pair",
+			cfg: Config{Provisioner: ProvisionerConfig{
+				Backend: "hestia",
+				Hestia: HestiaConfig{
+					APIURL:    "https://node.example.com:8083",
+					AccessKey: "access",
+				},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "fake is forbidden in production",
+			cfg: Config{
+				Env:         "production",
+				Provisioner: ProvisionerConfig{Backend: "fake"},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "unknown backend is rejected",
+			cfg:     Config{Provisioner: ProvisionerConfig{Backend: "unknown"}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.ValidateProvisioner()
+			if tt.wantErr && err == nil {
+				t.Fatal("ValidateProvisioner() succeeded, want error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("ValidateProvisioner() error = %v", err)
+			}
+		})
+	}
+}
