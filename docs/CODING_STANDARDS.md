@@ -22,7 +22,7 @@ deep-dives: [`BACKEND.md`](BACKEND.md), [`FRONTEND.md`](FRONTEND.md).
 |---|---|---|
 | Go package | short, lowercase, no underscores | `provisioner` |
 | Go exported | `PascalCase` | `CreateSite` |
-| Go unexported | `camelCase` | `hestiaClient` |
+| Go unexported | `camelCase` | `dockerClient` |
 | Go interface | capability + `-er` | `SiteProvisioner` |
 | Go file | `snake_case.go` | `site_service.go` |
 | Go test | `*_test.go`, `TestXxx` | `site_service_test.go` |

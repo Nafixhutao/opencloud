@@ -80,7 +80,7 @@ Base URL: `/api/v1` · Format: JSON · Auth: JWT (see [`SECURITY.md`](SECURITY.m
 
 - The backend maps typed errors (`apperr.*`) → status + envelope centrally; see
   [`BACKEND.md`](BACKEND.md#10-error-handling).
-- **Never leak internals** — no SQL, stack traces, or Hestia output in responses.
+- **Never leak internals** — no SQL, stack traces, or hosting-provider output in responses.
 - Validation errors (`422`) list offending fields in `details`.
 - Common codes: `VALIDATION_FAILED`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`,
   `CONFLICT`, `DOMAIN_TAKEN`, `RATE_LIMITED`, `INTERNAL`.

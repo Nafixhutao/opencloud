@@ -14,6 +14,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Docker + Caddy Phase 0 provisioning spike** (ADR 0008): a disposable,
+  idempotent `apply|verify|destroy` harness creates one labeled, constrained,
+  non-root site container with a dedicated network/volume and routes it through
+  Caddy over HTTPS without touching unrelated OpenCloud resources. The Go backend
+  now exposes a provider-neutral `SiteProvisioner` contract, deterministic site
+  resource names, and validated `docker|hestia|fake` backend selection (`fake` is
+  rejected in production). `docs/HESTIA_FALLBACK.md` preserves the Hestia
+  security spike, adoption triggers, and reversible migration plan.
 - **Geist Light auth and dashboard experience:** responsive `/login` and
   `/register` flows use Better Auth email/password plus conditionally-enabled
   Google/GitHub providers, shared Zod validation, actionable callback errors,
@@ -116,6 +124,9 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
+- Cleared the backend's current `golangci-lint` findings by checking migration
+  database-close errors, using the supported Prometheus collector package, and
+  documenting exported provisioner states.
 - Scoped production issuer/audience validation to the API binary. Worker startup
   no longer requires unused auth settings, and migrations require only PostgreSQL
   configuration (Codex review, PR #13).
@@ -160,10 +171,16 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Security
+- Upgraded indirect `github.com/quic-go/quic-go` from 0.59.0 to 0.59.1 to fix
+  GO-2026-5676; `govulncheck ./...` now reports no reachable vulnerabilities.
 - Forced the vulnerable PostCSS copy nested under Next.js to 8.5.10; `npm audit`
   now reports zero known production dependency vulnerabilities.
 
 ### Changed
+- Docker Engine + Caddy are the primary MVP data plane; Hestia is retained as a
+  separate-node fallback behind the same provisioner boundary. Hosting,
+  architecture, infrastructure, security, testing, deployment, environment, and
+  roadmap documentation now describe the new decision and its safety limits.
 - Version pins refreshed to current stable (greenfield — verified this cycle):
   **PostgreSQL 16 → 18** (`docs/DATABASE.md`, `docs/INFRASTRUCTURE.md`; 18.4 is the
   current series, 16 still supported but a new project should start on 18) and the

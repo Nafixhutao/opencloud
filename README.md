@@ -1,14 +1,13 @@
 # OpenCloud
 
-> A modern, custom-built cloud **shared-hosting platform** — an alternative to
-> Hostinger, cPanel, and DirectAdmin with a bespoke dashboard and Go control
-> plane, powered underneath by Hestia Control Panel.
+> A modern, custom-built cloud hosting platform with a bespoke dashboard and Go
+> control plane, powered by Docker workloads and Caddy ingress.
 
-OpenCloud lets customers provision and manage websites, domains, databases,
-email, DNS, and SSL through a fast custom dashboard — while operators manage
-servers, plans, and customers from a dedicated admin panel. The stock Hestia UI
-is never exposed; OpenCloud's Go backend is the system of record and drives
-Hestia as a provisioning backend.
+OpenCloud lets customers provision and manage websites, domains, databases, DNS,
+and SSL through a fast custom dashboard while operators manage capacity, plans,
+and customers from a dedicated admin panel. The Go backend is the system of
+record and drives provider-neutral provisioning; Docker + Caddy is the MVP
+backend and Hestia is preserved as a fallback (ADR 0008).
 
 ---
 
@@ -31,10 +30,10 @@ Hestia as a provisioning backend.
 - **Website management** — create, suspend, and delete sites across hosting nodes.
 - **Domains & DNS** — connect your own domain; zones and records managed via
   Cloudflare ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)).
-- **Databases** — provision and manage MariaDB databases and users.
-- **SSL** — automatic Let's Encrypt issuance and renewal via Certbot.
-- **Email, FTP/SSH, cron** — full account lifecycle per customer (email lands
-  post-launch — [ADR 0004](docs/adr/0004-external-services-at-launch.md)).
+- **Databases** — provision and manage scoped PostgreSQL/MariaDB databases and users.
+- **SSL** — automatic certificate issuance and renewal through Caddy.
+- **Deployments** — curated static, Node.js, PHP, Python, Go, and CMS containers;
+  email and traditional FTP remain post-launch ([ADR 0004](docs/adr/0004-external-services-at-launch.md)).
 - **Resource monitoring** — per-account CPU, RAM, disk, and bandwidth in Grafana.
 - **Multi-tenant isolation** — strict per-customer separation enforced end to end.
 - **Automation-first** — provisioning, suspension, and teardown are fully API-driven.
@@ -45,7 +44,7 @@ Hestia as a provisioning backend.
 |---|---|
 | **Backend** | Go · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap |
 | **Frontend** | Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Lucide React · GSAP |
-| **Hosting** | Hestia Control Panel · Nginx · Apache · PHP-FPM · MariaDB · Certbot · Cloudflare (DNS + Tunnel) |
+| **Hosting** | Docker Engine · Caddy · PostgreSQL/MariaDB · Cloudflare DNS; Hestia fallback |
 | **Platform** | Docker · Docker Compose |
 | **Monitoring** | Prometheus · Grafana |
 | **Security** | Fail2ban · UFW |
@@ -81,8 +80,8 @@ opencloud/
 - **Docker** 24+ and **Docker Compose** v2
 - **Go** 1.26+ (for backend dev outside Docker)
 - **Node.js** 20+ and **npm** (for frontend dev)
-- A Linux host running **Hestia Control Panel** for real provisioning
-  (optional for UI/backend dev — the provisioner can run against a fake)
+- Linux + Caddy for the real Docker provisioning spike (optional for UI/backend
+  development, where the provisioner can use a fake)
 
 ### Run the stack (Docker)
 
@@ -131,7 +130,9 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `AUTH_JWKS_URL` | better-auth JWKS the API validates JWTs against (issues none — ADR 0006) |
 | `AUTH_ISSUER` / `AUTH_AUDIENCE` | Optional JWT issuer and audience validation |
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | better-auth (BFF) identity provider config |
-| `HESTIA_API_URL` / `HESTIA_API_KEY` | Hosting node access |
+| `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
+| `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
+| `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
 
 See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
@@ -165,7 +166,8 @@ docker compose down                 # stop everything
 | [`docs/FRONTEND.md`](docs/FRONTEND.md) | Next.js dashboard |
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Schema, migrations, Redis |
 | [`docs/API.md`](docs/API.md) | REST API conventions and reference |
-| [`docs/HOSTING.md`](docs/HOSTING.md) | Hestia and the hosting stack |
+| [`docs/HOSTING.md`](docs/HOSTING.md) | Docker/Caddy hosting data plane |
+| [`docs/HESTIA_FALLBACK.md`](docs/HESTIA_FALLBACK.md) | Hestia adoption triggers and migration plan |
 | [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) | Docker, monitoring, environments |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Security practices |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Build, deploy, rollback |

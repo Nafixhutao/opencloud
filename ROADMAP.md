@@ -10,16 +10,15 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
 ## Current status
 
-A minimal frontend shell exists on the Next.js App Router at the repo root (Vite
-fully removed); the marketing and dashboard surfaces are still planned. The Go
-backend scaffold and local datastores are wired, while the domain schema and
-provisioning remain greenfield. We are still in **Phase 0 (Foundations)** because
-its dashboard/auth exit criteria are not complete; the backend JWT middleware is
-an early Phase 1 slice already in progress.
+The Next.js dashboard now has working registration/login and an authenticated
+shell; Compose brings up dashboard, API, worker, PostgreSQL, Redis, and both
+migration gates. Phase 0 is complete: Docker/Caddy is the validated MVP hosting
+backend (ADR 0008), its repeatable VPS spike is recorded green, and Hestia is
+preserved as a documented fallback. Phase 1 account and tenant work is next.
 
 ---
 
-## Phase 0 — Foundations 🚧
+## Phase 0 — Foundations ✅
 
 Stand up the skeleton everything else hangs off.
 
@@ -31,13 +30,16 @@ Stand up the skeleton everything else hangs off.
   (first migration). Identity tables (`auth.*`) are owned by better-auth's
   migrations, not Bun (ADR 0006)
 - ✅ Health/readiness endpoints + Prometheus metrics endpoint
-- ⏳ Hestia integration spike (local VM): validate API auth/key-scoping and
-  idempotency assumptions (ADR 0001) before Phase 2 builds on them
+- ✅ Docker/Caddy integration spike validated constrained container ownership,
+  HTTPS routing, idempotent create/retry/delete, recovery, and safe cleanup on
+  the target VPS (ADR 0008; `docs/spikes/2026-07-21-docker-caddy-phase0.md`).
+  Hestia requirements and migration triggers remain in `docs/HESTIA_FALLBACK.md`
 - ✅ CI: frontend (oxlint · tsc · build · audit) and backend
   (gofmt · lint · vet · test · vulnerability scan · Docker build)
 
 **Exit criteria:** `docker compose up` brings up dashboard + API + datastores; a
-user can register and log in.
+user can register and log in; the selected MVP hosting backend has a documented,
+repeatable idempotency spike.
 
 ## Phase 1 — Auth & accounts ⏳
 
@@ -72,19 +74,20 @@ user can register and log in.
 
 ## Phase 2 — Provisioning core ⏳
 
-The heart of the platform: drive Hestia.
+The heart of the platform: drive Docker/Caddy through a provider-neutral boundary.
 
-- `provisioner` package: idempotent Hestia API/CLI client + fake for tests
+- `provisioner` package: idempotent Docker/Caddy adapter + fake for tests; Hestia
+  remains an optional adapter behind the same interface
 - `nodes` registry + simple least-loaded placement
 - Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
   retries/backoff and compensating cleanup
 - Site lifecycle: create → active → suspend → delete (async, status-polled)
-- Database lifecycle: MariaDB DB + user provisioning
+- Database lifecycle: scoped PostgreSQL/MariaDB DB + user provisioning
 - Reconciliation job: detect/repair control-plane ↔ node drift
 - Basic control-plane backups: scheduled `pg_dump` + one rehearsed restore
 
 **Exit criteria:** a customer can create and delete a working website from the
-dashboard, backed by a real Hestia node — and the control-plane DB is backed up
+dashboard, backed by a real isolated site container — and the control-plane DB is backed up
 on a schedule with a tested restore.
 
 ## Phase 3 — Domains, DNS & SSL ⏳
@@ -92,7 +95,8 @@ on a schedule with a tested restore.
 - Domain management + linking to sites (bring-your-own-domain — ADR 0004)
 - Cloudflare DNS zone + record management through the provisioner (ADR 0003)
 - Cloudflare Tunnel ingress (`cloudflared`) for dashboard, API, and customer sites
-- Automatic Let's Encrypt issuance/renewal via Certbot
+- Automatic certificate issuance/renewal through Caddy with an allowlisted
+  On-Demand TLS permission endpoint
 - DNS propagation + certificate status surfaced in the UI
 
 **Exit criteria:** a customer can point a domain, get DNS + HTTPS, with renewals automated.
@@ -105,8 +109,8 @@ on a schedule with a tested restore.
   non-tunnel ingress — ADR 0003)
 - Cron job management per account
 - File usage and quota enforcement surfaced in the UI
-- Usage metering pipeline: worker polls per-account stats (disk, bandwidth —
-  `v-list-user-stats`) from nodes into Postgres, so Phase 5 billing has history
+- Usage metering pipeline: worker records per-account container/volume stats
+  (disk, CPU, memory, bandwidth) into Postgres, so Phase 5 billing has history
 
 ## Phase 5 — Billing & plans ⏳
 
@@ -120,7 +124,8 @@ on a schedule with a tested restore.
 
 - Per-account resource dashboards in Grafana
 - Alerting (node down, disk pressure, cert expiry, failed jobs)
-- Node hardening automation (Fail2ban, UFW) as repeatable bootstrap
+- Host/worker hardening automation (Docker authorization boundary, Caddy admin
+  isolation, Fail2ban, UFW) as repeatable bootstrap
 - Full backup strategy + restore runbooks (basic `pg_dump` lands in Phase 2)
 - Incident runbooks in `docs/runbooks/`
 

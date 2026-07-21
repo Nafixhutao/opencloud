@@ -9,11 +9,12 @@ rules are not optional and are never "simplified away" (see [`../CLAUDE.md`](../
 ## 1. Threat model (summary)
 
 - **Cross-tenant access** — a customer reaching another's data/files/processes.
-  *Mitigation:* `account_id` scoping (app + DB) + Hestia OS-level isolation.
+  *Mitigation:* `account_id` scoping (app + DB) + per-site Docker
+  network/volume/runtime policy; Hestia remains the stronger OS-user fallback.
 - **Credential theft** — stolen tokens, passwords, or node keys.
   *Mitigation:* hashing, short-lived tokens, httpOnly cookies, secret manager.
 - **Injection** — SQL, command, or template injection via customer input.
-  *Mitigation:* parameterized queries, typed Hestia args, input validation.
+  *Mitigation:* parameterized queries, typed provisioner inputs, input validation.
 - **Abuse / DoS** — brute force, scraping, resource exhaustion.
   *Mitigation:* rate limiting, Fail2ban, UFW, quotas, timeouts.
 - **Supply chain** — vulnerable dependencies.
@@ -62,9 +63,10 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   hostile; bind + validate DTOs in handlers ([`BACKEND.md`](BACKEND.md#5-http-layer-gin)).
 - **Parameterized queries only** — Bun handles this. Never build SQL by string
   concatenation.
-- **No raw shell interpolation** into Hestia commands — typed, validated arguments
-  only. Validate customer-supplied values (domains, DB names, usernames) against
-  strict allowlists before they reach a node.
+- **No raw shell interpolation** into Docker, Caddy, or fallback-provider
+  operations — typed, validated arguments only. Validate customer-supplied values
+  (domains, image/template IDs, DB names, environment keys) against strict
+  allowlists before they reach the provisioner.
 - Escape/encode output; the frontend relies on React's escaping plus a strict CSP.
 
 ## 6. Secrets management
@@ -72,13 +74,15 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 - All secrets via environment / secret manager, loaded by Viper. **Never commit
   `.env`**; ship `.env.example` with documented, non-secret defaults.
 - No secrets in source, logs, images, or client bundles / `NEXT_PUBLIC_*`.
-- Rotate credentials on exposure; scope each credential to least privilege (a
-  separate, narrowly-scoped Hestia API key; a DB user that can't `DROP`).
+- Rotate credentials on exposure; scope each credential to least privilege
+  (permissioned Docker boundary, loopback/private Caddy admin API, scoped fallback
+  Hestia access key, and a DB user that can't `DROP`).
 - Redact secrets at the logging boundary ([`BACKEND.md`](BACKEND.md#11-logging-zap)).
 
 ## 7. Transport security
 
-- **HTTPS everywhere** with HSTS. TLS certs via Certbot ([`HOSTING.md`](HOSTING.md#6-ssl--certificates)).
+- **HTTPS everywhere** with HSTS. Caddy manages customer certificates and renewal
+  ([`HOSTING.md`](HOSTING.md#5-domains-and-https)).
 - TLS for PostgreSQL and Redis connections in production.
 - Internal-only services (metrics, datastores) bound to the private network, never
   the public internet.
@@ -101,10 +105,15 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 ## 10. Node & host hardening
 
 - Containers run as **non-root**, minimal images, read-only filesystems where possible.
-- Hosting nodes: per-customer Linux users, PHP-FPM pools, and MariaDB users for
-  OS-level isolation ([`HOSTING.md`](HOSTING.md#5-isolation-on-the-node)).
+- Site containers drop capabilities, use `no-new-privileges`, dedicated networks
+  and volumes, and enforce CPU/memory/PID limits. No privileged containers or
+  arbitrary host mounts.
+- The Docker daemon and Caddy admin endpoint are worker-only. Neither is mounted
+  into the dashboard or public API; arbitrary Dockerfiles remain disabled until
+  isolated builds and image policy exist.
 - SSH: key-only, no root login, bastion-restricted. Automatic security updates.
-- Node bootstrap scripts under `deploy/hestia/` land with Phase 6 hardening.
+- Hestia fallback nodes follow [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md) and run
+  on separate clean hosts.
 
 ## 11. Dependency & supply-chain security
 

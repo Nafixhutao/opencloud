@@ -19,7 +19,8 @@ files. Decisions are recorded as ADRs in [`docs/adr/`](docs/adr/).
    ([0003](docs/adr/0003-cloudflare-dns-and-ingress.md), [0004](docs/adr/0004-external-services-at-launch.md)).
 
 **Non-goals:** building our own web server, DNS server, or mail stack. We
-orchestrate proven components through Hestia.
+orchestrate Docker Engine, Caddy, and Cloudflare behind a provider-neutral
+provisioner; Hestia remains a fallback (ADR 0008).
 
 ## 2. Control plane vs. data plane
 
@@ -28,12 +29,13 @@ OpenCloud separates **what it owns** from **what it orchestrates**:
 - **Control plane** (we build): the Go API, PostgreSQL, Redis, the worker, the
   Next.js dashboard, and the monitoring stack. System of record for accounts,
   billing, plans, and orchestration state. Containerized with Docker.
-- **Data plane** (we orchestrate): Hestia nodes running Nginx, Apache, PHP-FPM,
-  MariaDB, BIND9, and Certbot. These run on the host OS of each hosting node, not
-  in our containers. They serve customer traffic and hold customer data.
+- **Data plane** (we orchestrate): isolated Docker site containers, networks, and
+  volumes behind Caddy. It serves customer traffic and holds customer site data;
+  scale-out nodes or a fallback Hestia adapter use the same provisioner contract.
 
 The control plane drives the data plane exclusively through the **provisioner**
-(Hestia API + CLI). Nothing else touches a node. See [ADR 0001](docs/adr/0001-hestia-as-provisioning-backend.md).
+(Docker/Caddy for the MVP). Nothing else touches a hosting backend. See
+[ADR 0008](docs/adr/0008-docker-caddy-provisioning-backend.md).
 The provisioner is likewise the sole caller of the **Cloudflare API**, which
 provides customer DNS and the ingress tunnel ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)).
 
@@ -59,14 +61,14 @@ provides customer DNS and the ingress tunnel ([ADR 0003](docs/adr/0003-cloudflar
                        └───┬───────────┬───────────┬────┘
                            │           │           │
                 ┌──────────▼─┐  ┌──────▼─────┐  ┌──▼──────────────┐
-                │ PostgreSQL │  │   Redis    │  │  Hestia node(s) │  ← data plane
-                │ (Bun ORM)  │  │   cache    │  │  API + CLI       │
+                │ PostgreSQL │  │   Redis    │  │ Docker + Caddy  │  ← data plane
+                │ (Bun ORM)  │  │   cache    │  │ sites + routes  │
                 │ system of  │  │ ·sessions  │  └──┬──────────────┘
                 │  record +  │  │ ·ratelimit │     │
                 │ job queue  │  └────────────┘     │ provisions / manages
                 └─────┬──────┘                     │
-                      │ polls jobs         Nginx · Apache · PHP-FPM ·
-                ┌─────▼──────────┐         MariaDB · BIND9 · Certbot
+                      │ polls jobs         site containers · networks ·
+                ┌─────▼──────────┐         volumes · domains · TLS
                 │  Worker (jobs) │
                 └────────────────┘
 
@@ -88,11 +90,11 @@ below it (plus the provisioner from services).
 │ service         Business rules. Owns transactions. The only  │
 │                 layer that spans repositories + provisioner. │
 ├──────────────────────────────┬──────────────────────────────┤
-│ repository (Bun)             │ provisioner (Hestia client)   │
+│ repository (Bun)             │ provisioner (provider adapter)│
 │ All DB access. Always        │ Only caller of hosting nodes. │
 │ account_id-scoped.           │ Idempotent + reconcilable.    │
 ├──────────────────────────────┴──────────────────────────────┤
-│ PostgreSQL · Redis           │ Hestia node                   │
+│ PostgreSQL · Redis           │ Docker/Caddy data plane       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -122,7 +124,7 @@ POST /api/v1/sites
    `jobs` row ("provision_site") in the same tx, returns 202 + site id
    — one transaction, so a site row can never exist without its job (or vice versa)
  → worker picks up the job:
-     provisioner.CreateSite(ctx, node, spec)   // idempotent Hestia calls
+     provisioner.CreateSite(ctx, spec)         // idempotent provider calls
      on success → mark site active
      on failure → retry with backoff; after N retries mark failed + enqueue cleanup
  → client polls GET /api/v1/sites/{id} until status is active|failed
@@ -140,7 +142,7 @@ PostgreSQL is the **system of record** (and the job queue); Redis is a disposabl
 - `auth.user` — identity (email, `role`), owned by **better-auth** in the `auth`
   schema, not a Bun-managed table ([ADR 0006](docs/adr/0006-better-auth-identity-provider.md)).
 - `plans` / `subscriptions` — what a customer is entitled to.
-- `nodes` — hosting servers running Hestia.
+- `nodes` — hosting capacity registered by backend driver.
 - `sites`, `domains`, `databases`, `mailboxes`, `dns_zones`, `certificates` —
   customer resources, each linked to an `account_id` and a `node_id`.
 - `jobs` — **the job queue itself**: async work + status, claimed by the worker
@@ -158,8 +160,9 @@ Isolation is the platform's #1 invariant, enforced at three layers:
    security defect, not a style issue.
 2. **Database** — foreign keys and `account_id` columns make cross-tenant joins
    impossible by accident; admin cross-account access is an explicit, audited path.
-3. **Node** — Hestia provides per-customer Linux users, file permissions, and
-   MariaDB users, so tenants are isolated at the OS level on the data plane.
+3. **Data plane** — each site gets dedicated Docker network/volume ownership,
+   non-root runtime policy, and CPU/memory/PID limits. Hestia can provide stronger
+   per-customer Linux-user isolation if fallback triggers are met.
 
 ## 9. Scaling
 
@@ -192,7 +195,7 @@ Isolation is the platform's #1 invariant, enforced at three layers:
 | **Viper/Zap** | Standard, structured config + logging. |
 | **Next.js** | SSR dashboard + BFF; hosts **better-auth** (identity provider — ADR 0006), holds the JWT in an httpOnly cookie. |
 | **shadcn/ui + Tailwind** | Own the components; no heavyweight UI dependency. |
-| **Hestia** | Proven multi-tenant hosting stack we orchestrate, not rebuild. |
+| **Docker + Caddy** | Reuse the deployed host for isolated HTTP workloads, provider-neutral lifecycle, ingress, and automatic HTTPS (ADR 0008). |
 | **Cloudflare** | Free authoritative DNS (zones via API) + Tunnel ingress — self-hosted nodes reachable behind CGNAT, DDoS/WAF at the edge ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)). |
 | **Prometheus/Grafana** | De-facto standard metrics + dashboards. |
 

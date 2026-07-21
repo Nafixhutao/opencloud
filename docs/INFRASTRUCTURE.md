@@ -1,7 +1,7 @@
 # Infrastructure — Docker, Monitoring & Environments
 
 How the OpenCloud **control plane** is packaged, run, configured, and observed.
-The hosting **data plane** (Hestia nodes) is covered in [`HOSTING.md`](HOSTING.md);
+The hosting **data plane** (Docker sites + Caddy, with Hestia fallback) is covered in [`HOSTING.md`](HOSTING.md);
 release process in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 **Stack:** Docker · Docker Compose · Prometheus · Grafana · (host) Fail2ban · UFW.
@@ -13,11 +13,12 @@ release process in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 | Plane | Components | Runtime |
 |---|---|---|
 | **Control plane** | Go API, worker, Next.js frontend, PostgreSQL, Redis, Prometheus, Grafana | Docker containers |
-| **Data plane** | Hestia + Nginx/Apache/PHP-FPM/MariaDB/Certbot (BIND9 installed, fallback only) | Host OS on each hosting node (not containerized) |
+| **Data plane** | Docker site containers + Caddy ingress; optional Hestia fallback node | Current Linux host for MVP; scale-out nodes later |
 | **Edge** | Cloudflare DNS + Tunnel ([ADR 0003](adr/0003-cloudflare-dns-and-ingress.md)) | Cloudflare network; `cloudflared` runs on our hardware |
 
-Only the control plane is containerized. Hosting nodes run Hestia directly on the
-host for performance and OS-level tenant isolation.
+The MVP co-locates labeled site containers with the control plane while Caddy
+remains the only public listener. Scale-out nodes use the same provider contract;
+Hestia, if adopted, runs only on a separate clean host.
 
 ## 2. Docker Compose topology
 
@@ -66,8 +67,12 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `BETTER_AUTH_URL` | frontend | better-auth base URL (BFF origin) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | frontend | GitHub social login via better-auth (ADR 0006) |
-| `HESTIA_API_URL` | api, worker | hosting node API base |
-| `HESTIA_API_KEY` | api, worker | node API credential |
+| `PROVISIONER_BACKEND` | worker | `docker` (default), `hestia`, or non-production `fake` |
+| `DOCKER_SOCKET` | worker | local Docker Unix socket path; never exposed publicly |
+| `CADDY_API_URL` | worker | private/loopback Caddy admin endpoint |
+| `HESTIA_API_URL` | worker | optional fallback node API base |
+| `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
+| `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
 | `LOG_LEVEL` | all | `debug`/`info`/`warn`/`error` |
 | `API_URL` | frontend | backend base URL (server-side) |
 | `CORS_ORIGINS` | api | allowlist (no `*` in production) |
@@ -80,8 +85,8 @@ checked-in file. Rotate on exposure.
 
 | Environment | Purpose | Notes |
 |---|---|---|
-| **development** | local | Docker Compose; fake provisioner; verbose logs |
-| **staging** | pre-prod | mirrors prod config; real (test) Hestia node; safe data |
+| **development** | local | Docker Compose; Docker selected by default, fake available for tests; verbose logs |
+| **staging** | pre-prod | disposable labeled Docker/Caddy resources; safe data |
 | **production** | live | hardened; secrets from manager; backups + alerting on |
 
 Configuration differs **only** by environment variables, not by code paths.
@@ -94,15 +99,15 @@ Configuration differs **only** by environment variables, not by code paths.
 - Grafana dashboards visualize:
   - **Control plane:** request rate/latency/errors (RED), queue depth + job
     success/failure, DB/Redis connection pool usage, Go runtime (GC, goroutines).
-  - **Data plane:** per-node CPU/RAM/disk/bandwidth, and per-account resource usage
-    for customer dashboards.
+  - **Data plane:** container health, CPU/RAM/disk/bandwidth, Caddy route/certificate
+    state, and per-account resource usage for customer dashboards.
 - **Alerting** (Phase 6, [`../ROADMAP.md`](../ROADMAP.md)): node down, disk
   pressure, certificate expiry, failed-job spikes, error-rate SLO breaches.
 
 ### What to instrument
 - HTTP: request count, duration histogram, status classes — labeled by route.
 - Jobs: enqueued/started/succeeded/failed counters, processing duration.
-- External calls: DB, Redis, Hestia latency + error counters.
+- External calls: DB, Redis, Docker/Caddy, Cloudflare, and fallback-provider latency + error counters.
 - Keep label cardinality low (no per-user labels). Trends are metrics; detail is logs.
 
 ## 6. Logging & observability
@@ -120,8 +125,8 @@ Configuration differs **only** by environment variables, not by code paths.
 
 ## 8. Networking & host security
 
-- A reverse proxy configuration under `deploy/nginx/` is added with the production
-  deployment work; it terminates TLS and routes only frontend/API traffic.
+- Caddy terminates TLS and routes dashboard/API/customer traffic. Its admin API
+  remains private and configuration changes are validated before reload.
 - **UFW** on every host allows only required ports (HTTP/HTTPS, SSH from bastion,
   internal scrape ports on the private network).
 - **Fail2ban** bans abusive IPs (SSH, auth endpoints). Hardening details:

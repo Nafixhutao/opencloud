@@ -1,7 +1,8 @@
 # Backend — Go Control Plane
 
 The OpenCloud backend is a Go service that acts as the **system of record** and
-orchestrates Hestia nodes. This document is the deep dive; the contract lives in
+orchestrates provider-neutral hosting backends. Docker + Caddy is the MVP backend
+and Hestia is a fallback (ADR 0008). This document is the deep dive; the contract lives in
 [`../CLAUDE.md`](../CLAUDE.md) and the system map in [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 **Stack:** Go 1.26+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
@@ -23,7 +24,7 @@ backend/
 │   ├── service/           # business logic + transactions
 │   ├── repository/        # Bun data access, account-scoped
 │   ├── model/             # domain structs + Bun models
-│   ├── provisioner/       # Hestia API/CLI client (+ fake)
+│   ├── provisioner/       # provider-neutral contract + Docker/Hestia/fake adapters
 │   ├── middleware/        # auth, request-id, logging, recovery, ratelimit
 │   ├── queue/             # Postgres-backed job queue + job handlers
 │   ├── dto/               # request/response shapes
@@ -44,7 +45,7 @@ One-directional dependencies. See the diagram in [`../ARCHITECTURE.md`](../ARCHI
 | handler | service | touch Bun, hold business logic |
 | service | repository, provisioner, queue | import Gin, build SQL |
 | repository | Bun / PostgreSQL | call services, ignore `account_id` |
-| provisioner | Hestia API/CLI | be called by anything but a service |
+| provisioner | Docker/Caddy, Cloudflare, fallback Hestia | be called by anything but a service/worker job |
 
 A handler that needs data calls a service; a service that needs persistence calls
 a repository. No shortcuts.
@@ -88,7 +89,7 @@ type Config struct {
     AuthJWKSURL string `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS — validate JWTs (ADR 0006)
     AuthIssuer   string `mapstructure:"AUTH_ISSUER"`
     AuthAudience string `mapstructure:"AUTH_AUDIENCE"`
-    Hestia      HestiaConfig
+    Provisioner ProvisionerConfig
     LogLevel    string `mapstructure:"LOG_LEVEL"`
 }
 ```
@@ -161,20 +162,25 @@ Schema, migrations, and indexing rules: [`DATABASE.md`](DATABASE.md).
 
 ## 8. Provisioner
 
-- The **single gateway** to Hestia. Nothing else shells out to a node.
+- The **single gateway** to Docker, Caddy, Cloudflare, or fallback Hestia. The
+  dashboard and API never receive Docker daemon or Caddy admin access.
 - **Idempotent:** re-running a step on an existing resource succeeds, not errors —
   this makes job retries and reconciliation safe.
-- Defined behind an interface so services depend on the capability, not Hestia:
+- Defined behind an interface so services depend on the capability, not a provider:
 
 ```go
 type SiteProvisioner interface {
-    CreateSite(ctx context.Context, node model.Node, spec SiteSpec) error
-    DeleteSite(ctx context.Context, node model.Node, domain string) error
+    CreateSite(ctx context.Context, spec SiteSpec) error
+    DeleteSite(ctx context.Context, ref SiteRef) error
+    SuspendSite(ctx context.Context, ref SiteRef) error
+    ResumeSite(ctx context.Context, ref SiteRef) error
+    SiteStatus(ctx context.Context, ref SiteRef) (SiteState, error)
 }
 ```
 
-- A `fakeProvisioner` implements the interface for tests so we **never** provision
-  against a real node in CI. Hosting flows: [`HOSTING.md`](HOSTING.md).
+- `PROVISIONER_BACKEND` selects `docker`, `hestia`, or `fake`; `fake` is rejected
+  in production. A fake implements the interface for tests, so CI never reaches a
+  live Docker daemon or hosting node. Hosting flows: [`HOSTING.md`](HOSTING.md).
 
 ## 9. Async jobs (Postgres queue)
 
@@ -217,7 +223,7 @@ func (ProvisionSite) Kind() string { return "provision_site" }
   `apperr.Validation`, `apperr.Forbidden`).
 - A single `respondError` maps typed errors → HTTP status + envelope, so every
   endpoint behaves identically.
-- **Never leak internals** (SQL, stack traces, Hestia output) to clients; log the
+- **Never leak internals** (SQL, stack traces, provider output) to clients; log the
   detail, return a clean message + stable `code`. Full policy: [`API.md`](API.md#5-errors).
 
 ## 11. Logging (Zap)

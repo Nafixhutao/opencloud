@@ -13,7 +13,8 @@ This folder holds the per-topic depth.
 | [`DEPENDENCIES.md`](DEPENDENCIES.md) | Dependency adoption blueprint — status, phase, and install gates |
 | [`DATABASE.md`](DATABASE.md) | PostgreSQL schema, migrations, Redis |
 | [`API.md`](API.md) | REST conventions + endpoint reference |
-| [`HOSTING.md`](HOSTING.md) | Hestia and the hosting data plane |
+| [`HOSTING.md`](HOSTING.md) | Docker/Caddy hosting data plane and provider contract |
+| [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md) | Hestia adoption triggers and migration plan |
 | [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md) | Docker, monitoring, environments |
 | [`SECURITY.md`](SECURITY.md) | Auth, secrets, isolation, hardening |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | Build, release, rollback |
@@ -28,6 +29,7 @@ This folder holds the per-topic depth.
 |---|---|
 | `adr/` | Architecture Decision Records — one file per significant decision |
 | `adr/0000-template.md` | Copy this to start a new ADR |
+| `spikes/` | Dated infrastructure experiment results and conclusions |
 | `runbooks/` | Operational how-tos (incident response, restores). Added as procedures stabilize |
 
 ## Writing an ADR

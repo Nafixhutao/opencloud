@@ -30,8 +30,15 @@ func main() {
 		panic(err)
 	}
 	defer deps.Close()
+	if err := deps.Cfg.ValidateProvisioner(); err != nil {
+		deps.Log.Fatal("invalid provisioner configuration", zap.Error(err))
+	}
 
-	deps.Log.Info("worker started", zap.Duration("poll_interval", pollInterval))
+	deps.Log.Info(
+		"worker started",
+		zap.Duration("poll_interval", pollInterval),
+		zap.String("provisioner_backend", string(deps.Cfg.Provisioner.Backend)),
+	)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
