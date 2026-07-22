@@ -69,6 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Phase 0 spike shell tests
+        working-directory: .
         run: |
           test -x deploy/spikes/docker-caddy/run.sh
           test -x deploy/spikes/docker-caddy/run_test.sh
