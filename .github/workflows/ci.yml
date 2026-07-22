@@ -75,9 +75,11 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pin golangci-lint v2: action v6 + "latest" resolved to v1.x built with
+          # Go 1.24, which cannot load config targeting Go 1.26 (backend/.golangci.yml).
+          version: v2.12.2
           working-directory: backend
       - run: go vet ./...
       - run: go test ./...
