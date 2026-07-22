@@ -11,6 +11,8 @@ readonly volume="${SPIKE_VOLUME:-opencloud-phase0-spike-data}"
 readonly caddyfile="${CADDYFILE_PATH:-/etc/caddy/Caddyfile}"
 readonly snippet_dir="${CADDY_SNIPPET_DIR:-/etc/caddy/conf.d}"
 readonly snippet="${snippet_dir}/opencloud-phase0-spike.caddy"
+readonly caddy_backup="${caddyfile}.opencloud-phase0.bak"
+readonly caddy_owner_marker="${caddyfile}.opencloud-phase0.owner"
 readonly managed_label="opencloud.managed=true"
 readonly spike_label="opencloud.spike=phase0-docker-caddy"
 
@@ -89,17 +91,28 @@ ensure_container() {
   fi
 }
 
-ensure_caddy_route() {
+ensure_caddy_import() {
   local import_line="import ${snippet_dir}/*.caddy"
+
+  "${sudo_cmd[@]}" install -d -m 0755 "${snippet_dir}"
+  if ! "${sudo_cmd[@]}" grep -Fqx "${import_line}" "${caddyfile}"; then
+    if "${sudo_cmd[@]}" test -e "${caddy_backup}" || "${sudo_cmd[@]}" test -e "${caddy_owner_marker}"; then
+      echo "refusing to overwrite stale Caddy ownership artifacts" >&2
+      exit 1
+    fi
+    "${sudo_cmd[@]}" cp --preserve=mode,ownership,timestamps "${caddyfile}" "${caddy_backup}"
+    printf '\n%s\n' "${import_line}" | "${sudo_cmd[@]}" tee -a "${caddyfile}" >/dev/null
+    "${sudo_cmd[@]}" sha256sum "${caddyfile}" | "${sudo_cmd[@]}" awk '{print $1}' | \
+      "${sudo_cmd[@]}" tee "${caddy_owner_marker}" >/dev/null
+  fi
+}
+
+ensure_caddy_route() {
   local temp_snippet
   temp_snippet="$(mktemp)"
   trap 'rm -f "${temp_snippet:-}"' RETURN
 
-  "${sudo_cmd[@]}" install -d -m 0755 "${snippet_dir}"
-  if ! "${sudo_cmd[@]}" grep -Fqx "${import_line}" "${caddyfile}"; then
-    "${sudo_cmd[@]}" cp --preserve=mode,timestamps "${caddyfile}" "${caddyfile}.opencloud-phase0.bak"
-    printf '\n%s\n' "${import_line}" | "${sudo_cmd[@]}" tee -a "${caddyfile}" >/dev/null
-  fi
+  ensure_caddy_import
 
   cat >"${temp_snippet}" <<EOF
 ${spike_host} {
@@ -141,10 +154,41 @@ verify_spike() {
   echo "PASS container=1 network=1 volume=1 local_http=200 caddy_https=200 host=${spike_host}"
 }
 
+restore_owned_caddyfile() {
+  local expected_checksum
+  local actual_checksum
+
+  if ! "${sudo_cmd[@]}" test -e "${caddy_owner_marker}"; then
+    return
+  fi
+  if ! "${sudo_cmd[@]}" test -e "${caddy_backup}"; then
+    echo "Caddy ownership marker exists but backup is missing: ${caddy_backup}" >&2
+    return 1
+  fi
+
+  expected_checksum="$("${sudo_cmd[@]}" tr -d '[:space:]' <"${caddy_owner_marker}")"
+  actual_checksum="$("${sudo_cmd[@]}" sha256sum "${caddyfile}" | "${sudo_cmd[@]}" awk '{print $1}')"
+  if [[ -z "${expected_checksum}" || "${actual_checksum}" != "${expected_checksum}" ]]; then
+    echo "refusing to restore Caddyfile because it changed after spike apply" >&2
+    return 1
+  fi
+
+  "${sudo_cmd[@]}" cp --preserve=mode,ownership,timestamps "${caddy_backup}" "${caddyfile}"
+}
+
 destroy_spike() {
+  local owned_caddy_change=false
+
+  if "${sudo_cmd[@]}" test -e "${caddy_owner_marker}"; then
+    owned_caddy_change=true
+    restore_owned_caddyfile
+  fi
   "${sudo_cmd[@]}" rm -f "${snippet}"
   "${sudo_cmd[@]}" caddy validate --config "${caddyfile}" --adapter caddyfile >/dev/null
   "${sudo_cmd[@]}" systemctl reload caddy
+  if [[ "${owned_caddy_change}" == "true" ]]; then
+    "${sudo_cmd[@]}" rm -f "${caddy_backup}" "${caddy_owner_marker}"
+  fi
 
   if docker container inspect "${container}" >/dev/null 2>&1; then
     docker rm --force "${container}" >/dev/null
@@ -161,23 +205,29 @@ destroy_spike() {
   echo "PASS removed container network volume image and Caddy route"
 }
 
-for command in docker caddy curl grep awk systemctl install; do
-  require_command "${command}"
-done
-validate_input
+main() {
+  for command in docker caddy curl grep awk sha256sum systemctl install; do
+    require_command "${command}"
+  done
+  validate_input
 
-case "${mode}" in
-  apply)
-    apply_spike
-    ;;
-  verify)
-    verify_spike
-    ;;
-  destroy)
-    destroy_spike
-    ;;
-  *)
-    echo "usage: SPIKE_SITE_HOST=host.example.com $0 {apply|verify|destroy}" >&2
-    exit 1
-    ;;
-esac
+  case "${mode}" in
+    apply)
+      apply_spike
+      ;;
+    verify)
+      verify_spike
+      ;;
+    destroy)
+      destroy_spike
+      ;;
+    *)
+      echo "usage: SPIKE_SITE_HOST=host.example.com $0 {apply|verify|destroy}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
