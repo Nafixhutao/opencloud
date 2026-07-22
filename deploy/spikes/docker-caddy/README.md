@@ -6,7 +6,10 @@ creation without duplicates, and remove every managed resource safely.
 
 The script only manages objects labeled `opencloud.spike=phase0-docker-caddy`
 and the dedicated Caddy snippet `opencloud-phase0-spike.caddy`. It never prunes
-Docker or rewrites unrelated routes.
+Docker or rewrites unrelated routes. If it must add the snippet import to the
+host Caddyfile, it records ownership and restores the byte-for-byte backup on
+destroy. A checksum guard refuses cleanup rather than overwriting concurrent
+operator changes.
 
 ```bash
 export SPIKE_SITE_HOST=phase0-spike.203-0-113-10.sslip.io
@@ -14,6 +17,13 @@ export SPIKE_SITE_HOST=phase0-spike.203-0-113-10.sslip.io
 ./deploy/spikes/docker-caddy/run.sh apply   # idempotency check
 ./deploy/spikes/docker-caddy/run.sh verify
 ./deploy/spikes/docker-caddy/run.sh destroy # also removes the disposable image
+```
+
+The repository preserves both spike scripts as executable files. The focused
+shell test can be run without Docker or root access:
+
+```bash
+./deploy/spikes/docker-caddy/run_test.sh
 ```
 
 Use a DNS name that resolves to the host. The script binds the test site only to
