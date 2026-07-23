@@ -149,3 +149,23 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   chains, review `audit_logs`, and isolate the affected node (`draining` → offline).
 - Post-incident: write/refresh a runbook in `docs/runbooks/` and an ADR if the
   architecture changes. Notify per policy/regulation.
+
+## 16. Admin bootstrap (Phase 1)
+
+Admin role is **never** granted via signup or client-supplied fields. Operators
+promote a user explicitly and idempotently:
+
+```
+docker compose exec api /app/bootstrap-admin --user-id <better-auth-user-id>
+```
+
+Or on a host with DATABASE_URL:
+
+```
+go run ./cmd/bootstrap-admin --user-id <id>
+```
+
+Password reset tokens are single-use, expire (default 1h), stored hashed under
+better-auth `auth.verification`, and must never appear in application logs.
+Mail delivery uses `MAIL_PROVIDER` (`log` / `memory` / `smtp`); production
+email is not claimed active until a real provider is configured.

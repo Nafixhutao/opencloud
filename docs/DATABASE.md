@@ -204,3 +204,10 @@ Rules:
   truth â€” recovery always assumes PostgreSQL is authoritative.
 - Customer site volumes and databases are backed up by the active provider; see
   [`HOSTING.md`](HOSTING.md).
+
+## 10. Phase 1 tenancy tables
+
+- `public.account_memberships` — `user_id` (better-auth) ? `account_id` with
+  `role` (customer|admin) and `status` (active|suspended|disabled). Unique on
+  `user_id` for MVP single-tenant-per-user.
+- `public.audit_logs` — append-only sensitive action trail.

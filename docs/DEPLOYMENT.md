@@ -134,3 +134,9 @@ If any check fails, roll back (§7) and investigate before re-attempting.
 - Tag releases with SemVer (`vMAJOR.MINOR.PATCH`).
 - Move `CHANGELOG.md`'s **[Unreleased]** section under the new version + date on
   release ([`../CHANGELOG.md`](../CHANGELOG.md)).
+
+## Phase 1 deploy notes
+
+After Bun migrations, run Better Auth migration, then rolling-update API/worker/dashboard.
+Promote the first admin with `/app/bootstrap-admin --user-id <id>` (not via HTTP).
+Set `MAIL_PROVIDER` only when a real transport is ready; default `log` does not deliver email.
