@@ -17,11 +17,13 @@ import { loginSchema, type LoginValues } from '@/lib/auth-validation';
 type LoginFormProps = {
   enabledSocialProviders: readonly SocialProvider[];
   initialError?: string | null;
+  initialNotice?: string | null;
 };
 
 export function LoginForm({
   enabledSocialProviders,
   initialError = null,
+  initialNotice = null,
 }: LoginFormProps) {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(initialError);
@@ -40,7 +42,11 @@ export function LoginForm({
       });
 
       if (error) {
-        setFormError(error.message ?? 'Check your email and password, then try again.');
+        setFormError(
+          error.code === 'EMAIL_NOT_VERIFIED' || error.status === 403
+            ? 'Verify your email before signing in. If the account exists, a fresh link has been sent.'
+            : 'Check your email and password, then try again.',
+        );
         return;
       }
 
@@ -71,6 +77,14 @@ export function LoginForm({
 
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup className="gap-4">
+          {initialNotice ? (
+            <p
+              role="status"
+              className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm leading-6"
+            >
+              {initialNotice}
+            </p>
+          ) : null}
           {formError ? <FieldError>{formError}</FieldError> : null}
 
           <Field data-invalid={Boolean(errors.email)}>

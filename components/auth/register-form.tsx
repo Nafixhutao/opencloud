@@ -38,6 +38,7 @@ export function RegisterForm({
         name: values.name,
         email: values.email,
         password: values.password,
+        callbackURL: '/login?verified=1',
       });
 
       if (error) {
@@ -45,7 +46,9 @@ export function RegisterForm({
         return;
       }
 
-      router.push('/dashboard');
+      // Better Auth returns the same successful shape for a new or duplicate
+      // address when verification is required, preventing enumeration.
+      router.push('/login?notice=verify-email');
       router.refresh();
     } catch {
       setFormError('Cevra could not be reached. Check your connection and try again.');
