@@ -18,6 +18,8 @@ const (
 	AuditProfileUpdated    = "account.profile.update"
 	AuditUserRoleChanged   = "admin.user.role_change"
 	AuditUserStatusChanged = "admin.user.status_change"
+	AuditAdminUsersListed  = "admin.users.list"
+	AuditAdminUserViewed   = "admin.user.view"
 	AuditAdminBootstrap    = "admin.bootstrap"
 	AuditMembershipEnsured = "account.membership.ensure"
 )

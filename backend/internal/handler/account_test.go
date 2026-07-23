@@ -37,6 +37,14 @@ func openDB(t *testing.T) *bun.DB {
 	if err := db.NewRaw(`SELECT count(*) FROM information_schema.tables WHERE table_name='account_memberships'`).Scan(context.Background(), &n); err != nil || n == 0 {
 		t.Skip("migrations not applied")
 	}
+	_, err = db.ExecContext(context.Background(), `
+		CREATE SCHEMA IF NOT EXISTS auth;
+		CREATE TABLE IF NOT EXISTS auth."user" (
+			id text PRIMARY KEY,
+			name text NOT NULL DEFAULT '',
+			email text NOT NULL DEFAULT ''
+		)`)
+	require.NoError(t, err)
 	return db
 }
 

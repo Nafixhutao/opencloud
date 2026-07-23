@@ -71,7 +71,10 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 			log.Fatal("jwks init failed", zap.Error(err), zap.String("url", cfg.AuthJWKSURL))
 		}
 		authed := v1.Group("")
-		authed.Use(middleware.Auth(keyFunc, cfg.AuthIssuer, cfg.AuthAudience))
+		authed.Use(
+			middleware.Auth(keyFunc, cfg.AuthIssuer, cfg.AuthAudience),
+			middleware.RequireCurrentMembership(acctRepo),
+		)
 		{
 			authed.GET("/me", acctH.Me)
 			authed.PATCH("/me", middleware.RateLimit(rdb, "me-write", 30, time.Minute), acctH.UpdateMe)

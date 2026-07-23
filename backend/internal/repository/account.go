@@ -13,6 +13,8 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/model"
 )
 
+const adminMutationLockKey int64 = 0x4f434c4f55444144
+
 // AccountRepo manages public.accounts and account_memberships.
 type AccountRepo struct {
 	db bun.IDB
@@ -52,6 +54,27 @@ func (r *AccountRepo) GetAccountByID(ctx context.Context, id uuid.UUID) (*model.
 		return nil, err
 	}
 	return acct, nil
+}
+
+// UpdateAccountName updates one tenant account display name.
+func (r *AccountRepo) UpdateAccountName(ctx context.Context, id uuid.UUID, name string) error {
+	result, err := r.db.NewUpdate().
+		Model((*model.Account)(nil)).
+		Set("name = ?", name).
+		Set("updated_at = now()").
+		Where("id = ?", id).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // CreateMembership inserts a membership row.
@@ -94,8 +117,35 @@ func (r *AccountRepo) GetMembershipByID(ctx context.Context, id uuid.UUID) (*mod
 	return m, nil
 }
 
-// ListMemberships returns paginated memberships ordered by created_at desc.
-func (r *AccountRepo) ListMemberships(ctx context.Context, limit, offset int) ([]model.AccountMembership, int, error) {
+// GetMembershipByIDForUpdate locks a membership until the surrounding
+// transaction ends.
+func (r *AccountRepo) GetMembershipByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.AccountMembership, error) {
+	m := new(model.AccountMembership)
+	err := r.db.NewSelect().Model(m).Where("id = ?", id).For("UPDATE").Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// AdminUserRow is the explicit cross-schema projection used only by platform
+// admin routes. It deliberately exposes no credential or token fields.
+type AdminUserRow struct {
+	MembershipID uuid.UUID `bun:"membership_id"`
+	AccountID    uuid.UUID `bun:"account_id"`
+	UserID       string    `bun:"user_id"`
+	Role         string    `bun:"role"`
+	Status       string    `bun:"status"`
+	AccountName  string    `bun:"account_name"`
+	UserName     string    `bun:"user_name"`
+	UserEmail    string    `bun:"user_email"`
+	CreatedAt    time.Time `bun:"created_at"`
+	UpdatedAt    time.Time `bun:"updated_at"`
+}
+
+// ListAdminUsers returns paginated memberships with safe identity fields in one
+// query. This avoids the former account lookup per row.
+func (r *AccountRepo) ListAdminUsers(ctx context.Context, limit, offset int) ([]AdminUserRow, int, error) {
 	if limit <= 0 {
 		limit = 25
 	}
@@ -106,16 +156,59 @@ func (r *AccountRepo) ListMemberships(ctx context.Context, limit, offset int) ([
 		offset = 0
 	}
 
-	var rows []model.AccountMembership
-	count, err := r.db.NewSelect().Model(&rows).
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		ScanAndCount(ctx)
+	var total int
+	if err := r.db.NewRaw(`SELECT count(*) FROM public.account_memberships`).Scan(ctx, &total); err != nil {
+		return nil, 0, err
+	}
+
+	var rows []AdminUserRow
+	err := r.db.NewRaw(`
+		SELECT
+			m.id AS membership_id,
+			m.account_id,
+			m.user_id,
+			m.role,
+			m.status,
+			a.name AS account_name,
+			COALESCE(u.name, '') AS user_name,
+			COALESCE(u.email, '') AS user_email,
+			m.created_at,
+			m.updated_at
+		FROM public.account_memberships AS m
+		JOIN public.accounts AS a ON a.id = m.account_id
+		LEFT JOIN auth."user" AS u ON u.id = m.user_id
+		ORDER BY m.created_at DESC
+		LIMIT ? OFFSET ?`, limit, offset).Scan(ctx, &rows)
 	if err != nil {
 		return nil, 0, err
 	}
-	return rows, count, nil
+	return rows, total, nil
+}
+
+// GetAdminUser returns one safe platform-admin projection.
+func (r *AccountRepo) GetAdminUser(ctx context.Context, id uuid.UUID) (*AdminUserRow, error) {
+	row := new(AdminUserRow)
+	err := r.db.NewRaw(`
+		SELECT
+			m.id AS membership_id,
+			m.account_id,
+			m.user_id,
+			m.role,
+			m.status,
+			a.name AS account_name,
+			COALESCE(u.name, '') AS user_name,
+			COALESCE(u.email, '') AS user_email,
+			m.created_at,
+			m.updated_at
+		FROM public.account_memberships AS m
+		JOIN public.accounts AS a ON a.id = m.account_id
+		LEFT JOIN auth."user" AS u ON u.id = m.user_id
+		WHERE m.id = ?
+		LIMIT 1`, id).Scan(ctx, row)
+	if err != nil {
+		return nil, err
+	}
+	return row, nil
 }
 
 // UpdateMembershipRoleStatus updates role and/or status.
@@ -150,8 +243,17 @@ func (r *AccountRepo) CountAdmins(ctx context.Context) (int, error) {
 		Count(ctx)
 }
 
+// LockAdminMutations serializes all role/status/bootstrap writes that could
+// remove the last active platform admin. The lock is transaction-scoped.
+func (r *AccountRepo) LockAdminMutations(ctx context.Context) error {
+	_, err := r.db.NewRaw(`SELECT pg_advisory_xact_lock(?)`, adminMutationLockKey).Exec(ctx)
+	return err
+}
+
 // EnsureMembership creates account+membership if the user has none.
-// Safe for retries: UNIQUE(user_id) makes concurrent inserts converge.
+// PostgreSQL callers serialize per user and use ON CONFLICT, so a losing
+// concurrent caller never queries an aborted transaction or leaves an orphan
+// account.
 func (r *AccountRepo) EnsureMembership(ctx context.Context, userID, accountName string) (*model.AccountMembership, *model.Account, error) {
 	existing, err := r.GetMembershipByUserID(ctx, userID)
 	if err == nil {
@@ -169,7 +271,14 @@ func (r *AccountRepo) EnsureMembership(ctx context.Context, userID, accountName 
 		accountName = "Workspace"
 	}
 
-	// Prefer a real transaction when the handle supports it.
+	// bun.Tx also exposes BeginTx by translating it to a savepoint. Starting a
+	// nested transaction here is unnecessary and, more importantly, can leave
+	// the caller's transaction aborted if savepoint cleanup fails. Reuse the
+	// service-owned transaction directly.
+	if _, inTx := r.db.(bun.Tx); inTx {
+		return r.ensureMembershipLocked(ctx, userID, accountName)
+	}
+
 	type beginTx interface {
 		BeginTx(context.Context, *sql.TxOptions) (bun.Tx, error)
 	}
@@ -181,43 +290,8 @@ func (r *AccountRepo) EnsureMembership(ctx context.Context, userID, accountName 
 		defer tx.Rollback() //nolint:errcheck
 
 		txRepo := r.WithDB(tx)
-		// Re-check inside the tx.
-		existing, err = txRepo.GetMembershipByUserID(ctx, userID)
-		if err == nil {
-			acct, aerr := txRepo.GetAccountByID(ctx, existing.AccountID)
-			if aerr != nil {
-				return nil, nil, aerr
-			}
-			if err := tx.Commit(); err != nil {
-				return nil, nil, err
-			}
-			return existing, acct, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, err
-		}
-
-		acct, err := txRepo.CreateAccount(ctx, accountName)
+		m, acct, err := txRepo.ensureMembershipLocked(ctx, userID, accountName)
 		if err != nil {
-			return nil, nil, err
-		}
-		m := &model.AccountMembership{
-			AccountID: acct.ID,
-			UserID:    userID,
-			Role:      model.RoleCustomer,
-			Status:    model.MembershipActive,
-		}
-		if err := txRepo.CreateMembership(ctx, m); err != nil {
-			// Concurrent insert: another worker won the race.
-			existing, rerr := txRepo.GetMembershipByUserID(ctx, userID)
-			if rerr == nil {
-				acct2, aerr := txRepo.GetAccountByID(ctx, existing.AccountID)
-				if aerr != nil {
-					return nil, nil, aerr
-				}
-				_ = tx.Rollback()
-				return existing, acct2, nil
-			}
 			return nil, nil, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -226,7 +300,25 @@ func (r *AccountRepo) EnsureMembership(ctx context.Context, userID, accountName 
 		return m, acct, nil
 	}
 
-	// Fallback without tx (tests with mocked IDB).
+	// Non-transactional handles reach this path only in lightweight repository
+	// fakes; production *bun.DB always takes the branch above.
+	return r.ensureMembershipLocked(ctx, userID, accountName)
+}
+
+func (r *AccountRepo) ensureMembershipLocked(ctx context.Context, userID, accountName string) (*model.AccountMembership, *model.Account, error) {
+	if _, err := r.db.NewRaw(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, userID).Exec(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	existing, err := r.GetMembershipByUserID(ctx, userID)
+	if err == nil {
+		acct, aerr := r.GetAccountByID(ctx, existing.AccountID)
+		return existing, acct, aerr
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, err
+	}
+
 	acct, err := r.CreateAccount(ctx, accountName)
 	if err != nil {
 		return nil, nil, err
@@ -237,16 +329,30 @@ func (r *AccountRepo) EnsureMembership(ctx context.Context, userID, accountName 
 		Role:      model.RoleCustomer,
 		Status:    model.MembershipActive,
 	}
-	if err := r.CreateMembership(ctx, m); err != nil {
-		existing, rerr := r.GetMembershipByUserID(ctx, userID)
-		if rerr == nil {
-			acct2, aerr := r.GetAccountByID(ctx, existing.AccountID)
-			if aerr != nil {
-				return nil, nil, aerr
-			}
-			return existing, acct2, nil
-		}
+	now := time.Now().UTC()
+	m.ID = uuid.New()
+	m.CreatedAt = now
+	m.UpdatedAt = now
+	result, err := r.db.NewInsert().Model(m).
+		On("CONFLICT (user_id) DO NOTHING").
+		Exec(ctx)
+	if err != nil {
 		return nil, nil, err
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return nil, nil, err
+	}
+	if inserted == 0 {
+		if _, err := r.db.NewDelete().Model(acct).WherePK().Exec(ctx); err != nil {
+			return nil, nil, err
+		}
+		winner, err := r.GetMembershipByUserID(ctx, userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		winnerAccount, err := r.GetAccountByID(ctx, winner.AccountID)
+		return winner, winnerAccount, err
 	}
 	return m, acct, nil
 }

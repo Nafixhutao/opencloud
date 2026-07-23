@@ -1,23 +1,36 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { Membership } from './membership.ts';
+import { Pool } from 'pg';
 
-// Pure unit checks around membership role invariants (no DB).
-// Integration ensureForUser is covered by Go service tests + VPS smoke.
+import { createMembershipStore } from './membership.ts';
 
-test('membership role type only allows customer|admin', () => {
-  const roles: Membership['role'][] = ['customer', 'admin'];
-  assert.deepEqual(roles, ['customer', 'admin']);
-  // Signup path always assigns customer — never admin.
-  const signupRole: Membership['role'] = 'customer';
-  assert.equal(signupRole, 'customer');
-  assert.notEqual(signupRole, 'admin');
-});
+const databaseURL = process.env.DATABASE_URL;
 
-test('membership status vocabulary', () => {
-  const statuses: Membership['status'][] = ['active', 'suspended', 'disabled'];
-  assert.ok(statuses.includes('active'));
-  assert.ok(statuses.includes('suspended'));
-  assert.ok(statuses.includes('disabled'));
-});
+test(
+  'concurrent membership callers converge on one account without orphans',
+  { skip: !databaseURL },
+  async () => {
+    const pool = new Pool({ connectionString: databaseURL });
+    const store = createMembershipStore(pool);
+    const nonce = crypto.randomUUID();
+    const userID = `ts_membership_${nonce}`;
+    const accountName = `TS membership race ${nonce}`;
+    try {
+      const memberships = await Promise.all(
+        Array.from({ length: 12 }, () => store.ensureForUser(userID, accountName)),
+      );
+      assert.equal(new Set(memberships.map((row) => row.id)).size, 1);
+      assert.equal(new Set(memberships.map((row) => row.account_id)).size, 1);
+
+      const accounts = await pool.query<{ id: string }>(
+        `SELECT id FROM public.accounts WHERE name = $1`,
+        [accountName],
+      );
+      assert.equal(accounts.rowCount, 1);
+      assert.equal(accounts.rows[0].id, memberships[0].account_id);
+    } finally {
+      await pool.end();
+    }
+  },
+);

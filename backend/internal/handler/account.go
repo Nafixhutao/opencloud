@@ -65,7 +65,7 @@ func (h *AccountHandler) UpdateMe(c *gin.Context) {
 func (h *AccountHandler) ListUsers(c *gin.Context) {
 	page := queryInt(c, "page", 1)
 	perPage := queryInt(c, "per_page", 25)
-	users, total, err := h.svc.ListUsers(c.Request.Context(), page, perPage)
+	users, total, err := h.svc.ListUsers(c.Request.Context(), middleware.UserID(c), page, perPage)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -83,7 +83,7 @@ func (h *AccountHandler) GetUser(c *gin.Context) {
 		respondError(c, apperr.Validation("invalid user id"))
 		return
 	}
-	user, err := h.svc.GetUser(c.Request.Context(), id)
+	user, err := h.svc.GetUser(c.Request.Context(), middleware.UserID(c), id)
 	if err != nil {
 		respondError(c, err)
 		return

@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/nazxf/opencloud/backend/internal/model"
 )
 
 // Identity context keys populated by Auth from a validated JWT.
@@ -141,6 +145,47 @@ func RequireRole(allowed ...string) gin.HandlerFunc {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 			"error": gin.H{"code": "FORBIDDEN", "message": "insufficient permissions"},
 		})
+	}
+}
+
+// MembershipLookup is the narrow repository capability needed to invalidate
+// stale bearer claims after an admin demotes or suspends a user.
+type MembershipLookup interface {
+	GetMembershipByUserID(context.Context, string) (*model.AccountMembership, error)
+}
+
+// RequireCurrentMembership re-checks the server-side membership on protected
+// routes. It fails closed for removed/suspended memberships and replaces the
+// token role with the current DB role before RequireRole runs.
+func RequireCurrentMembership(store MembershipLookup) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		membership, err := store.GetMembershipByUserID(c.Request.Context(), UserID(c))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				abortUnauthorized(c, "membership is no longer active")
+				return
+			}
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": gin.H{"code": "UNAVAILABLE", "message": "authorization state unavailable"},
+			})
+			return
+		}
+		if membership.AccountID != AccountID(c) {
+			abortUnauthorized(c, "token account mismatch")
+			return
+		}
+		if membership.Status != model.MembershipActive {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": gin.H{"code": "FORBIDDEN", "message": "account is not active"},
+			})
+			return
+		}
+		if !model.ValidRole(membership.Role) {
+			abortUnauthorized(c, "membership role is invalid")
+			return
+		}
+		c.Set(contextRole, membership.Role)
+		c.Next()
 	}
 }
 
