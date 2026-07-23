@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BrandLogo } from '@/components/brand-logo';
-import { memberships } from '@/lib/membership';
+import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
 
 // Shell for the authenticated customer area: server-side session guard.

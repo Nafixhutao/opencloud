@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation';
 
 import { AdminUsersTable, type AdminUserRow } from '@/components/admin/users-table';
 import { apiFetch } from '@/lib/api';
+import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
-import { memberships } from '@/lib/membership';
 
 // oxlint-disable-next-line react/only-export-components -- Next.js page metadata.
 export const metadata: Metadata = {

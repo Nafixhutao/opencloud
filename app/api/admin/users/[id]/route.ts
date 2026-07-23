@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { apiFetch } from '@/lib/api';
+import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
-import { memberships } from '@/lib/membership';
 
 type RouteContext = { params: Promise<{ id: string }> };
 

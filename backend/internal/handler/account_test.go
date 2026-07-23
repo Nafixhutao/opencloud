@@ -3,7 +3,6 @@ package handler_test
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
-	"github.com/uptrace/bun/driver/pgdriver"
 
+	"github.com/nazxf/opencloud/backend/internal/database"
 	"github.com/nazxf/opencloud/backend/internal/handler"
 	"github.com/nazxf/opencloud/backend/internal/middleware"
 	"github.com/nazxf/opencloud/backend/internal/model"
@@ -30,8 +28,10 @@ func openDB(t *testing.T) *bun.DB {
 	if dsn == "" {
 		t.Skip("DATABASE_URL not set")
 	}
-	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
-	db := bun.NewDB(sqldb, pgdialect.New())
+	db, err := database.Connect(context.Background(), dsn)
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
 	t.Cleanup(func() { _ = db.Close() })
 	var n int
 	if err := db.NewRaw(`SELECT count(*) FROM information_schema.tables WHERE table_name='account_memberships'`).Scan(context.Background(), &n); err != nil || n == 0 {
@@ -55,7 +55,6 @@ func TestMeAndAdminRBAC(t *testing.T) {
 	h := handler.NewAccountHandler(svc)
 	gin.SetMode(gin.TestMode)
 
-	// Seed two customers.
 	uA := "ha_" + uuid.NewString()
 	uB := "hb_" + uuid.NewString()
 	meA, err := svc.GetMe(context.Background(), uA, "TenantA")
@@ -63,7 +62,6 @@ func TestMeAndAdminRBAC(t *testing.T) {
 	meB, err := svc.GetMe(context.Background(), uB, "TenantB")
 	require.NoError(t, err)
 
-	// Customer A /me
 	r := gin.New()
 	r.GET("/me", withIdentity(uA, meA.AccountID, model.RoleCustomer), h.Me)
 	w := httptest.NewRecorder()
@@ -71,14 +69,12 @@ func TestMeAndAdminRBAC(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), meA.AccountID.String())
 
-	// Token account mismatch → 401
 	r2 := gin.New()
 	r2.GET("/me", withIdentity(uA, meB.AccountID, model.RoleCustomer), h.Me)
 	w2 := httptest.NewRecorder()
 	r2.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/me", nil))
 	require.Equal(t, http.StatusUnauthorized, w2.Code)
 
-	// Customer cannot list admin users (RequireRole gate)
 	r3 := gin.New()
 	r3.GET("/admin/users",
 		withIdentity(uA, meA.AccountID, model.RoleCustomer),
@@ -89,7 +85,6 @@ func TestMeAndAdminRBAC(t *testing.T) {
 	r3.ServeHTTP(w3, httptest.NewRequest(http.MethodGet, "/admin/users", nil))
 	require.Equal(t, http.StatusForbidden, w3.Code)
 
-	// Promote A to admin and list users.
 	_, err = svc.BootstrapAdmin(context.Background(), uA)
 	require.NoError(t, err)
 	r4 := gin.New()
@@ -103,7 +98,6 @@ func TestMeAndAdminRBAC(t *testing.T) {
 	require.Equal(t, http.StatusOK, w4.Code)
 	require.Contains(t, w4.Body.String(), `"data"`)
 
-	// Cross-tenant profile patch rejected at service (handler path)
 	r5 := gin.New()
 	r5.PATCH("/me", withIdentity(uB, meA.AccountID, model.RoleCustomer), h.UpdateMe)
 	body, _ := json.Marshal(map[string]string{"name": "Hijack"})
