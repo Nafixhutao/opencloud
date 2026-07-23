@@ -10,16 +10,16 @@ import (
 
 // Well-known audit actions for Phase 1 auth/account events.
 const (
-	AuditLoginSuccess       = "auth.login.success"
-	AuditLoginFailure       = "auth.login.failure"
-	AuditPasswordResetReq   = "auth.password_reset.request"
-	AuditPasswordResetDone  = "auth.password_reset.complete"
-	AuditPasswordChanged    = "auth.password.change"
-	AuditProfileUpdated     = "account.profile.update"
-	AuditUserRoleChanged    = "admin.user.role_change"
-	AuditUserStatusChanged  = "admin.user.status_change"
-	AuditAdminBootstrap     = "admin.bootstrap"
-	AuditMembershipEnsured  = "account.membership.ensure"
+	AuditLoginSuccess      = "auth.login.success"
+	AuditLoginFailure      = "auth.login.failure"
+	AuditPasswordResetReq  = "auth.password_reset.request"
+	AuditPasswordResetDone = "auth.password_reset.complete"
+	AuditPasswordChanged   = "auth.password.change"
+	AuditProfileUpdated    = "account.profile.update"
+	AuditUserRoleChanged   = "admin.user.role_change"
+	AuditUserStatusChanged = "admin.user.status_change"
+	AuditAdminBootstrap    = "admin.bootstrap"
+	AuditMembershipEnsured = "account.membership.ensure"
 )
 
 // AuditLog is an append-only sensitive-action record (SECURITY §12).

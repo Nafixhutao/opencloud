@@ -10,10 +10,10 @@ import (
 
 // Error is a stable, machine-readable application error.
 type Error struct {
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
-	Status  int            `json:"-"`
-	Details []FieldIssue   `json:"details,omitempty"`
+	Code    string       `json:"code"`
+	Message string       `json:"message"`
+	Status  int          `json:"-"`
+	Details []FieldIssue `json:"details,omitempty"`
 	cause   error
 }
 
