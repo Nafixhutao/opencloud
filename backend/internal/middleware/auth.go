@@ -78,7 +78,6 @@ func Auth(keyFunc jwt.Keyfunc, issuer, audience string) gin.HandlerFunc {
 
 		// account_id is our tenant-scoping key (SECURITY §4) and must be a UUID
 		// referencing public.accounts; sub is better-auth's opaque user id.
-		// Claims are server-issued only — never trust client-supplied account/role.
 		if claims.Subject == "" {
 			abortUnauthorized(c, "token missing subject")
 			return
@@ -88,15 +87,10 @@ func Auth(keyFunc jwt.Keyfunc, issuer, audience string) gin.HandlerFunc {
 			abortUnauthorized(c, "token missing or invalid account_id")
 			return
 		}
-		role := claims.Role
-		if role != "customer" && role != "admin" {
-			abortUnauthorized(c, "token missing or invalid role")
-			return
-		}
 
 		c.Set(contextUserID, claims.Subject)
 		c.Set(contextAccountID, acctID)
-		c.Set(contextRole, role)
+		c.Set(contextRole, claims.Role)
 		c.Next()
 	}
 }

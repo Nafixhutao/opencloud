@@ -262,12 +262,3 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 Deliberately **not** used: a validation lib (Gin bundles `validator/v10`), a
 migration tool (Bun has `bun/migrate`), an HTTP client lib (stdlib `net/http`),
 a decimal lib (money is `int64` cents — see `CODING_STANDARDS.md`).
-
-## Phase 1 account layer
-
-- `internal/model`: Account, AccountMembership, AuditLog
-- `internal/repository`: AccountRepo, AuditRepo
-- `internal/service`: AccountService (me, profile, admin users, bootstrap)
-- `internal/handler`: AccountHandler
-- `cmd/bootstrap-admin`: explicit admin promotion
-- Middleware: Auth validates role; RateLimit (Redis); CORS

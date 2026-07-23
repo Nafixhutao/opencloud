@@ -4,10 +4,10 @@ import type { ReactNode } from 'react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BrandLogo } from '@/components/brand-logo';
-import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
 
 // Shell for the authenticated customer area: server-side session guard.
+// Full navigation lands with the first real dashboard screens (Phase 1).
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -15,18 +15,6 @@ export default async function DashboardLayout({
   if (!session) {
     redirect('/login');
   }
-
-  let isAdmin = false;
-  try {
-    const membership = await memberships.getByUserId(session.user.id);
-    isAdmin = membership?.role === 'admin';
-  } catch {
-    // Domain tables may be briefly unavailable during migrations; never fail the shell.
-    isAdmin = false;
-  }
-
-  const navLink =
-    'rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground';
 
   return (
     <div className="min-h-svh bg-background">
@@ -41,17 +29,19 @@ export default async function DashboardLayout({
           <div className="flex min-w-0 items-center gap-8">
             <BrandLogo priority className="h-6" />
             <nav aria-label="Dashboard navigation" className="hidden items-center gap-1 sm:flex">
-              <Link href="/dashboard" className={navLink}>
+              <Link
+                href="/dashboard"
+                aria-current="page"
+                className="rounded-sm bg-muted px-3 py-2 text-sm font-medium"
+              >
                 Overview
               </Link>
-              <Link href="/account" className={navLink}>
-                Account
-              </Link>
-              {isAdmin ? (
-                <Link href="/admin/users" className={navLink}>
-                  Users
-                </Link>
-              ) : null}
+              <a
+                href="#workspace"
+                className="rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Setup
+              </a>
             </nav>
           </div>
 

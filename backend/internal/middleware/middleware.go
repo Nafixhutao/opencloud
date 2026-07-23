@@ -1,5 +1,6 @@
 // Package middleware holds cross-cutting Gin middleware. Order at wiring time:
-// request-id → logger → recovery → cors → ratelimit → auth (BACKEND.md §5).
+// request-id → logger → recovery (auth, cors, ratelimit land in later phases —
+// BACKEND.md §5).
 package middleware
 
 import (

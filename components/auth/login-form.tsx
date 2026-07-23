@@ -89,15 +89,7 @@ export function LoginForm({
           </Field>
 
           <Field data-invalid={Boolean(errors.password)}>
-            <div className="flex items-center justify-between gap-3">
-              <FieldLabel htmlFor="login-password">Password</FieldLabel>
-              <Link
-                className="text-xs text-link-signal hover:underline"
-                href="/forgot-password"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            <FieldLabel htmlFor="login-password">Password</FieldLabel>
             <Input
               id="login-password"
               type="password"

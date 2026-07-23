@@ -205,10 +205,3 @@ npm run lint    # oxlint
 - Lint with **oxlint** (configured in `.oxlintrc.json`); type-check with `tsc`.
 - No secrets in client code or `NEXT_PUBLIC_*` vars. Anything sensitive stays
   server-side. See [`SECURITY.md`](SECURITY.md).
-
-## Phase 1 UI
-
-- `/account` profile + change password
-- `/forgot-password`, `/reset-password`
-- `/admin/users` (role-gated)
-- BFF routes: `/api/account/profile`, `/api/admin/users/[id]` attach JWT via `lib/api.ts`

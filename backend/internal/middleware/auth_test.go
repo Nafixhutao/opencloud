@@ -254,9 +254,8 @@ func TestRequireRole(t *testing.T) {
 		{name: "admin allowed on admin route", allowed: []string{"admin"}, role: "admin", wantStatus: http.StatusOK},
 		{name: "customer forbidden on admin route", allowed: []string{"admin"}, role: "customer", wantStatus: http.StatusForbidden},
 		{name: "one of several roles matches", allowed: []string{"admin", "customer"}, role: "customer", wantStatus: http.StatusOK},
-		// Auth rejects empty/unknown roles before RequireRole runs (401).
-		{name: "empty role unauthenticated", allowed: []string{"admin"}, role: "", wantStatus: http.StatusUnauthorized},
-		{name: "unknown role unauthenticated", allowed: []string{"admin"}, role: "superuser", wantStatus: http.StatusUnauthorized},
+		{name: "empty role forbidden", allowed: []string{"admin"}, role: "", wantStatus: http.StatusForbidden},
+		{name: "unknown role forbidden", allowed: []string{"admin"}, role: "superuser", wantStatus: http.StatusForbidden},
 	}
 
 	for _, tt := range tests {
@@ -271,9 +270,6 @@ func TestRequireRole(t *testing.T) {
 			require.Equal(t, tt.wantStatus, rec.Code)
 			if tt.wantStatus == http.StatusForbidden {
 				require.Contains(t, rec.Body.String(), `"code":"FORBIDDEN"`)
-			}
-			if tt.wantStatus == http.StatusUnauthorized {
-				require.Contains(t, rec.Body.String(), `"code":"UNAUTHENTICATED"`)
 			}
 		})
 	}

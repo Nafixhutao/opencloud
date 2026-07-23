@@ -180,24 +180,3 @@ better-auth JWT, and the current user/tenant is read from its claims.
 | `GET` | `/healthz` | liveness |
 | `GET` | `/readyz` | readiness (DB + Redis reachable) |
 | `GET` | `:9090/metrics` | Prometheus metrics (separate internal listener) |
-
-## 10. Phase 1 endpoints
-
-### `GET /api/v1/me`
-Returns the caller's membership + account (requires JWT with `account_id` + `role`).
-
-### `PATCH /api/v1/me`
-Body: `{ "name": string }` — updates the tenant account display name for the JWT account only.
-
-### `GET /api/v1/admin/users?page=&per_page=`
-Admin-only. Paginated memberships.
-
-### `GET /api/v1/admin/users/{membership_id}`
-Admin-only. Single membership.
-
-### `PATCH /api/v1/admin/users/{membership_id}`
-Admin-only. Body: `{ "role"?: "customer"|"admin", "status"?: "active"|"suspended"|"disabled" }`.
-Refuses self-disable/demote and removing the last active admin.
-
-Identity (register/login/session/password reset) is under `/api/auth/*` on the
-Next.js BFF (better-auth), not the Go API.

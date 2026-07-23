@@ -2,14 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getAuthCallbackError } from './auth-errors.ts';
-import {
-  changePasswordSchema,
-  forgotPasswordSchema,
-  loginSchema,
-  profileSchema,
-  registerSchema,
-  resetPasswordSchema,
-} from './auth-validation.ts';
+import { loginSchema, registerSchema } from './auth-validation.ts';
 
 test('login validation trims a valid email and requires a password', () => {
   const parsed = loginSchema.parse({
@@ -81,24 +74,4 @@ test('auth callback errors map known codes and hide unknown internals', () => {
     'Sign-up could not be completed. Try again or use email.',
   );
   assert.equal(getAuthCallbackError(undefined, 'login'), null);
-});
-
-test('password reset and profile schemas align with server bounds', () => {
-  assert.equal(forgotPasswordSchema.safeParse({ email: 'a@b.co' }).success, true);
-  assert.equal(
-    resetPasswordSchema.safeParse({
-      password: 'eightchars',
-      confirmPassword: 'eightchars',
-    }).success,
-    true,
-  );
-  assert.equal(
-    changePasswordSchema.safeParse({
-      currentPassword: 'old',
-      newPassword: 'eightchars',
-      confirmPassword: 'eightchars',
-    }).success,
-    true,
-  );
-  assert.equal(profileSchema.safeParse({ name: 'Workspace' }).success, true);
 });

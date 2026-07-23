@@ -41,8 +41,6 @@ jobs:
           npm run auth:migrate
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'auth'")" -ge 4
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('user', 'session', 'account', 'verification')")" -eq 0
-      - run: npm run test:auth
-      - run: npm run auth:check-providers
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
@@ -99,12 +97,6 @@ jobs:
           go run ./cmd/migrate up
           go run ./cmd/migrate down
           go run ./cmd/migrate up
-          # Phase 1 tables present after up
-          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('account_memberships','audit_logs')")" -eq 2
-      - name: account service integration
-        env:
-          DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
-        run: go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: docker build
