@@ -14,6 +14,20 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 1 — Auth & accounts:** tenant `account_memberships` + append-only
+  `audit_logs` migrations; signup ensures customer membership; Better Auth JWT
+  `definePayload` emits trusted `account_id`/`role`; Go `GET/PATCH /api/v1/me`
+  and admin `/api/v1/admin/users` with RBAC, self-lockout, and last-admin rules;
+  `cmd/bootstrap-admin` for explicit admin promotion; password forgot/reset/change
+  via Better Auth with configurable `MAIL_PROVIDER` (log/memory/smtp stub);
+  dashboard `/account` and `/admin/users`; Redis + Better Auth rate limits; audit
+  events for login, password reset, profile, and admin role/status changes.
+
+### Changed
+- Compose API defaults `AUTH_JWKS_URL` to the dashboard service and waits for
+  JWKS readiness; dashboard receives optional mail env vars.
+
+### Added (prior unreleased)
 - **Docker + Caddy Phase 0 provisioning spike** (ADR 0008): a disposable,
   idempotent `apply|verify|destroy` harness creates one labeled, constrained,
   non-root site container with a dedicated network/volume and routes it through

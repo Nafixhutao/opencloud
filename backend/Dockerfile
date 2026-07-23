@@ -14,14 +14,15 @@ COPY . .
 # Static build: no cgo, trimmed paths, no symbol table (smaller binaries).
 ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags='-s -w' -o /out/api     ./cmd/api  && \
-    go build -trimpath -ldflags='-s -w' -o /out/worker  ./cmd/worker && \
-    go build -trimpath -ldflags='-s -w' -o /out/migrate ./cmd/migrate
+    go build -trimpath -ldflags='-s -w' -o /out/api              ./cmd/api  && \
+    go build -trimpath -ldflags='-s -w' -o /out/worker           ./cmd/worker && \
+    go build -trimpath -ldflags='-s -w' -o /out/migrate          ./cmd/migrate && \
+    go build -trimpath -ldflags='-s -w' -o /out/bootstrap-admin  ./cmd/bootstrap-admin
 
 # Distroless nonroot: no shell, unprivileged uid (SECURITY.md).
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-COPY --from=build /out/api /out/worker /out/migrate /app/
+COPY --from=build /out/api /out/worker /out/migrate /out/bootstrap-admin /app/
 
 USER nonroot:nonroot
 EXPOSE 8080 9090

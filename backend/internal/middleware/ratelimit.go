@@ -1,0 +1,72 @@
+package middleware
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+)
+
+// RateLimit is a Redis sliding-window limiter for sensitive routes.
+// keyPrefix groups counters; max is the allowed hits per window.
+func RateLimit(rdb *redis.Client, keyPrefix string, max int, window time.Duration) gin.HandlerFunc {
+	if max <= 0 {
+		max = 10
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	return func(c *gin.Context) {
+		if rdb == nil {
+			c.Next()
+			return
+		}
+		ip := c.ClientIP()
+		key := fmt.Sprintf("ratelimit:%s:%s", keyPrefix, ip)
+		ctx := c.Request.Context()
+
+		allowed, retryAfter, err := consume(ctx, rdb, key, max, window)
+		if err != nil {
+			// Fail open on Redis errors for availability, but log via header for ops.
+			c.Header("X-RateLimit-Error", "1")
+			c.Next()
+			return
+		}
+		c.Header("X-RateLimit-Limit", strconv.Itoa(max))
+		if !allowed {
+			if retryAfter > 0 {
+				c.Header("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+			}
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": gin.H{"code": "RATE_LIMITED", "message": "too many requests"},
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
+func consume(ctx context.Context, rdb *redis.Client, key string, max int, window time.Duration) (bool, time.Duration, error) {
+	// Fixed-window counter: INCR + EXPIRE on first hit. Good enough for auth abuse.
+	n, err := rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return false, 0, err
+	}
+	if n == 1 {
+		if err := rdb.Expire(ctx, key, window).Err(); err != nil {
+			return false, 0, err
+		}
+	}
+	if n > int64(max) {
+		ttl, err := rdb.TTL(ctx, key).Result()
+		if err != nil {
+			ttl = window
+		}
+		return false, ttl, nil
+	}
+	return true, 0, nil
+}

@@ -10,11 +10,11 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
 ## Current status
 
-The Next.js dashboard now has working registration/login and an authenticated
-shell; Compose brings up dashboard, API, worker, PostgreSQL, Redis, and both
-migration gates. Phase 0 is complete: Docker/Caddy is the validated MVP hosting
-backend (ADR 0008), its repeatable VPS spike is recorded green, and Hestia is
-preserved as a documented fallback. Phase 1 account and tenant work is next.
+Phase 1 (Auth & accounts) is complete: secure authentication end to end, tenant
+membership with JWT `account_id`/`role` claims, customer profile/password flows,
+admin user management with RBAC, auth rate limiting, and audit logging. Phase 0
+foundations remain in place (Docker/Caddy hosting backend, Compose stack, CI).
+Phase 2 provisioning core is next.
 
 ---
 
@@ -41,7 +41,7 @@ Stand up the skeleton everything else hangs off.
 user can register and log in; the selected MVP hosting backend has a documented,
 repeatable idempotency spike.
 
-## Phase 1 — Auth & accounts ⏳
+## Phase 1 — Auth & accounts ✅
 
 - **shadcn/ui initialized** (Tailwind v4 preset — blank `tailwind.config`,
   `cssVariables: true`; verified compatible with Next 16 + React 19) as the
@@ -54,23 +54,27 @@ repeatable idempotency spike.
   field`; the registry ships `field` instead of the old `form` wrapper)
 - **better-auth** owns sessions + JWT (httpOnly cookies, JWKS); the Go backend
   validates JWTs and issues none (ADR 0006)
-  — 🚧 backend JWT-validation middleware landed (`middleware.Auth` + JWKS via
-  `keyfunc/v3`); BFF foundation (PostgreSQL `auth` schema, email/password,
-  session handler/client) landed; `jwt()` plugin (JWKS at `/api/auth/jwks`) and
-  login/register UI landed; JWT tenant claims (`account_id`/`role`) pending
+  — ✅ JWT plugin with server-side `definePayload` claims `account_id` + `role`
+  from `public.account_memberships`; Go `middleware.Auth` validates signature,
+  iss/aud/exp, UUID `account_id`, and role ∈ {customer,admin}
 - Social login (Google + GitHub) + email/password via better-auth
   (ADR 0006 — supersedes ADR 0005)
-  — 🚧 provider integration and conditional UI landed; production OAuth
-  credentials are still pending
+  — ✅ provider integration and conditional UI landed; production OAuth
+  credentials are still an external operator dependency (not claimed active)
 - RBAC (`customer`, `admin`) enforced in middleware
-  — 🚧 backend `middleware.RequireRole` landed (403 on mismatch); role-gated
-  routes wired when the first admin/customer endpoint lands
+  — ✅ `RequireRole` on `/api/v1/admin/*`; admin UI gated server-side; signup
+  always creates `customer` membership; admin only via `bootstrap-admin`
 - Account + user management (signup, login, profile, password reset)
+  — ✅ `GET/PATCH /api/v1/me`, `/account` profile + change password, forgot/reset
+  password with configurable mail adapter (`MAIL_PROVIDER=log|memory|smtp`)
 - Admin panel shell with role-gated routes
+  — ✅ `/admin/users` list/detail/role/status with self-lockout and last-admin guards
 - Audit logging for sensitive actions
+  — ✅ `public.audit_logs` + appends for login, password reset, profile, role/status
 - Rate limiting on auth endpoints
+  — ✅ better-auth rateLimit on sign-in/up/reset/change-password; Redis limits on API
 
-**Exit criteria:** secure auth end to end; admin can see and manage users.
+**Exit criteria:** secure auth end to end; admin can see and manage users. ✅
 
 ## Phase 2 — Provisioning core ⏳
 

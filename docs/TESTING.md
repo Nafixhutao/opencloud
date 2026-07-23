@@ -120,3 +120,9 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
   fixtures beyond what the test needs.
 - Prefer assertion helpers (`testify/require`) for clear failures; fail fast on
   setup errors.
+
+## Phase 1 tests
+
+Frontend: `npm run test:auth`, `npm run auth:check-providers`, lint, tsc, build, audit.
+Backend: gofmt, golangci-lint, vet, `go test ./...` (integration needs DATABASE_URL), govulncheck, Docker build.
+Migrations: up/idempotent up/down/up in CI. Tenant isolation and admin rules in `internal/service` and `internal/handler` tests.
