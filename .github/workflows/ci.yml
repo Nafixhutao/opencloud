@@ -104,7 +104,7 @@ jobs:
         run: |
           go run ./cmd/migrate up
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) = count(DISTINCT group_id) FROM bun_migrations")" = "t"
-          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-up.sql
+          docker run --rm --network host postgres:18-alpine pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-up.sql
           sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-up.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           INSERT INTO public.accounts (id, name, status)
@@ -115,7 +115,7 @@ jobs:
           VALUES ('00000000-0000-0000-0000-000000000021', 'migration-sentinel-user', 'migration.sentinel', 'migration-sentinel-user');
           SQL
           go run ./cmd/migrate up
-          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-idempotent.sql
+          docker run --rm --network host postgres:18-alpine pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-idempotent.sql
           sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-idempotent.sql
           diff -u /tmp/schema-up.sql /tmp/schema-idempotent.sql
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.account_memberships WHERE user_id='migration-sentinel-user'")" -eq 1
@@ -123,7 +123,7 @@ jobs:
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.account_memberships WHERE user_id='migration-sentinel-user'")" -eq 1
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.audit_logs WHERE action='migration.sentinel'")" -eq 1
           go run ./cmd/migrate up
-          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-roundtrip.sql
+          docker run --rm --network host postgres:18-alpine pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-roundtrip.sql
           sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-roundtrip.sql
           diff -u /tmp/schema-up.sql /tmp/schema-roundtrip.sql
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('account_memberships','audit_logs','auth_token_consumptions')")" -eq 3
