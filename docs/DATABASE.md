@@ -150,6 +150,10 @@ type Site struct {
 - Files are **timestamped** and live in `backend/migrations/`:
   `20260630120000_create_sites.up.sql` / `.down.sql`.
 - **Never edit a shipped migration** — add a new one. Production is forward-only.
+- Committed SHA-256 checksums pin every SQL file, with fixed checksums for the
+  shipped Phase 1 membership/audit migrations. `cmd/migrate up` assigns each
+  pending file its own Bun rollback group, so a development `down` cannot
+  accidentally remove the whole migration history.
 - Every migration is reviewed and reversible where practical; destructive
   migrations are called out in the PR.
 - Migrations run as a deploy step **before** the new app version starts. See
@@ -207,7 +211,13 @@ Rules:
 
 ## 10. Phase 1 tenancy tables
 
-- `public.account_memberships` � `user_id` (better-auth) ? `account_id` with
+- `public.account_memberships` — `user_id` (better-auth) → `account_id` with
   `role` (customer|admin) and `status` (active|suspended|disabled). Unique on
   `user_id` for MVP single-tenant-per-user.
-- `public.audit_logs` � append-only sensitive action trail.
+- `public.audit_logs` — append-only sensitive action trail.
+- `public.auth_token_consumptions` stores only SHA-256 email-verification token
+  digests to make verification links single-use. Raw tokens and URLs never enter
+  the domain database.
+- `audit_logs` is append-only at the database boundary: UPDATE and DELETE are
+  rejected by triggers. Privileged domain mutations append their audit row in
+  the same transaction.

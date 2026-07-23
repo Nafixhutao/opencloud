@@ -123,6 +123,14 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
 
 ## Phase 1 tests
 
-Frontend: `npm run test:auth`, `npm run auth:check-providers`, lint, tsc, build, audit.
+Frontend: `npm run test:auth`, `npm run auth:check-providers`, lint, tsc, build,
+audit. Real Postgres tests cover concurrent membership convergence/no orphans,
+unverified-login rejection, verification expiry/single-use, reset delivery via
+the memory adapter, reset single-use, old/new password behavior, and an
+authenticated password-change audit failure path.
 Backend: gofmt, golangci-lint, vet, `go test ./...` (integration needs DATABASE_URL), govulncheck, Docker build.
-Migrations: up/idempotent up/down/up in CI. Tenant isolation and admin rules in `internal/service` and `internal/handler` tests.
+Migrations: immutable Phase 1 checksums plus up/idempotent-up/latest-down/up
+schema comparison in CI; sentinel membership/audit rows must survive latest
+down. Tenant isolation, stale-token demote/suspend behavior, transactional audit
+failure rollback, N+1-free admin projection, concurrent membership creation,
+and concurrent last-active-admin rules run against disposable PostgreSQL.

@@ -270,4 +270,13 @@ a decimal lib (money is `int64` cents — see `CODING_STANDARDS.md`).
 - `internal/service`: AccountService (me, profile, admin users, bootstrap)
 - `internal/handler`: AccountHandler
 - `cmd/bootstrap-admin`: explicit admin promotion
-- Middleware: Auth validates role; RateLimit (Redis); CORS
+- Middleware: Auth validates JWT claims, then `RequireCurrentMembership`
+  re-checks database role/status; RateLimit (Redis); CORS
+- Admin is a global platform role. Admin list/detail are the only Phase 1
+  cross-account paths; both are audited and return only safe identity fields.
+- Role/status/bootstrap writes use a transaction-scoped PostgreSQL advisory lock
+  plus row locking, so count/check/update cannot race past the last-active-admin
+  invariant. Profile and privileged mutation audits share the owning transaction.
+- Membership provisioning uses a per-user advisory lock and
+  `INSERT ... ON CONFLICT`, so concurrent callers converge without orphan
+  accounts or aborted-transaction re-reads.

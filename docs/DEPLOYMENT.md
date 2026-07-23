@@ -56,6 +56,9 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
 - Bun runs first to create the `auth` namespace. Better Auth's migration API then manages
   only the identity tables inside that schema (ADR 0006).
 - Production is **forward-only**; never edit a shipped migration — add a new one.
+  SQL checksums enforce immutable history, and `up` creates one rollback group
+  per file. `down` is a disposable-development verification tool, not a
+  production rollback procedure.
 - Migrations must be **backward-compatible** with the currently-running app version
   so a deploy (or rollback) never breaks live traffic. The pattern for breaking
   schema changes is **expand → migrate → contract**:
@@ -139,4 +142,10 @@ If any check fails, roll back (§7) and investigate before re-attempting.
 
 After Bun migrations, run Better Auth migration, then rolling-update API/worker/dashboard.
 Promote the first admin with `/app/bootstrap-admin --user-id <id>` (not via HTTP).
-Set `MAIL_PROVIDER` only when a real transport is ready; default `log` does not deliver email.
+Production must set `MAIL_PROVIDER=smtp`, `MAIL_FROM`, `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS`. Port 465 normally uses
+`SMTP_SECURE=true`; STARTTLS ports use `false` and are upgraded with certificate
+validation. The dashboard fails fast if production configuration is incomplete.
+`log`/`memory` are development/test adapters and do not deliver email. Provider
+credentials are external secrets; do not deploy or claim production email active
+until staging verification/reset delivery succeeds.

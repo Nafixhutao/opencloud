@@ -14,16 +14,26 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 1 auth hardening:** required email verification, one-time verification
+  claims, real configurable Nodemailer SMTP delivery with TLS, authenticated
+  password-change and login-failure audit events, safe admin name/email
+  projection, and concurrent Postgres integration coverage for membership and
+  last-active-admin invariants.
 - **Phase 1 — Auth & accounts:** tenant `account_memberships` + append-only
   `audit_logs` migrations; signup ensures customer membership; Better Auth JWT
   `definePayload` emits trusted `account_id`/`role`; Go `GET/PATCH /api/v1/me`
   and admin `/api/v1/admin/users` with RBAC, self-lockout, and last-admin rules;
   `cmd/bootstrap-admin` for explicit admin promotion; password forgot/reset/change
-  via Better Auth with configurable `MAIL_PROVIDER` (log/memory/smtp stub);
+  via Better Auth with configurable `MAIL_PROVIDER` (`log`/`memory` for
+  development/test, real `smtp` transport for production);
   dashboard `/account` and `/admin/users`; Redis + Better Auth rate limits; audit
   events for login, password reset, profile, and admin role/status changes.
 
 ### Changed
+- Bun `up` now assigns one rollback group per migration instead of grouping all
+  pending files. Production stays forward-only; a development `down` can only
+  target the newest migration. Production mail configuration fails fast unless
+  `MAIL_PROVIDER=smtp` and required sender/auth credentials are complete.
 - Compose API defaults `AUTH_JWKS_URL` to the dashboard service and waits for
   JWKS readiness; dashboard receives optional mail env vars.
 
@@ -138,6 +148,16 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
+- Last-active-admin count/update is serialized in one transaction with a
+  transaction-scoped PostgreSQL advisory lock; self-demotion/self-disable remain
+  forbidden. Membership creation uses advisory locking plus `ON CONFLICT` and
+  never re-queries an aborted transaction. Admin listing no longer performs an
+  account query per row, and stale bearer JWT role/status is re-checked against
+  the database on protected Go routes.
+- Profile, bootstrap, role/status, and platform-admin read paths no longer ignore
+  audit failures. Domain mutations and audit rows share a transaction; the
+  Better Auth password boundary reports `AUDIT_FAILED` rather than claiming an
+  unaudited success when its cross-schema audit append fails.
 - Cleared the backend's current `golangci-lint` findings by checking migration
   database-close errors, using the supported Prometheus collector package, and
   documenting exported provisioner states.
@@ -185,6 +205,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Security
+- Phase 1 migration files are pinned by committed SHA-256 checksums and explicit
+  immutable-history tests. `audit_logs` UPDATE/DELETE is rejected by database
+  triggers, while verification storage contains only SHA-256 token digests—never
+  raw tokens, URLs, cookies, passwords, or secrets.
 - Upgraded indirect `github.com/quic-go/quic-go` from 0.59.0 to 0.59.1 to fix
   GO-2026-5676; `govulncheck ./...` now reports no reachable vulnerabilities.
 - Forced the vulnerable PostCSS copy nested under Next.js to 8.5.10; `npm audit`

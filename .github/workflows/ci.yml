@@ -27,6 +27,8 @@ jobs:
       DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
       BETTER_AUTH_SECRET: ci-only-secret-at-least-32-characters
       BETTER_AUTH_URL: http://localhost:3000
+      ENV: test
+      MAIL_PROVIDER: memory
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +36,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: public domain migrations
+        run: |
+          for migration in backend/migrations/*.up.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: better-auth migration
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS auth'
@@ -96,11 +103,36 @@ jobs:
           DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
         run: |
           go run ./cmd/migrate up
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) = count(DISTINCT group_id) FROM bun_migrations")" = "t"
+          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-up.sql
+          sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-up.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO public.accounts (id, name, status)
+          VALUES ('00000000-0000-0000-0000-000000000021', 'migration sentinel', 'active');
+          INSERT INTO public.account_memberships (account_id, user_id, role, status)
+          VALUES ('00000000-0000-0000-0000-000000000021', 'migration-sentinel-user', 'customer', 'active');
+          INSERT INTO public.audit_logs (account_id, actor_id, action, target)
+          VALUES ('00000000-0000-0000-0000-000000000021', 'migration-sentinel-user', 'migration.sentinel', 'migration-sentinel-user');
+          SQL
           go run ./cmd/migrate up
+          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-idempotent.sql
+          sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-idempotent.sql
+          diff -u /tmp/schema-up.sql /tmp/schema-idempotent.sql
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.account_memberships WHERE user_id='migration-sentinel-user'")" -eq 1
           go run ./cmd/migrate down
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.account_memberships WHERE user_id='migration-sentinel-user'")" -eq 1
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.audit_logs WHERE action='migration.sentinel'")" -eq 1
           go run ./cmd/migrate up
-          # Phase 1 tables present after up
-          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('account_memberships','audit_logs')")" -eq 2
+          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges > /tmp/schema-roundtrip.sql
+          sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-roundtrip.sql
+          diff -u /tmp/schema-up.sql /tmp/schema-roundtrip.sql
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('account_memberships','audit_logs','auth_token_consumptions')")" -eq 3
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.accounts WHERE id='00000000-0000-0000-0000-000000000021'")" -eq 1
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.audit_logs WHERE action='migration.sentinel'")" -eq 1
+          if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE public.audit_logs SET action='tampered' WHERE action='migration.sentinel'"; then
+            echo "audit_logs update unexpectedly succeeded"
+            exit 1
+          fi
       - name: account service integration
         env:
           DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable

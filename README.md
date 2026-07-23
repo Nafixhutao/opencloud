@@ -70,8 +70,9 @@ opencloud/
 └── docker-compose.yml    # dashboard + backend + migration gates + datastores
 ```
 
-> **Status:** the repo contains a minimal Next.js shell and the Phase 0 Go
-> backend scaffold. See [`ROADMAP.md`](ROADMAP.md) for what is implemented.
+> **Status:** Phase 1 auth/accounts is implemented and security-hardened, but
+> production email/OAuth activation still requires operator-supplied provider
+> credentials and staging verification. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
 
@@ -130,6 +131,8 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `AUTH_JWKS_URL` | better-auth JWKS the API validates JWTs against (issues none — ADR 0006) |
 | `AUTH_ISSUER` / `AUTH_AUDIENCE` | Optional JWT issuer and audience validation |
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | better-auth (BFF) identity provider config |
+| `MAIL_PROVIDER` / `MAIL_FROM` | `smtp` + sender identity in production; `log`/`memory` are non-delivery dev/test adapters |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Real verification/reset delivery; production fails fast when incomplete |
 | `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
 | `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
 | `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
@@ -147,6 +150,7 @@ See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
 
 # Frontend
 npm run auth:migrate                # migrate Better Auth tables (after Bun)
+npm run test:auth                   # auth/mail/concurrency integration tests
 npm run lint                        # oxlint
 npm run build                       # production build
 
