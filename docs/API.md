@@ -184,20 +184,26 @@ better-auth JWT, and the current user/tenant is read from its claims.
 ## 10. Phase 1 endpoints
 
 ### `GET /api/v1/me`
-Returns the caller's membership + account (requires JWT with `account_id` + `role`).
+Returns the caller's membership + account (requires JWT with `account_id` +
+`role`). The API re-checks current membership role/status in PostgreSQL, so a
+stale token cannot preserve demoted or suspended access.
 
 ### `PATCH /api/v1/me`
 Body: `{ "name": string }` — updates the tenant account display name for the JWT account only.
 
 ### `GET /api/v1/admin/users?page=&per_page=`
-Admin-only. Paginated memberships.
+Global platform-admin only. Paginated memberships with safe user name/email and
+account identity; implemented as a count plus one joined query. Cross-account
+listing is explicitly audited.
 
 ### `GET /api/v1/admin/users/{membership_id}`
-Admin-only. Single membership.
+Global platform-admin only. Single safe membership/user/account projection;
+cross-account access is audited.
 
 ### `PATCH /api/v1/admin/users/{membership_id}`
-Admin-only. Body: `{ "role"?: "customer"|"admin", "status"?: "active"|"suspended"|"disabled" }`.
-Refuses self-disable/demote and removing the last active admin.
+Global platform-admin only. Body: `{ "role"?: "customer"|"admin", "status"?: "active"|"suspended"|"disabled" }`.
+Refuses self-disable/demote and atomically prevents removal of the last active
+platform admin. Mutation and audit append commit together.
 
 Identity (register/login/session/password reset) is under `/api/auth/*` on the
 Next.js BFF (better-auth), not the Go API.

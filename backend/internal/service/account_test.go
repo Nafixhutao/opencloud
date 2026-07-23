@@ -3,6 +3,8 @@ package service_test
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,6 +17,20 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/service"
 	"github.com/uptrace/bun"
 )
+
+type selectCounter struct {
+	count atomic.Int64
+}
+
+func (h *selectCounter) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
+	return ctx
+}
+
+func (h *selectCounter) AfterQuery(_ context.Context, event *bun.QueryEvent) {
+	if event.Operation() == "SELECT" {
+		h.count.Add(1)
+	}
+}
 
 func openTestDB(t *testing.T) *bun.DB {
 	t.Helper()
@@ -33,6 +49,14 @@ func openTestDB(t *testing.T) *bun.DB {
 	if err != nil || n == 0 {
 		t.Skip("account_memberships missing; run migrations first")
 	}
+	_, err = db.ExecContext(context.Background(), `
+		CREATE SCHEMA IF NOT EXISTS auth;
+		CREATE TABLE IF NOT EXISTS auth."user" (
+			id text PRIMARY KEY,
+			name text NOT NULL DEFAULT '',
+			email text NOT NULL DEFAULT ''
+		)`)
+	require.NoError(t, err)
 	return db
 }
 
@@ -146,8 +170,187 @@ func TestListUsersPagination(t *testing.T) {
 		_, err := svc.GetMe(ctx, "list_"+uuid.NewString(), "L")
 		require.NoError(t, err)
 	}
-	users, total, err := svc.ListUsers(ctx, 1, 2)
+	counter := new(selectCounter)
+	db.AddQueryHook(counter)
+	users, total, err := svc.ListUsers(ctx, "admin_"+uuid.NewString(), 1, 2)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, total, 3)
 	require.LessOrEqual(t, len(users), 2)
+	require.Equal(t, int64(2), counter.count.Load(), "admin list uses count + one joined page query")
+}
+
+func TestConcurrentAdminMutationsLeaveOneActiveAdmin(t *testing.T) {
+	db := openTestDB(t)
+	svc := newAccountService(t, db)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `UPDATE public.account_memberships SET role = 'customer'`)
+	require.NoError(t, err)
+
+	firstID := "race_admin_1_" + uuid.NewString()
+	secondID := "race_admin_2_" + uuid.NewString()
+	first, err := svc.BootstrapAdmin(ctx, firstID)
+	require.NoError(t, err)
+	second, err := svc.BootstrapAdmin(ctx, secondID)
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, membershipID := range []uuid.UUID{first.MembershipID, second.MembershipID} {
+		wg.Add(1)
+		go func(id uuid.UUID) {
+			defer wg.Done()
+			<-start
+			_, updateErr := svc.UpdateUser(
+				ctx,
+				"independent_operator",
+				id,
+				service.UpdateUserRequest{Role: model.RoleCustomer},
+			)
+			errs <- updateErr
+		}(membershipID)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	successes := 0
+	conflicts := 0
+	for updateErr := range errs {
+		if updateErr == nil {
+			successes++
+			continue
+		}
+		if ae := apperr.As(updateErr); ae != nil && ae.Code == "CONFLICT" {
+			conflicts++
+			continue
+		}
+		require.NoError(t, updateErr)
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, conflicts)
+
+	count, err := repository.NewAccountRepo(db).CountAdmins(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestEnsureMembershipConcurrentCallersConvergeWithoutOrphanAccount(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.NewAccountRepo(db)
+	ctx := context.Background()
+	userID := "membership_race_" + uuid.NewString()
+
+	var accountsBefore int
+	require.NoError(t, db.NewRaw(`SELECT count(*) FROM public.accounts`).Scan(ctx, &accountsBefore))
+
+	const callers = 12
+	results := make(chan *model.AccountMembership, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			membership, _, ensureErr := repo.EnsureMembership(ctx, userID, "Race Workspace")
+			if ensureErr != nil {
+				errs <- ensureErr
+				return
+			}
+			results <- membership
+		}()
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+	for ensureErr := range errs {
+		require.NoError(t, ensureErr)
+	}
+
+	var winnerMembershipID, winnerAccountID uuid.UUID
+	count := 0
+	for membership := range results {
+		if count == 0 {
+			winnerMembershipID = membership.ID
+			winnerAccountID = membership.AccountID
+		}
+		require.Equal(t, winnerMembershipID, membership.ID)
+		require.Equal(t, winnerAccountID, membership.AccountID)
+		count++
+	}
+	require.Equal(t, callers, count)
+
+	var accountsAfter int
+	require.NoError(t, db.NewRaw(`SELECT count(*) FROM public.accounts`).Scan(ctx, &accountsAfter))
+	require.Equal(t, accountsBefore+1, accountsAfter)
+}
+
+func TestProfileMutationRollsBackWhenAuditInsertFails(t *testing.T) {
+	db := openTestDB(t)
+	svc := newAccountService(t, db)
+	ctx := context.Background()
+	me, err := svc.GetMe(ctx, "audit_profile_"+uuid.NewString(), "Original")
+	require.NoError(t, err)
+
+	installFailingAuditTrigger(t, db)
+	_, err = svc.UpdateProfile(
+		ctx,
+		me.UserID,
+		me.AccountID,
+		service.UpdateProfileRequest{Name: "Must Roll Back"},
+	)
+	require.Error(t, err)
+
+	account, err := repository.NewAccountRepo(db).GetAccountByID(ctx, me.AccountID)
+	require.NoError(t, err)
+	require.Equal(t, "Original", account.Name)
+}
+
+func TestPrivilegedMutationRollsBackWhenAuditInsertFails(t *testing.T) {
+	db := openTestDB(t)
+	svc := newAccountService(t, db)
+	ctx := context.Background()
+	target, err := svc.GetMe(ctx, "audit_admin_"+uuid.NewString(), "Target")
+	require.NoError(t, err)
+	membership, err := repository.NewAccountRepo(db).GetMembershipByUserID(ctx, target.UserID)
+	require.NoError(t, err)
+
+	installFailingAuditTrigger(t, db)
+	_, err = svc.UpdateUser(
+		ctx,
+		"platform_operator",
+		membership.ID,
+		service.UpdateUserRequest{Role: model.RoleAdmin},
+	)
+	require.Error(t, err)
+
+	reloaded, err := repository.NewAccountRepo(db).GetMembershipByID(ctx, membership.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.RoleCustomer, reloaded.Role)
+}
+
+func installFailingAuditTrigger(t *testing.T, db *bun.DB) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `
+		CREATE OR REPLACE FUNCTION public.test_fail_audit_insert()
+		RETURNS trigger
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced audit failure';
+		END;
+		$$;
+		DROP TRIGGER IF EXISTS test_fail_audit_insert ON public.audit_logs;
+		CREATE TRIGGER test_fail_audit_insert
+		BEFORE INSERT ON public.audit_logs
+		FOR EACH ROW EXECUTE FUNCTION public.test_fail_audit_insert()`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, cleanupErr := db.ExecContext(context.Background(), `
+			DROP TRIGGER IF EXISTS test_fail_audit_insert ON public.audit_logs;
+			DROP FUNCTION IF EXISTS public.test_fail_audit_insert()`)
+		require.NoError(t, cleanupErr)
+	})
 }

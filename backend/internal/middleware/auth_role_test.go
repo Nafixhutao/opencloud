@@ -1,6 +1,7 @@
 package middleware_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"net/http"
@@ -14,7 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nazxf/opencloud/backend/internal/middleware"
+	"github.com/nazxf/opencloud/backend/internal/model"
 )
+
+type membershipLookup struct {
+	membership *model.AccountMembership
+	err        error
+}
+
+func (l membershipLookup) GetMembershipByUserID(context.Context, string) (*model.AccountMembership, error) {
+	return l.membership, l.err
+}
 
 func TestAuthRejectsMissingRole(t *testing.T) {
 	t.Parallel()
@@ -103,4 +114,61 @@ func TestAuthAcceptsAdminRole(t *testing.T) {
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"role":"admin"`)
+}
+
+func TestStaleAdminTokenIsRejectedAfterDemotion(t *testing.T) {
+	t.Parallel()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	claims := baseClaims()
+	claims.Role = model.RoleAdmin
+	accountID := uuid.MustParse(claims.AccountID)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(
+		middleware.Auth(keyfuncFor(&key.PublicKey), testIssuer, testAudience),
+		middleware.RequireCurrentMembership(membershipLookup{membership: &model.AccountMembership{
+			UserID:    claims.Subject,
+			AccountID: accountID,
+			Role:      model.RoleCustomer,
+			Status:    model.MembershipActive,
+		}}),
+	)
+	r.GET("/admin", middleware.RequireRole(model.RoleAdmin), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+signRS256(t, key, testKID, claims))
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestStaleTokenIsRejectedAfterSuspension(t *testing.T) {
+	t.Parallel()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	claims := baseClaims()
+	accountID := uuid.MustParse(claims.AccountID)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(
+		middleware.Auth(keyfuncFor(&key.PublicKey), testIssuer, testAudience),
+		middleware.RequireCurrentMembership(membershipLookup{membership: &model.AccountMembership{
+			UserID:    claims.Subject,
+			AccountID: accountID,
+			Role:      claims.Role,
+			Status:    model.MembershipSuspended,
+		}}),
+	)
+	r.GET("/protected", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+signRS256(t, key, testKID, claims))
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code)
 }

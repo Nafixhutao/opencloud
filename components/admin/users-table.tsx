@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 export type AdminUserRow = {
   membership_id: string;
   user_id: string;
+  name: string;
+  email: string;
   account_id: string;
   role: string;
   status: string;
@@ -93,7 +95,7 @@ export function AdminUsersTable({
           <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Account</th>
-              <th className="px-4 py-3 font-medium">User ID</th>
+              <th className="px-4 py-3 font-medium">Identity</th>
               <th className="px-4 py-3 font-medium">Role</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Actions</th>
@@ -111,13 +113,21 @@ export function AdminUsersTable({
                       {u.account_id.slice(0, 8)}…
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {u.user_id.slice(0, 12)}…
-                    {isSelf ? (
-                      <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
-                        you
-                      </span>
-                    ) : null}
+                  <td className="px-4 py-3">
+                    <div className="font-medium">
+                      {u.name || 'Unnamed user'}
+                      {isSelf ? (
+                        <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
+                          you
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {u.email || 'Email unavailable'}
+                    </div>
+                    <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      {u.user_id.slice(0, 12)}…
+                    </div>
                   </td>
                   <td className="px-4 py-3 capitalize">{u.role}</td>
                   <td className="px-4 py-3 capitalize">{u.status}</td>

@@ -10,11 +10,13 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
 ## Current status
 
-Phase 1 (Auth & accounts) is complete: secure authentication end to end, tenant
-membership with JWT `account_id`/`role` claims, customer profile/password flows,
-admin user management with RBAC, auth rate limiting, and audit logging. Phase 0
-foundations remain in place (Docker/Caddy hosting backend, Compose stack, CI).
-Phase 2 provisioning core is next.
+Phase 1 (Auth & accounts) is technically implemented and hardened: verified
+email/password auth, tenant membership, immediate membership/status re-checks,
+atomic platform-admin management, and durable domain audit writes are covered by
+integration tests. It remains **in progress operationally** until a real
+production SMTP provider (and optional OAuth providers) is configured with
+external credentials and the complete flow is verified in staging. Phase 0
+foundations remain in place; Phase 2 follows that gate.
 
 ---
 
@@ -41,7 +43,7 @@ Stand up the skeleton everything else hangs off.
 user can register and log in; the selected MVP hosting backend has a documented,
 repeatable idempotency spike.
 
-## Phase 1 — Auth & accounts ✅
+## Phase 1 — Auth & accounts 🚧
 
 - **shadcn/ui initialized** (Tailwind v4 preset — blank `tailwind.config`,
   `cssVariables: true`; verified compatible with Next 16 + React 19) as the
@@ -65,16 +67,29 @@ repeatable idempotency spike.
   — ✅ `RequireRole` on `/api/v1/admin/*`; admin UI gated server-side; signup
   always creates `customer` membership; admin only via `bootstrap-admin`
 - Account + user management (signup, login, profile, password reset)
-  — ✅ `GET/PATCH /api/v1/me`, `/account` profile + change password, forgot/reset
-  password with configurable mail adapter (`MAIL_PROVIDER=log|memory|smtp`)
+  — ✅ `GET/PATCH /api/v1/me`, `/account` profile + audited password change,
+  required email verification, and single-use verification/reset links. SMTP is
+  a real TLS transport; production refuses non-delivery adapters or incomplete
+  credentials.
 - Admin panel shell with role-gated routes
-  — ✅ `/admin/users` list/detail/role/status with self-lockout and last-admin guards
+  — ✅ `/admin/users` list/detail/role/status with safe name/email identity,
+  explicit audited cross-account access, self-lockout protection, and a
+  transaction/advisory-lock last-active-admin guard.
 - Audit logging for sensitive actions
-  — ✅ `public.audit_logs` + appends for login, password reset, profile, role/status
+  — ✅ DB-enforced append-only `public.audit_logs`; profile, bootstrap, role/status,
+  password, login, verification, reset, and platform-admin reads are audited.
 - Rate limiting on auth endpoints
   — ✅ better-auth rateLimit on sign-in/up/reset/change-password; Redis limits on API
+- Migration and token hardening
+  — ✅ shipped Phase 1 migration checksums are immutable; each new migration gets
+  its own rollback group; concurrent membership creation converges without
+  orphans; protected Go routes re-check current DB role/status so stale bearer
+  JWTs cannot retain admin access.
 
-**Exit criteria:** secure auth end to end; admin can see and manage users. ✅
+**Exit criteria:** code and disposable integration gates are implemented.
+Production exit remains pending real SMTP/OAuth credentials, staging delivery
+verification, and review/CI approval; no credential or production deployment is
+claimed by this roadmap.
 
 ## Phase 2 — Provisioning core ⏳
 

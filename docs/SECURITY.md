@@ -29,10 +29,17 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   and email verification. Passwords are hashed by better-auth (scrypt default);
   the Go backend holds **no** password or OAuth code. `state`/PKCE and
   provider-verified-email auto-linking are better-auth's.
+- Email/password login requires a verified address. Verification and password
+  reset links expire after one hour; reset tokens and verification claims are
+  single-use. OpenCloud stores only a SHA-256 verification-token digest outside
+  Better Auth and never logs a token, reset URL, cookie, password, or secret.
 - **JWT** is issued by better-auth's `jwt` plugin — asymmetric, exposed at a
   **JWKS** endpoint — carrying `sub` plus custom claims (`account_id`, `role`).
   The Go backend is a **resource server**: `middleware/auth` validates the JWT
   against the cached JWKS on every protected route; it **issues no tokens**.
+  Protected routes then re-read the current membership and replace the JWT role
+  with the database role. Demotion, suspension, or disable therefore takes
+  effect immediately for already-issued bearer JWTs.
 - **Sessions** (rotation and revocation) live in better-auth (`auth.session`),
   short-lived by config.
 - **Sensitive actions** (delete account, change billing, role change) require
@@ -54,6 +61,9 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 - **Tenant scoping is the #1 invariant:** every customer data path is scoped by
   `account_id`. A missing scope is a vulnerability, not a style nit. Admin
   cross-account access is a separate, explicit, **audited** path.
+- `admin` is a **global platform-operator role**, not a tenant administrator.
+  Only `/api/v1/admin/*` may cross account boundaries. Customer routes remain
+  scoped to the JWT account and never inherit platform-wide access.
 - Resources the caller can't access return `404`, not `403`, to avoid leaking
   existence ([`API.md`](API.md#3-status-codes)).
 
@@ -128,6 +138,11 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   password changes — are written to an **append-only** `audit_logs` trail with
   actor, target, and metadata ([`DATABASE.md`](DATABASE.md#3-core-schema)).
 - Audit logs are retained and protected from tampering; they are not customer-editable.
+- Profile, bootstrap, and role/status mutations append audit rows in the same
+  PostgreSQL transaction. Database triggers reject audit UPDATE/DELETE. Better
+  Auth owns password credential transactions in `auth.*`; if the following
+  domain audit append fails, the API returns `AUDIT_FAILED` and never reports
+  success. A durable outbox is deferred until cross-database delivery exists.
 
 ## 13. Data protection & privacy
 
@@ -167,5 +182,9 @@ go run ./cmd/bootstrap-admin --user-id <id>
 
 Password reset tokens are single-use, expire (default 1h), stored hashed under
 better-auth `auth.verification`, and must never appear in application logs.
-Mail delivery uses `MAIL_PROVIDER` (`log` / `memory` / `smtp`); production
-email is not claimed active until a real provider is configured.
+Mail delivery uses `MAIL_PROVIDER` (`log` / `memory` / `smtp`). `log` and
+`memory` never deliver and are forbidden in production. Production requires a
+real SMTP host, sender, username/password, TLS 1.2+, and valid certificates;
+startup fails fast when incomplete. Production email is not claimed active
+until those external credentials are configured and a staging delivery test
+passes.

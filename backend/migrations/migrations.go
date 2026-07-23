@@ -10,7 +10,7 @@ import (
 	"github.com/uptrace/bun/migrate"
 )
 
-//go:embed *.sql
+//go:embed *.sql checksums.sha256
 var sqlMigrations embed.FS
 
 // Migrations is the registry the migrate command runs against.

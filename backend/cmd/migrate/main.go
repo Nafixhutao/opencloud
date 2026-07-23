@@ -45,6 +45,7 @@ func main() {
 		db,
 		migrations.Migrations,
 		migrate.WithMarkAppliedOnSuccess(true),
+		migrate.WithUpsert(true),
 	)
 	if err := migrator.Init(ctx); err != nil {
 		deps.Log.Fatal("migrator init", zap.Error(err))
@@ -58,15 +59,27 @@ func main() {
 func run(ctx context.Context, log *zap.Logger, m *migrate.Migrator, cmd string) error {
 	switch cmd {
 	case "up":
-		group, err := m.Migrate(ctx)
+		ms, err := m.MigrationsWithStatus(ctx)
 		if err != nil {
 			return err
 		}
-		if group.IsZero() {
+		unapplied := ms.Unapplied()
+		if len(unapplied) == 0 {
 			log.Info("no new migrations to run")
 			return nil
 		}
-		log.Info("migrations applied", zap.String("group", group.String()))
+		names := make([]string, 0, len(unapplied))
+		// Bun's Migrate applies every pending file as one rollback group. That
+		// makes a fresh install's first `down` remove the entire schema. Apply
+		// each pending migration as its own group so rollback is always limited
+		// to the newest migration and shipped history remains immutable.
+		for i := range unapplied {
+			if err := m.RunMigration(ctx, unapplied[i].Name); err != nil {
+				return err
+			}
+			names = append(names, unapplied[i].Name)
+		}
+		log.Info("migrations applied", zap.Strings("migrations", names))
 		return nil
 
 	case "down":

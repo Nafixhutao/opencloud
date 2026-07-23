@@ -65,6 +65,11 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `AUTH_AUDIENCE` | api | expected JWT audience; required in production |
 | `BETTER_AUTH_SECRET` | frontend | better-auth encryption/hashing key (≥32 chars) — ADR 0006 |
 | `BETTER_AUTH_URL` | frontend | better-auth base URL (BFF origin) |
+| `MAIL_PROVIDER` | frontend | `smtp` in production; `log`/`memory` only outside production |
+| `MAIL_FROM` | frontend | verified sender identity for auth mail |
+| `SMTP_HOST` / `SMTP_PORT` | frontend | production SMTP endpoint |
+| `SMTP_SECURE` | frontend | `true` for implicit TLS (normally 465), otherwise required STARTTLS |
+| `SMTP_USER` / `SMTP_PASS` | frontend | external SMTP credentials; both required in production |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | frontend | GitHub social login via better-auth (ADR 0006) |
 | `PROVISIONER_BACKEND` | worker | `docker` (default), `hestia`, or non-production `fake` |
@@ -80,6 +85,9 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 
 Secrets in production come from a secret manager / orchestrator secrets, not a
 checked-in file. Rotate on exposure.
+The dashboard validates production mail configuration at startup and refuses
+non-delivery adapters or incomplete SMTP credentials. Credentials must be
+provisioned externally and verified in staging before email is considered live.
 
 ## 4. Environments
 

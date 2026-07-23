@@ -35,6 +35,7 @@ For every new dependency:
 |---|---|---|---|
 | Framework and routing | Next.js App Router + React | **Adopted** | Core framework; keep Next.js routing |
 | Authentication | better-auth | **Adopted — Phase 1** | Owns identity, sessions, social login, JWT/JWKS |
+| Auth email delivery | Nodemailer SMTP | **Adopted — Phase 1 hardening** | Real verification/reset delivery with TLS; platform APIs provide no SMTP client |
 | Dashboard/admin UI | shadcn/ui + Tailwind CSS | **Adopted — Phase 1** | Add primitives per screen, never `--all` |
 | Marketing UI | Astryx + StyleX | **Planned — marketing rework** | First rebuilt marketing route; keep separate from shadcn route groups |
 | Forms and client validation | react-hook-form + zod + resolver | **Adopted — Phase 1** | Shared form pattern; backend still re-validates |

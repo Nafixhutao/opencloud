@@ -73,45 +73,66 @@ func (s *AccountService) UpdateProfile(ctx context.Context, userID string, accou
 		return nil, apperr.Validation("name must be at most 100 characters", apperr.FieldIssue{Field: "name", Issue: "max 100"})
 	}
 
-	m, err := s.accts.GetMembershipByUserID(ctx, userID)
+	var result *Me
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		accts := s.accts.WithDB(tx)
+		audit := s.audit.WithDB(tx)
+		m, err := accts.GetMembershipByUserID(ctx, userID)
+		if err != nil {
+			return err
+		}
+		// Tenant isolation: never update another account even if JWT was stale.
+		if m.AccountID != accountID {
+			return apperr.NotFound("account not found")
+		}
+		if m.Status != model.MembershipActive {
+			return apperr.Forbidden("account is " + m.Status)
+		}
+		if err := accts.UpdateAccountName(ctx, accountID, name); err != nil {
+			return err
+		}
+		actor := userID
+		aid := accountID
+		if err := audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			ActorID:   &actor,
+			Action:    model.AuditProfileUpdated,
+			Target:    strPtr(accountID.String()),
+			Metadata:  map[string]any{"fields": []string{"name"}},
+		}); err != nil {
+			return err
+		}
+		acct, err := accts.GetAccountByID(ctx, accountID)
+		if err != nil {
+			return err
+		}
+		result = &Me{
+			UserID:    m.UserID,
+			AccountID: m.AccountID,
+			Role:      m.Role,
+			Status:    m.Status,
+			Account:   acct,
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperr.NotFound("membership not found")
 		}
-		return nil, apperr.Internal("failed to load membership").Wrap(err)
-	}
-	// Tenant isolation: never update another account even if JWT was somehow wrong.
-	if m.AccountID != accountID {
-		return nil, apperr.NotFound("account not found")
-	}
-
-	_, err = s.db.NewUpdate().
-		Model((*model.Account)(nil)).
-		Set("name = ?", name).
-		Set("updated_at = now()").
-		Where("id = ?", accountID).
-		Exec(ctx)
-	if err != nil {
+		if apperr.As(err) != nil {
+			return nil, err
+		}
 		return nil, apperr.Internal("failed to update profile").Wrap(err)
 	}
-
-	actor := userID
-	aid := accountID
-	_ = s.audit.Append(ctx, repository.Entry{
-		AccountID: &aid,
-		ActorID:   &actor,
-		Action:    model.AuditProfileUpdated,
-		Target:    strPtr(accountID.String()),
-		Metadata:  map[string]any{"name": name},
-	})
-
-	return s.GetMe(ctx, userID, name)
+	return result, nil
 }
 
-// AdminUser is a membership row for admin listings (identity fields filled by handler/BFF).
+// AdminUser is the safe membership/account/identity projection for platform admins.
 type AdminUser struct {
 	MembershipID uuid.UUID `json:"membership_id"`
 	UserID       string    `json:"user_id"`
+	Name         string    `json:"name"`
+	Email        string    `json:"email"`
 	AccountID    uuid.UUID `json:"account_id"`
 	Role         string    `json:"role"`
 	Status       string    `json:"status"`
@@ -120,8 +141,9 @@ type AdminUser struct {
 	UpdatedAt    string    `json:"updated_at"`
 }
 
-// ListUsers returns paginated memberships for admin.
-func (s *AccountService) ListUsers(ctx context.Context, page, perPage int) ([]AdminUser, int, error) {
+// ListUsers returns paginated memberships for a platform admin and records the
+// cross-account read before any data is returned.
+func (s *AccountService) ListUsers(ctx context.Context, actorUserID string, page, perPage int) ([]AdminUser, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -132,53 +154,46 @@ func (s *AccountService) ListUsers(ctx context.Context, page, perPage int) ([]Ad
 		perPage = 100
 	}
 	offset := (page - 1) * perPage
-	rows, total, err := s.accts.ListMemberships(ctx, perPage, offset)
+	rows, total, err := s.accts.ListAdminUsers(ctx, perPage, offset)
 	if err != nil {
 		return nil, 0, apperr.Internal("failed to list users").Wrap(err)
 	}
 	out := make([]AdminUser, 0, len(rows))
-	for _, m := range rows {
-		acctName := ""
-		if acct, aerr := s.accts.GetAccountByID(ctx, m.AccountID); aerr == nil {
-			acctName = acct.Name
-		}
-		out = append(out, AdminUser{
-			MembershipID: m.ID,
-			UserID:       m.UserID,
-			AccountID:    m.AccountID,
-			Role:         m.Role,
-			Status:       m.Status,
-			AccountName:  acctName,
-			CreatedAt:    m.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:    m.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-		})
+	for _, row := range rows {
+		out = append(out, adminUserFromRow(&row))
+	}
+	actor := actorUserID
+	if err := s.audit.Append(ctx, repository.Entry{
+		ActorID:  &actor,
+		Action:   model.AuditAdminUsersListed,
+		Target:   strPtr("account_memberships"),
+		Metadata: map[string]any{"page": page, "per_page": perPage, "result_count": len(out)},
+	}); err != nil {
+		return nil, 0, apperr.Internal("failed to audit admin user list").Wrap(err)
 	}
 	return out, total, nil
 }
 
-// GetUser returns one membership for admin detail.
-func (s *AccountService) GetUser(ctx context.Context, membershipID uuid.UUID) (*AdminUser, error) {
-	m, err := s.accts.GetMembershipByID(ctx, membershipID)
+// GetUser returns one membership for admin detail and audits the cross-account read.
+func (s *AccountService) GetUser(ctx context.Context, actorUserID string, membershipID uuid.UUID) (*AdminUser, error) {
+	row, err := s.accts.GetAdminUser(ctx, membershipID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperr.NotFound("user not found")
 		}
 		return nil, apperr.Internal("failed to load user").Wrap(err)
 	}
-	acctName := ""
-	if acct, aerr := s.accts.GetAccountByID(ctx, m.AccountID); aerr == nil {
-		acctName = acct.Name
+	actor := actorUserID
+	if err := s.audit.Append(ctx, repository.Entry{
+		AccountID: &row.AccountID,
+		ActorID:   &actor,
+		Action:    model.AuditAdminUserViewed,
+		Target:    strPtr(row.UserID),
+	}); err != nil {
+		return nil, apperr.Internal("failed to audit admin user view").Wrap(err)
 	}
-	return &AdminUser{
-		MembershipID: m.ID,
-		UserID:       m.UserID,
-		AccountID:    m.AccountID,
-		Role:         m.Role,
-		Status:       m.Status,
-		AccountName:  acctName,
-		CreatedAt:    m.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:    m.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
+	user := adminUserFromRow(row)
+	return &user, nil
 }
 
 // UpdateUserRequest is the admin patch for role/status.
@@ -201,66 +216,90 @@ func (s *AccountService) UpdateUser(ctx context.Context, actorUserID string, mem
 		return nil, apperr.Validation("invalid status", apperr.FieldIssue{Field: "status", Issue: "must be active, suspended, or disabled"})
 	}
 
-	target, err := s.accts.GetMembershipByID(ctx, membershipID)
+	var result *AdminUser
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		accts := s.accts.WithDB(tx)
+		audit := s.audit.WithDB(tx)
+		if err := accts.LockAdminMutations(ctx); err != nil {
+			return err
+		}
+		target, err := accts.GetMembershipByIDForUpdate(ctx, membershipID)
+		if err != nil {
+			return err
+		}
+
+		// Prevent self-lockout: admin cannot disable/suspend or demote themselves.
+		if target.UserID == actorUserID {
+			if status != "" && status != model.MembershipActive {
+				return apperr.Conflict("cannot change your own status")
+			}
+			if role != "" && role != model.RoleAdmin {
+				return apperr.Conflict("cannot demote yourself")
+			}
+		}
+
+		demotingAdmin := target.Role == model.RoleAdmin &&
+			target.Status == model.MembershipActive &&
+			role == model.RoleCustomer
+		disablingAdmin := target.Role == model.RoleAdmin &&
+			target.Status == model.MembershipActive &&
+			status != "" && status != model.MembershipActive
+		if demotingAdmin || disablingAdmin {
+			n, err := accts.CountAdmins(ctx)
+			if err != nil {
+				return err
+			}
+			if n <= 1 {
+				return apperr.Conflict("cannot remove the last active admin")
+			}
+		}
+
+		updated, err := accts.UpdateMembershipRoleStatus(ctx, membershipID, role, status)
+		if err != nil {
+			return err
+		}
+		actor := actorUserID
+		aid := updated.AccountID
+		if role != "" && role != target.Role {
+			if err := audit.Append(ctx, repository.Entry{
+				AccountID: &aid,
+				ActorID:   &actor,
+				Action:    model.AuditUserRoleChanged,
+				Target:    strPtr(updated.UserID),
+				Metadata:  map[string]any{"from": target.Role, "to": role},
+			}); err != nil {
+				return err
+			}
+		}
+		if status != "" && status != target.Status {
+			if err := audit.Append(ctx, repository.Entry{
+				AccountID: &aid,
+				ActorID:   &actor,
+				Action:    model.AuditUserStatusChanged,
+				Target:    strPtr(updated.UserID),
+				Metadata:  map[string]any{"from": target.Status, "to": status},
+			}); err != nil {
+				return err
+			}
+		}
+		row, err := accts.GetAdminUser(ctx, membershipID)
+		if err != nil {
+			return err
+		}
+		user := adminUserFromRow(row)
+		result = &user
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperr.NotFound("user not found")
 		}
-		return nil, apperr.Internal("failed to load user").Wrap(err)
-	}
-
-	// Prevent self-lockout: admin cannot disable/suspend or demote themselves.
-	if target.UserID == actorUserID {
-		if status != "" && status != model.MembershipActive {
-			return nil, apperr.Conflict("cannot change your own status")
+		if apperr.As(err) != nil {
+			return nil, err
 		}
-		if role != "" && role != model.RoleAdmin {
-			return nil, apperr.Conflict("cannot demote yourself")
-		}
-	}
-
-	// Prevent removing the last active admin.
-	demotingAdmin := target.Role == model.RoleAdmin && role == model.RoleCustomer
-	disablingAdmin := target.Role == model.RoleAdmin &&
-		target.Status == model.MembershipActive &&
-		status != "" && status != model.MembershipActive
-	if demotingAdmin || disablingAdmin {
-		n, err := s.accts.CountAdmins(ctx)
-		if err != nil {
-			return nil, apperr.Internal("failed to count admins").Wrap(err)
-		}
-		if n <= 1 {
-			return nil, apperr.Conflict("cannot remove the last active admin")
-		}
-	}
-
-	updated, err := s.accts.UpdateMembershipRoleStatus(ctx, membershipID, role, status)
-	if err != nil {
 		return nil, apperr.Internal("failed to update user").Wrap(err)
 	}
-
-	actor := actorUserID
-	aid := updated.AccountID
-	if role != "" && role != target.Role {
-		_ = s.audit.Append(ctx, repository.Entry{
-			AccountID: &aid,
-			ActorID:   &actor,
-			Action:    model.AuditUserRoleChanged,
-			Target:    strPtr(updated.UserID),
-			Metadata:  map[string]any{"from": target.Role, "to": role},
-		})
-	}
-	if status != "" && status != target.Status {
-		_ = s.audit.Append(ctx, repository.Entry{
-			AccountID: &aid,
-			ActorID:   &actor,
-			Action:    model.AuditUserStatusChanged,
-			Target:    strPtr(updated.UserID),
-			Metadata:  map[string]any{"from": target.Status, "to": status},
-		})
-	}
-
-	return s.GetUser(ctx, membershipID)
+	return result, nil
 }
 
 // BootstrapAdmin promotes a user to admin by user_id (idempotent, explicit).
@@ -269,35 +308,62 @@ func (s *AccountService) BootstrapAdmin(ctx context.Context, userID string) (*Ad
 	if userID == "" {
 		return nil, apperr.Validation("user_id is required")
 	}
-	m, err := s.accts.GetMembershipByUserID(ctx, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Ensure a membership first so bootstrap works for brand-new users.
-			m, _, err = s.accts.EnsureMembership(ctx, userID, "Admin Workspace")
-			if err != nil {
-				return nil, apperr.Internal("failed to ensure membership").Wrap(err)
-			}
-		} else {
-			return nil, apperr.Internal("failed to load membership").Wrap(err)
+	var result *AdminUser
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		accts := s.accts.WithDB(tx)
+		audit := s.audit.WithDB(tx)
+		if err := accts.LockAdminMutations(ctx); err != nil {
+			return err
 		}
-	}
-	if m.Role == model.RoleAdmin && m.Status == model.MembershipActive {
-		return s.GetUser(ctx, m.ID)
-	}
-	updated, err := s.accts.UpdateMembershipRoleStatus(ctx, m.ID, model.RoleAdmin, model.MembershipActive)
-	if err != nil {
-		return nil, apperr.Internal("failed to promote admin").Wrap(err)
-	}
-	aid := updated.AccountID
-	actor := userID
-	_ = s.audit.Append(ctx, repository.Entry{
-		AccountID: &aid,
-		ActorID:   &actor,
-		Action:    model.AuditAdminBootstrap,
-		Target:    strPtr(userID),
-		Metadata:  map[string]any{"method": "bootstrap"},
+		m, _, err := accts.EnsureMembership(ctx, userID, "Admin Workspace")
+		if err != nil {
+			return err
+		}
+		wasAdmin := m.Role == model.RoleAdmin && m.Status == model.MembershipActive
+		if !wasAdmin {
+			m, err = accts.UpdateMembershipRoleStatus(ctx, m.ID, model.RoleAdmin, model.MembershipActive)
+			if err != nil {
+				return err
+			}
+		}
+		aid := m.AccountID
+		actor := userID
+		if err := audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			ActorID:   &actor,
+			Action:    model.AuditAdminBootstrap,
+			Target:    strPtr(userID),
+			Metadata:  map[string]any{"method": "bootstrap", "idempotent": wasAdmin},
+		}); err != nil {
+			return err
+		}
+		row, err := accts.GetAdminUser(ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		user := adminUserFromRow(row)
+		result = &user
+		return nil
 	})
-	return s.GetUser(ctx, updated.ID)
+	if err != nil {
+		return nil, apperr.Internal("failed to bootstrap admin").Wrap(err)
+	}
+	return result, nil
+}
+
+func adminUserFromRow(row *repository.AdminUserRow) AdminUser {
+	return AdminUser{
+		MembershipID: row.MembershipID,
+		UserID:       row.UserID,
+		Name:         row.UserName,
+		Email:        row.UserEmail,
+		AccountID:    row.AccountID,
+		Role:         row.Role,
+		Status:       row.Status,
+		AccountName:  row.AccountName,
+		CreatedAt:    row.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    row.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+	}
 }
 
 func strPtr(s string) *string { return &s }

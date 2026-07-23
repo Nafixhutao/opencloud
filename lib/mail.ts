@@ -1,34 +1,44 @@
-/**
- * Configurable mail adapter for auth emails (password reset, etc.).
- *
- * Production SMTP is optional. When MAIL_PROVIDER is unset or "log", messages
- * are captured in memory (tests) or logged without secrets (dev). Never log
- * reset tokens or full URLs containing tokens in production logs.
- */
+import nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 export type MailMessage = {
   to: string;
   subject: string;
   text: string;
-  /** Optional HTML body */
   html?: string;
-  /** Non-secret metadata for tests (never includes tokens in production logs) */
+  /** Non-secret metadata for test assertions; never serialized into logs. */
   tags?: Record<string, string>;
 };
 
 export type MailAdapter = {
   send(message: MailMessage): Promise<void>;
-  /** Test helper: captured messages (memory adapter only). */
   readonly sent?: MailMessage[];
 };
 
-export type MailProvider = 'log' | 'memory' | 'smtp' | 'console';
+export type SMTPConfig = {
+  host: string;
+  port: number;
+  user?: string;
+  pass?: string;
+  from: string;
+  secure: boolean;
+};
 
-function redactForLog(message: MailMessage): Record<string, string> {
+type MailEnvironment = Readonly<Record<string, string | undefined>>;
+type MailTransport = {
+  sendMail(message: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html?: string;
+  }): Promise<unknown>;
+};
+
+function redactedMetadata(message: MailMessage): Record<string, string> {
   return {
     to: message.to,
     subject: message.subject,
-    // Never include body/url/token in logs.
     body_chars: String(message.text.length),
   };
 }
@@ -46,81 +56,120 @@ export function createMemoryMailAdapter(): MailAdapter {
 export function createLogMailAdapter(): MailAdapter {
   return {
     async send(message) {
-      // Structured, secret-free log line for local/dev.
-      console.info('[mail:log]', JSON.stringify(redactForLog(message)));
+      console.info('[mail:log]', JSON.stringify(redactedMetadata(message)));
     },
   };
 }
 
-export function createSMTPMailAdapter(opts: {
-  host: string;
-  port: number;
-  user?: string;
-  pass?: string;
-  from: string;
-  secure?: boolean;
-}): MailAdapter {
-  // Lazy nodemailer-free SMTP via raw fetch is not available; use dynamic import
-  // only when configured. For MVP without a dependency, we surface a clear error
-  // if SMTP is selected but undeliverable — operators set MAIL_PROVIDER=log until
-  // a transport is wired. This keeps package.json lean (YAGNI).
-  const from = opts.from;
+export function readSMTPConfig(env: MailEnvironment = process.env): SMTPConfig {
+  const host = env.SMTP_HOST?.trim() ?? '';
+  const from = env.MAIL_FROM?.trim() ?? '';
+  const port = Number(env.SMTP_PORT ?? '587');
+  const secureValue = (env.SMTP_SECURE ?? 'false').toLowerCase();
+  const user = env.SMTP_USER?.trim() || undefined;
+  const pass = env.SMTP_PASS || undefined;
+
+  if (!host || !from) {
+    throw new Error('SMTP_HOST and MAIL_FROM are required when MAIL_PROVIDER=smtp');
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('SMTP_PORT must be an integer between 1 and 65535');
+  }
+  if (secureValue !== 'true' && secureValue !== 'false') {
+    throw new Error('SMTP_SECURE must be true or false');
+  }
+  if (Boolean(user) !== Boolean(pass)) {
+    throw new Error('SMTP_USER and SMTP_PASS must be configured together');
+  }
+
+  return {
+    host,
+    port,
+    user,
+    pass,
+    from,
+    secure: secureValue === 'true',
+  };
+}
+
+export function createSMTPMailAdapter(
+  config: SMTPConfig,
+  transport: MailTransport = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: !config.secure,
+    auth:
+      config.user && config.pass
+        ? {
+            user: config.user,
+            pass: config.pass,
+          }
+        : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    tls: {
+      minVersion: 'TLSv1.2',
+      servername: config.host,
+      rejectUnauthorized: true,
+    },
+  } satisfies SMTPTransport.Options),
+): MailAdapter {
   return {
     async send(message) {
-      // Minimal SMTP via Node net would be fragile; document that production
-      // email requires configuring an external provider. Fail loudly so we never
-      // silently drop password-reset mail.
-      const err = new Error(
-        'SMTP mail adapter is not bundled yet. Set MAIL_PROVIDER=log or memory, ' +
-          'or integrate a provider (Resend/SES) before enabling production reset email. ' +
-          `Configured host=${opts.host} from=${from}`,
-      );
-      console.error('[mail:smtp]', err.message, redactForLog(message));
-      throw err;
+      await transport.sendMail({
+        from: config.from,
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      });
     },
   };
 }
 
 let singleton: MailAdapter | null = null;
 
-export function getMailAdapter(): MailAdapter {
+export function getMailAdapter(env: MailEnvironment = process.env): MailAdapter {
   if (singleton) {
     return singleton;
   }
-  const provider = (process.env.MAIL_PROVIDER ?? 'log').toLowerCase() as MailProvider;
+
+  const provider = (env.MAIL_PROVIDER ?? 'log').toLowerCase();
+  const production = (env.ENV?.trim() || env.NODE_ENV) === 'production';
+  if (production && provider !== 'smtp') {
+    throw new Error('Production requires MAIL_PROVIDER=smtp with complete credentials');
+  }
+
   switch (provider) {
     case 'memory':
+      if (production) {
+        throw new Error('MAIL_PROVIDER=memory is forbidden in production');
+      }
       singleton = createMemoryMailAdapter();
       break;
-    case 'smtp': {
-      const host = process.env.SMTP_HOST ?? '';
-      const port = Number(process.env.SMTP_PORT ?? '587');
-      const from = process.env.MAIL_FROM ?? 'noreply@localhost';
-      if (!host) {
-        console.warn('[mail] MAIL_PROVIDER=smtp but SMTP_HOST unset; falling back to log');
-        singleton = createLogMailAdapter();
-      } else {
-        singleton = createSMTPMailAdapter({
-          host,
-          port,
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-          from,
-          secure: process.env.SMTP_SECURE === 'true',
-        });
-      }
-      break;
-    }
-    case 'console':
     case 'log':
-    default:
+      if (production) {
+        throw new Error('MAIL_PROVIDER=log is forbidden in production');
+      }
       singleton = createLogMailAdapter();
       break;
+    case 'smtp': {
+      const config = readSMTPConfig(env);
+      if (production && (!config.user || !config.pass)) {
+        throw new Error('Production SMTP requires SMTP_USER and SMTP_PASS');
+      }
+      singleton = createSMTPMailAdapter(config);
+      break;
+    }
+    default:
+      throw new Error(`Unsupported MAIL_PROVIDER: ${provider}`);
   }
   return singleton;
 }
 
-/** Test-only: replace the process-wide adapter. */
+/** Test-only: replace or clear the process-wide adapter. */
 export function setMailAdapterForTests(adapter: MailAdapter | null): void {
   singleton = adapter;
 }

@@ -4,6 +4,8 @@ const callbackMessages: Record<string, string> = {
   access_denied: 'Sign-in was cancelled. Choose another method or try again.',
   invalid_state: 'That sign-in request expired. Start again from this page.',
   email_unverified: 'Use email and password first, then connect that provider later.',
+  INVALID_TOKEN: 'That verification link is invalid or has already been used.',
+  TOKEN_EXPIRED: 'That verification link expired. Sign in to request a fresh one.',
   social: 'Social sign-in could not be completed. Try again or use email.',
 };
 

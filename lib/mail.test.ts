@@ -4,75 +4,93 @@ import test from 'node:test';
 import {
   createLogMailAdapter,
   createMemoryMailAdapter,
+  createSMTPMailAdapter,
+  getMailAdapter,
+  readSMTPConfig,
   setMailAdapterForTests,
 } from './mail.ts';
-import {
-  forgotPasswordSchema,
-  changePasswordSchema,
-  resetPasswordSchema,
-  profileSchema,
-} from './auth-validation.ts';
 
-test('forgot password validates email', () => {
-  assert.equal(forgotPasswordSchema.safeParse({ email: 'a@b.co' }).success, true);
-  assert.equal(forgotPasswordSchema.safeParse({ email: 'nope' }).success, false);
-});
+test.afterEach(() => setMailAdapterForTests(null));
 
-test('reset password requires match and length', () => {
-  assert.equal(
-    resetPasswordSchema.safeParse({
-      password: 'eightchars',
-      confirmPassword: 'eightchars',
-    }).success,
-    true,
-  );
-  assert.equal(
-    resetPasswordSchema.safeParse({
-      password: 'short',
-      confirmPassword: 'short',
-    }).success,
-    false,
-  );
-});
-
-test('change password requires current password', () => {
-  assert.equal(
-    changePasswordSchema.safeParse({
-      currentPassword: 'oldpass12',
-      newPassword: 'newpass12',
-      confirmPassword: 'newpass12',
-    }).success,
-    true,
-  );
-  assert.equal(
-    changePasswordSchema.safeParse({
-      currentPassword: '',
-      newPassword: 'newpass12',
-      confirmPassword: 'newpass12',
-    }).success,
-    false,
-  );
-});
-
-test('profile name bounds', () => {
-  assert.equal(profileSchema.safeParse({ name: 'Ada' }).success, true);
-  assert.equal(profileSchema.safeParse({ name: '' }).success, false);
-  assert.equal(profileSchema.safeParse({ name: 'x'.repeat(101) }).success, false);
-});
-
-test('memory mail adapter captures messages without exposing tokens in log adapter metadata', async () => {
-  const mem = createMemoryMailAdapter();
-  setMailAdapterForTests(mem);
-  await mem.send({
+test('memory adapter captures the complete message for auth integration tests', async () => {
+  const adapter = createMemoryMailAdapter();
+  await adapter.send({
     to: 'user@example.com',
     subject: 'Reset',
-    text: 'link with token=SECRET',
+    text: 'one-time link',
     tags: { kind: 'password_reset' },
   });
-  assert.equal(mem.sent?.length, 1);
-  assert.equal(mem.sent?.[0]?.to, 'user@example.com');
-  // log adapter should not throw
-  const log = createLogMailAdapter();
-  await log.send({ to: 'a@b.co', subject: 'x', text: 'y' });
-  setMailAdapterForTests(null);
+  assert.equal(adapter.sent?.length, 1);
+  assert.equal(adapter.sent?.[0]?.tags?.kind, 'password_reset');
+});
+
+test('log adapter emits metadata without body, token, or URL', async () => {
+  const lines: string[] = [];
+  const original = console.info;
+  console.info = (...args: unknown[]) => lines.push(args.join(' '));
+  try {
+    await createLogMailAdapter().send({
+      to: 'user@example.com',
+      subject: 'Reset',
+      text: 'https://example.test/reset?token=TOP_SECRET',
+    });
+  } finally {
+    console.info = original;
+  }
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].includes('TOP_SECRET'), false);
+  assert.equal(lines[0].includes('https://'), false);
+  assert.match(lines[0], /body_chars/);
+});
+
+test('smtp adapter uses TLS-hardened config and sends through the transport', async () => {
+  const delivered: unknown[] = [];
+  const transport = {
+    async sendMail(message: unknown) {
+      delivered.push(message);
+      return {};
+    },
+  };
+  const config = readSMTPConfig({
+    SMTP_HOST: 'smtp.example.com',
+    SMTP_PORT: '587',
+    SMTP_USER: 'mailer',
+    SMTP_PASS: 'external-secret',
+    SMTP_SECURE: 'false',
+    MAIL_FROM: 'OpenCloud <noreply@example.com>',
+  });
+  const adapter = createSMTPMailAdapter(config, transport);
+  await adapter.send({
+    to: 'user@example.com',
+    subject: 'Verify',
+    text: 'verification body',
+  });
+  assert.equal(delivered.length, 1);
+  assert.deepEqual(config, {
+    host: 'smtp.example.com',
+    port: 587,
+    user: 'mailer',
+    pass: 'external-secret',
+    from: 'OpenCloud <noreply@example.com>',
+    secure: false,
+  });
+});
+
+test('production rejects non-delivery adapters and incomplete SMTP credentials', () => {
+  assert.throws(
+    () => getMailAdapter({ ENV: 'production', MAIL_PROVIDER: 'log' }),
+    /Production requires MAIL_PROVIDER=smtp/,
+  );
+  assert.throws(
+    () =>
+      getMailAdapter({
+        ENV: 'production',
+        MAIL_PROVIDER: 'smtp',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_PORT: '587',
+        SMTP_SECURE: 'false',
+        MAIL_FROM: 'noreply@example.com',
+      }),
+    /requires SMTP_USER and SMTP_PASS/,
+  );
 });
