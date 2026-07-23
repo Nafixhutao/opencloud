@@ -65,11 +65,14 @@ func (e *Error) WithDetails(details ...FieldIssue) *Error {
 	return &clone
 }
 
-// Common constructors.
+// Common constructors that map to the API error envelope (API.md §5).
+
+// Validation returns a 422 validation error.
 func Validation(msg string, details ...FieldIssue) *Error {
 	return New(http.StatusUnprocessableEntity, "VALIDATION_FAILED", msg).WithDetails(details...)
 }
 
+// Unauthenticated returns a 401 error.
 func Unauthenticated(msg string) *Error {
 	if msg == "" {
 		msg = "authentication required"
@@ -77,6 +80,7 @@ func Unauthenticated(msg string) *Error {
 	return New(http.StatusUnauthorized, "UNAUTHENTICATED", msg)
 }
 
+// Forbidden returns a 403 error.
 func Forbidden(msg string) *Error {
 	if msg == "" {
 		msg = "insufficient permissions"
@@ -84,6 +88,7 @@ func Forbidden(msg string) *Error {
 	return New(http.StatusForbidden, "FORBIDDEN", msg)
 }
 
+// NotFound returns a 404 error.
 func NotFound(msg string) *Error {
 	if msg == "" {
 		msg = "resource not found"
@@ -91,6 +96,7 @@ func NotFound(msg string) *Error {
 	return New(http.StatusNotFound, "NOT_FOUND", msg)
 }
 
+// Conflict returns a 409 error.
 func Conflict(msg string) *Error {
 	if msg == "" {
 		msg = "conflict"
@@ -98,6 +104,7 @@ func Conflict(msg string) *Error {
 	return New(http.StatusConflict, "CONFLICT", msg)
 }
 
+// RateLimited returns a 429 error.
 func RateLimited(msg string) *Error {
 	if msg == "" {
 		msg = "too many requests"
@@ -105,6 +112,7 @@ func RateLimited(msg string) *Error {
 	return New(http.StatusTooManyRequests, "RATE_LIMITED", msg)
 }
 
+// Internal returns a 500 error.
 func Internal(msg string) *Error {
 	if msg == "" {
 		msg = "internal server error"

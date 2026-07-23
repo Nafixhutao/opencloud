@@ -1,3 +1,4 @@
+// Package model holds Bun domain structs for the control plane.
 package model
 
 import (

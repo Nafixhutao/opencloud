@@ -47,12 +47,12 @@ func TestRateLimitFixedWindowLogic(t *testing.T) {
 	t.Parallel()
 	// Mirror the INCR semantics used by middleware.RateLimit.
 	store := newMemoryRedis()
-	max := 3
+	limit := 3
 	hit := func(key string) bool {
 		store.mu.Lock()
 		defer store.mu.Unlock()
 		store.data[key]++
-		return store.data[key] <= int64(max)
+		return store.data[key] <= int64(limit)
 	}
 	for i := 0; i < 3; i++ {
 		require.True(t, hit("ip1"))
