@@ -3,10 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "auth:check-providers": "jiti scripts/check-social-providers.ts",
     "auth:migrate": "jiti scripts/migrate-auth.ts",
     "test:auth": "node --import jiti/register --test lib/auth-validation.test.ts lib/mail.test.ts lib/membership.test.ts lib/auth.integration.test.ts",
+    "test:ui": "vitest run",
     "dev": "next dev",
     "build": "next build",
     "lint": "oxlint",
@@ -19,6 +23,7 @@
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^5.4.0",
     "@tailwindcss/postcss": "^4.3.2",
+    "@tanstack/react-query": "^5.101.4",
     "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -37,15 +42,19 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.2",
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "jiti": "^2.7.0",
+    "jsdom": "^29.1.1",
     "oxlint": "^1.69.0",
     "shadcn": "^4.14.0",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "next": {
