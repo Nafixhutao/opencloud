@@ -25,8 +25,8 @@ working `docker buildx` plugin; on Ubuntu 24.04 the package is `docker-buildx`.
 Runs on every PR and on merge to `main`. **Merges are blocked unless CI is green.**
 
 ```
-1. Backend:  gofmt check · golangci-lint · go test ./... · migration round trip · govulncheck · docker build
-2. Frontend: Better Auth migration · oxlint · tsc --noEmit · npm run build · npm audit
+1. Backend:  gofmt check · golangci-lint · vet · unit/real-Postgres tests · migration round trip · govulncheck · docker build
+2. Frontend: Better Auth migration · auth/UI tests · oxlint · tsc --noEmit · npm run build · npm audit
 3. Image publishing and automatic deployment are added with the release pipeline.
 ```
 
@@ -111,6 +111,20 @@ curl -fsS localhost:8080/readyz       # readiness gate
 - Docker daemon and Caddy admin access are never added to dashboard/API
   containers. Scale-out or fallback Hestia nodes are drained before maintenance
   ([`HOSTING.md`](HOSTING.md)).
+- The base Compose file intentionally defaults the worker to `fake` and does not
+  mount `/var/run/docker.sock`. Enabling the Docker adapter requires a separately
+  reviewed worker deployment with a restricted daemon boundary and private Caddy
+  admin reachability. A raw socket grants host-equivalent control and is only
+  used by the disposable integration harness, never by the public API/frontend.
+
+## Phase 2 review-branch validation
+
+The site-provisioning slice is validated with isolated PostgreSQL, Caddy, and
+site resources on a disposable target. `deploy/validation/caddy-phase2.json`
+binds only validation loopback ports and must not replace the host's active Caddy
+configuration. The tagged Docker/Caddy integration test uses fixed deterministic
+resource names so cleanup can target exactly those objects. Passing this
+validation does not authorize staging promotion or production deployment.
 
 ## 9. Secrets & config at deploy time
 

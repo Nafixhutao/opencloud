@@ -130,10 +130,10 @@ GET /api/v1/sites/{id}
 - Deprecations are announced in [`../CHANGELOG.md`](../CHANGELOG.md) and via a
   `Deprecation` response header before removal.
 
-## 11. Endpoint reference (illustrative)
+## 11. Endpoint reference
 
-Endpoints are added as features ship ([`../ROADMAP.md`](../ROADMAP.md)). The set
-below shows the intended shape and naming.
+Endpoints are added as features ship ([`../ROADMAP.md`](../ROADMAP.md)). Entries
+explicitly marked planned are not implemented yet.
 
 ### Auth
 
@@ -146,33 +146,46 @@ better-auth JWT, and the current user/tenant is read from its claims.
 ### Sites
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`    | `/sites` | list caller's sites (paginated) |
-| `POST`   | `/sites` | create a site (async → `202`) |
-| `GET`    | `/sites/{id}` | site detail + status |
-| `PATCH`  | `/sites/{id}` | update settings |
-| `POST`   | `/sites/{id}/suspend` | suspend (admin/billing) |
-| `DELETE` | `/sites/{id}` | delete (async → `202`) |
+| `GET`    | `/sites?page=&per_page=` | list caller's sites (paginated) |
+| `POST`   | `/sites` | create a curated static site (async → `202`; accepts `Idempotency-Key`) |
+| `GET`    | `/sites/{id}` | caller-owned site detail + status |
+| `POST`   | `/sites/{id}/suspend` | suspend caller-owned site (async → `202`) |
+| `POST`   | `/sites/{id}/resume` | resume caller-owned site (async → `202`) |
+| `DELETE` | `/sites/{id}` | delete caller-owned site (async → `202`) |
+
+Create body:
+
+```json
+{ "domain": "site.example.com", "template": "static" }
+```
+
+Status progresses through `provisioning`, `active`, `suspending`, `suspended`,
+`resuming`, `deleting`, `deleted`, or `failed`. The dashboard polls only while a
+site is in a transitional state. All reads and writes include the authenticated
+`account_id`; another tenant's UUID returns `404`. Customer responses omit
+control-plane placement, image, port, and resource-limit fields.
 
 ### Domains / DNS
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/sites/{id}/domains` | domains on a site |
-| `POST` | `/sites/{id}/domains` | attach a domain |
-| `GET`  | `/dns/zones/{id}/records` | list DNS records |
-| `POST` | `/dns/zones/{id}/records` | create a record |
+| `GET`  | `/sites/{id}/domains` | planned: domains on a site |
+| `POST` | `/sites/{id}/domains` | planned: attach a domain |
+| `GET`  | `/dns/zones/{id}/records` | planned: list DNS records |
+| `POST` | `/dns/zones/{id}/records` | planned: create a record |
 
 ### Databases
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/databases` | list databases |
-| `POST` | `/databases` | provision a MariaDB database (async) |
+| `GET`  | `/databases` | planned: list databases |
+| `POST` | `/databases` | planned: provision a scoped database (async) |
 
 ### Admin
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/admin/accounts` | list all accounts (admin) |
-| `GET`  | `/admin/nodes` | hosting node status |
-| `POST` | `/admin/nodes/{id}/drain` | drain a node |
+| `GET`  | `/admin/accounts` | planned: list all accounts |
+| `GET`  | `/admin/nodes` | audited global platform-admin node list |
+| `POST` | `/admin/nodes` | audited global platform-admin node registration |
+| `PATCH` | `/admin/nodes/{id}` | audited status change: `online`, `draining`, or `offline` |
 
 ### System
 | Method | Path | Purpose |
@@ -181,7 +194,7 @@ better-auth JWT, and the current user/tenant is read from its claims.
 | `GET` | `/readyz` | readiness (DB + Redis reachable) |
 | `GET` | `:9090/metrics` | Prometheus metrics (separate internal listener) |
 
-## 10. Phase 1 endpoints
+## 12. Phase 1 endpoints
 
 ### `GET /api/v1/me`
 Returns the caller's membership + account (requires JWT with `account_id` +

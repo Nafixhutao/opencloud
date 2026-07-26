@@ -17,8 +17,10 @@ installed on the live control-plane host.
 
 The Phase 0 spike is disposable and proves the host can create one constrained
 container, route a real hostname through Caddy, repeat the operation without
-duplicates, and clean up only OpenCloud-labeled resources. The production
-provisioner, job queue, and customer site APIs land in Phase 2.
+duplicates, and clean up only OpenCloud-labeled resources. The Phase 2
+site-provisioning review slice implements the durable queue, customer APIs,
+worker, and Docker/Caddy adapter. It is not a production deployment and does not
+yet include database lifecycle or backup/restore.
 
 ## 2. Provisioner boundary
 
@@ -53,6 +55,7 @@ object with at least:
 - `opencloud.managed=true`
 - `opencloud.account_id=<uuid>`
 - `opencloud.site_id=<uuid>`
+- `opencloud.node_id=<uuid>`
 
 The provisioner may mutate or remove an object only after all ownership labels
 match the requested tenant and site. It never uses global prune commands.
@@ -137,3 +140,15 @@ migration runbook are in [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md).
 - Unknown/unmanaged resources are reported, never adopted or deleted silently.
 - Metrics cover provisioning latency, retries, failures, container health, and
   Caddy route/certificate errors without per-user high-cardinality labels.
+
+The Docker adapter uses one deterministic Caddy route ID per site and conditional
+`If-Match` writes against Caddy's config API so concurrent changes retry instead
+of overwriting another route. It validates the complete existing ownership
+label set before stopping or deleting Docker objects. The launch slice permits
+only the exact configured static image and binds the random upstream port to
+host loopback.
+
+The direct Docker socket remains unsuitable as a production boundary. A
+rootless engine or restricted authorization/socket proxy and private Caddy admin
+path must be selected and reviewed before enabling this adapter outside isolated
+validation.

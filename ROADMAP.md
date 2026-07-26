@@ -10,13 +10,12 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 
 ## Current status
 
-Phase 1 (Auth & accounts) is technically implemented and hardened: verified
-email/password auth, tenant membership, immediate membership/status re-checks,
-atomic platform-admin management, and durable domain audit writes are covered by
-integration tests. It remains **in progress operationally** until a real
-production SMTP provider (and optional OAuth providers) is configured with
-external credentials and the complete flow is verified in staging. Phase 0
-foundations remain in place; Phase 2 follows that gate.
+Phase 1 (Auth & accounts) is technically implemented, hardened, and verified in
+staging. Production activation is deliberately deferred; external mail/OAuth
+credentials and a production release approval remain operational gates, not
+missing Phase 1 code. Phase 2 is now **in progress** with a review branch for the
+site-provisioning vertical slice. That slice is not merged or deployed, and the
+database lifecycle plus backup/restore work below remains outstanding.
 
 ---
 
@@ -43,7 +42,7 @@ Stand up the skeleton everything else hangs off.
 user can register and log in; the selected MVP hosting backend has a documented,
 repeatable idempotency spike.
 
-## Phase 1 — Auth & accounts 🚧
+## Phase 1 — Auth & accounts ✅
 
 - **shadcn/ui initialized** (Tailwind v4 preset — blank `tailwind.config`,
   `cssVariables: true`; verified compatible with Next 16 + React 19) as the
@@ -86,23 +85,25 @@ repeatable idempotency spike.
   orphans; protected Go routes re-check current DB role/status so stale bearer
   JWTs cannot retain admin access.
 
-**Exit criteria:** code and disposable integration gates are implemented.
-Production exit remains pending real SMTP/OAuth credentials, staging delivery
-verification, and review/CI approval; no credential or production deployment is
-claimed by this roadmap.
+**Exit criteria:** met in code, disposable integration, and operator staging
+verification. Production release remains a separate, deferred approval gate; no
+credential or production deployment is claimed by this roadmap.
 
-## Phase 2 — Provisioning core ⏳
+## Phase 2 — Provisioning core 🚧
 
 The heart of the platform: drive Docker/Caddy through a provider-neutral boundary.
 
-- `provisioner` package: idempotent Docker/Caddy adapter + fake for tests; Hestia
-  remains an optional adapter behind the same interface
-- `nodes` registry + simple least-loaded placement
-- Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
-  retries/backoff and compensating cleanup
-- Site lifecycle: create → active → suspend → delete (async, status-polled)
+- 🚧 `provisioner` package: idempotent, ownership-checked Docker/Caddy adapter +
+  concurrency-safe fake for tests. The current review slice still requires CI
+  approval; Hestia remains an unimplemented optional adapter.
+- 🚧 `nodes` registry + transactionally reserved least-loaded placement
+- 🚧 Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
+  retries/backoff, stale-job recovery, and compensating cleanup
+- 🚧 Site lifecycle: create → active → suspend/resume → delete, exposed through
+  tenant-scoped APIs and a status-polled dashboard
 - Database lifecycle: scoped PostgreSQL/MariaDB DB + user provisioning
-- Reconciliation job: detect/repair control-plane ↔ node drift
+- 🚧 Reconciliation job: detect/repair managed site state without adopting or
+  deleting unrelated Docker/Caddy resources
 - Basic control-plane backups: scheduled `pg_dump` + one rehearsed restore
 
 **Exit criteria:** a customer can create and delete a working website from the

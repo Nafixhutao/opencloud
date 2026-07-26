@@ -72,9 +72,11 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `SMTP_USER` / `SMTP_PASS` | frontend | external SMTP credentials; both required in production |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | frontend | GitHub social login via better-auth (ADR 0006) |
-| `PROVISIONER_BACKEND` | worker | `docker` (default), `hestia`, or non-production `fake` |
+| `PROVISIONER_BACKEND` | worker | `fake` by default; reviewed deployments may select `docker`; `hestia` is not implemented |
 | `DOCKER_SOCKET` | worker | local Docker Unix socket path; never exposed publicly |
 | `CADDY_API_URL` | worker | private/loopback Caddy admin endpoint |
+| `CADDY_SERVER_ID` | worker | Caddy HTTP server ID whose owned site routes may be changed |
+| `SITE_DEFAULT_IMAGE` | worker | exact curated site image allowlist entry |
 | `HESTIA_API_URL` | worker | optional fallback node API base |
 | `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
 | `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
@@ -93,7 +95,7 @@ provisioned externally and verified in staging before email is considered live.
 
 | Environment | Purpose | Notes |
 |---|---|---|
-| **development** | local | Docker Compose; Docker selected by default, fake available for tests; verbose logs |
+| **development** | local | Docker Compose; fake provisioner by default; verbose logs |
 | **staging** | pre-prod | disposable labeled Docker/Caddy resources; safe data |
 | **production** | live | hardened; secrets from manager; backups + alerting on |
 
@@ -148,3 +150,7 @@ Configuration differs **only** by environment variables, not by code paths.
 - Size PostgreSQL and Redis connection pools deliberately ([`BACKEND.md`](BACKEND.md));
   don't open per-request connections.
 - Track node capacity in the `nodes` table; scale out by registering new nodes.
+- The public API and dashboard never receive a Docker socket. The base Compose
+  worker also receives none; a real worker requires a separate hardened
+  rootless/restricted-socket deployment because Docker daemon access is
+  host-equivalent.

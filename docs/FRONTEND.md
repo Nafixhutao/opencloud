@@ -200,6 +200,7 @@ npm run dev     # next dev — http://localhost:3000
 npm run build   # production build
 npm run start   # serve production build
 npm run lint    # oxlint
+npm run test:ui # Vitest + Testing Library dashboard behavior tests
 ```
 
 - Lint with **oxlint** (configured in `.oxlintrc.json`); type-check with `tsc`.
@@ -212,3 +213,15 @@ npm run lint    # oxlint
 - `/forgot-password`, `/reset-password`
 - `/admin/users` (role-gated)
 - BFF routes: `/api/account/profile`, `/api/admin/users/[id]` attach JWT via `lib/api.ts`
+
+## Phase 2 site UI
+
+- `/sites` provides one accessible create form, responsive list/table views,
+  explicit transitional statuses, and typed-domain confirmation before delete.
+- TanStack Query owns server state and polls every two seconds only while a site
+  is transitional. Lifecycle mutations invalidate the tenant's site query.
+- Browser calls terminate at thin `/api/sites/*` BFF handlers. Those handlers
+  attach the server-side JWT, preserve `Idempotency-Key`, and return generic
+  authentication/provider errors without exposing tokens or backend internals.
+- The launch template is intentionally limited to `static`; DNS automation,
+  databases, uploads/builds, and production rollout remain later work.

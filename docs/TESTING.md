@@ -134,3 +134,40 @@ schema comparison in CI; sentinel membership/audit rows must survive latest
 down. Tenant isolation, stale-token demote/suspend behavior, transactional audit
 failure rollback, N+1-free admin projection, concurrent membership creation,
 and concurrent last-active-admin rules run against disposable PostgreSQL.
+
+## Phase 2 site-provisioning tests
+
+Frontend:
+
+```bash
+npm run test:ui
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+The UI suite renders the real site dashboard and asserts validation blocks an
+invalid create request, while an accepted mutation invalidates the query and
+shows the queued site. These are behavior tests, not TypeScript value checks.
+
+Backend unit tests cover fake-provider concurrency and Docker/Caddy
+idempotency/ownership/security configuration. With a disposable PostgreSQL in
+`DATABASE_URL`, service integration tests cover concurrent least-loaded
+placement, idempotency convergence, unique job claims, audit-trigger rollback,
+exact capacity release, the full fake lifecycle, and delete winning over an
+in-flight provision result.
+
+The real Docker/Caddy lifecycle is opt-in and must target disposable resources:
+
+```bash
+DOCKER_INTEGRATION=1 \
+DOCKER_SITE_IMAGE=opencloud/site-static:phase2-validation \
+CADDY_INTEGRATION_URL=http://127.0.0.1:22019 \
+CADDY_INTEGRATION_PUBLIC_URL=http://127.0.0.1:22443 \
+go test -tags=integration ./internal/provisioner \
+  -run TestDockerCaddyLifecycleAgainstDisposableBackend -count=1
+```
+
+The test creates twice, suspends twice, resumes twice, deletes twice, verifies
+HTTP routing, and checks final absence. It must never point at the active Caddy
+admin API.
