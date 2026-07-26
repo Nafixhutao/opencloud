@@ -52,14 +52,11 @@
     "jiti": "^2.7.0",
     "jsdom": "^29.1.1",
     "oxlint": "^1.69.0",
-    "shadcn": "^4.14.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "next": {
-      "postcss": "8.5.10"
-    },
+    "postcss": "8.5.23",
     "sharp": "0.35.3",
     "fast-uri": "3.1.4"
   }
