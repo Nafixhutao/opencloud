@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: public domain migrations
@@ -49,6 +49,7 @@ jobs:
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'auth'")" -ge 4
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('user', 'session', 'account', 'verification')")" -eq 0
       - run: npm run test:auth
+      - run: npm run test:ui
       - run: npm run auth:check-providers
       - run: npm run lint
       - run: npx tsc --noEmit
@@ -127,13 +128,14 @@ jobs:
           sed -i '/^\\restrict /d; /^\\unrestrict /d' /tmp/schema-roundtrip.sql
           diff -u /tmp/schema-up.sql /tmp/schema-roundtrip.sql
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('account_memberships','audit_logs','auth_token_consumptions')")" -eq 3
+          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('nodes','sites','jobs')")" -eq 3
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.accounts WHERE id='00000000-0000-0000-0000-000000000021'")" -eq 1
           test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM public.audit_logs WHERE action='migration.sentinel'")" -eq 1
           if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE public.audit_logs SET action='tampered' WHERE action='migration.sentinel'"; then
             echo "audit_logs update unexpectedly succeeded"
             exit 1
           fi
-      - name: account service integration
+      - name: account and site service integration
         env:
           DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
         run: go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1

@@ -35,10 +35,12 @@ type Config struct {
 // ProvisionerConfig selects the hosting backend and carries only the connection
 // details the worker needs. Hestia stays available as a documented fallback.
 type ProvisionerConfig struct {
-	Backend      provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
-	DockerSocket string              `mapstructure:"DOCKER_SOCKET"`
-	CaddyAPIURL  string              `mapstructure:"CADDY_API_URL"`
-	Hestia       HestiaConfig        `mapstructure:",squash"`
+	Backend       provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
+	DockerSocket  string              `mapstructure:"DOCKER_SOCKET"`
+	CaddyAPIURL   string              `mapstructure:"CADDY_API_URL"`
+	CaddyServerID string              `mapstructure:"CADDY_SERVER_ID"`
+	SiteImage     string              `mapstructure:"SITE_DEFAULT_IMAGE"`
+	Hestia        HestiaConfig        `mapstructure:",squash"`
 }
 
 // HestiaConfig holds fallback Hestia credentials. Access/secret keys are the
@@ -68,9 +70,11 @@ func load(requireRedis bool) (*Config, error) {
 	v.SetDefault("METRICS_ADDR", ":9090")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("RATE_LIMIT_RPS", 10)
-	v.SetDefault("PROVISIONER_BACKEND", string(provisioner.BackendDocker))
+	v.SetDefault("PROVISIONER_BACKEND", string(provisioner.BackendFake))
 	v.SetDefault("DOCKER_SOCKET", "/var/run/docker.sock")
 	v.SetDefault("CADDY_API_URL", "http://127.0.0.1:2019")
+	v.SetDefault("CADDY_SERVER_ID", "srv0")
+	v.SetDefault("SITE_DEFAULT_IMAGE", "opencloud/site-static:phase2")
 
 	// Explicitly bind every key: viper's Unmarshal only sees keys it already
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
@@ -78,7 +82,8 @@ func load(requireRedis bool) (*Config, error) {
 	for _, key := range []string{
 		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
-		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL",
+		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL", "CADDY_SERVER_ID",
+		"SITE_DEFAULT_IMAGE",
 		"HESTIA_API_URL", "HESTIA_ACCESS_KEY", "HESTIA_SECRET_KEY", "HESTIA_API_KEY",
 	} {
 		_ = v.BindEnv(key)
@@ -154,8 +159,10 @@ func (c *Config) ValidateProvisioner() error {
 	switch backend {
 	case provisioner.BackendDocker:
 		return requireConfig(map[string]string{
-			"CADDY_API_URL": c.Provisioner.CaddyAPIURL,
-			"DOCKER_SOCKET": c.Provisioner.DockerSocket,
+			"CADDY_API_URL":      c.Provisioner.CaddyAPIURL,
+			"CADDY_SERVER_ID":    c.Provisioner.CaddyServerID,
+			"DOCKER_SOCKET":      c.Provisioner.DockerSocket,
+			"SITE_DEFAULT_IMAGE": c.Provisioner.SiteImage,
 		})
 	case provisioner.BackendHestia:
 		if err := requireConfig(map[string]string{"HESTIA_API_URL": c.Provisioner.Hestia.APIURL}); err != nil {

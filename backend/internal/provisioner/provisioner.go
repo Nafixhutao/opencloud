@@ -45,6 +45,7 @@ func ParseBackend(value string) (Backend, error) {
 type SiteSpec struct {
 	SiteID       uuid.UUID
 	AccountID    uuid.UUID
+	NodeID       uuid.UUID
 	Domain       string
 	Image        string
 	InternalPort uint16
@@ -57,6 +58,7 @@ type SiteSpec struct {
 type SiteRef struct {
 	SiteID    uuid.UUID
 	AccountID uuid.UUID
+	NodeID    uuid.UUID
 }
 
 // SiteState is the backend-observed lifecycle state used for reconciliation.

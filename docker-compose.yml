@@ -104,9 +104,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      PROVISIONER_BACKEND: ${PROVISIONER_BACKEND:-docker}
+      PROVISIONER_BACKEND: ${PROVISIONER_BACKEND:-fake}
       DOCKER_SOCKET: ${DOCKER_SOCKET:-/var/run/docker.sock}
       CADDY_API_URL: ${CADDY_API_URL:-http://127.0.0.1:2019}
+      CADDY_SERVER_ID: ${CADDY_SERVER_ID:-srv0}
+      SITE_DEFAULT_IMAGE: ${SITE_DEFAULT_IMAGE:-opencloud/site-static:phase2}
       HESTIA_API_URL: ${HESTIA_API_URL:-}
       HESTIA_ACCESS_KEY: ${HESTIA_ACCESS_KEY:-}
       HESTIA_SECRET_KEY: ${HESTIA_SECRET_KEY:-}

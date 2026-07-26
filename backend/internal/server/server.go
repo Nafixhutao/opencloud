@@ -57,8 +57,23 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 	// Domain services.
 	acctRepo := repository.NewAccountRepo(db)
 	auditRepo := repository.NewAuditRepo(db)
+	siteRepo := repository.NewSiteRepo(db)
+	nodeRepo := repository.NewNodeRepo(db)
+	jobRepo := repository.NewJobRepo(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
+	siteSvc := service.NewSiteService(
+		db,
+		siteRepo,
+		nodeRepo,
+		jobRepo,
+		auditRepo,
+		string(cfg.Provisioner.Backend),
+		cfg.Provisioner.SiteImage,
+	)
+	nodeSvc := service.NewNodeService(db, nodeRepo, auditRepo)
 	acctH := handler.NewAccountHandler(acctSvc)
+	siteH := handler.NewSiteHandler(siteSvc)
+	nodeH := handler.NewNodeHandler(nodeSvc)
 
 	v1 := r.Group("/api/v1")
 	// Global API rate limit (cheap abuse guard); auth routes have tighter limits.
@@ -78,6 +93,12 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 		{
 			authed.GET("/me", acctH.Me)
 			authed.PATCH("/me", middleware.RateLimit(rdb, "me-write", 30, time.Minute), acctH.UpdateMe)
+			authed.GET("/sites", siteH.List)
+			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
+			authed.GET("/sites/:id", siteH.Get)
+			authed.POST("/sites/:id/suspend", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Suspend)
+			authed.POST("/sites/:id/resume", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Resume)
+			authed.DELETE("/sites/:id", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Delete)
 
 			admin := authed.Group("/admin")
 			admin.Use(middleware.RequireRole(model.RoleAdmin))
@@ -85,6 +106,9 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 				admin.GET("/users", acctH.ListUsers)
 				admin.GET("/users/:id", acctH.GetUser)
 				admin.PATCH("/users/:id", middleware.RateLimit(rdb, "admin-write", 60, time.Minute), acctH.UpdateUser)
+				admin.GET("/nodes", nodeH.List)
+				admin.POST("/nodes", middleware.RateLimit(rdb, "admin-write", 60, time.Minute), nodeH.Register)
+				admin.PATCH("/nodes/:id", middleware.RateLimit(rdb, "admin-write", 60, time.Minute), nodeH.SetStatus)
 			}
 		}
 	} else {
@@ -163,7 +187,7 @@ func cors(origins string) gin.HandlerFunc {
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Vary", "Origin")
 				c.Header("Access-Control-Allow-Credentials", "true")
-				c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, X-User-Name")
+				c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Request-ID, X-User-Name")
 				c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			}
 		}
