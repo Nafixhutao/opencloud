@@ -171,3 +171,24 @@ go test -tags=integration ./internal/provisioner \
 The test creates twice, suspends twice, resumes twice, deletes twice, verifies
 HTTP routing, and checks final absence. It must never point at the active Caddy
 admin API.
+
+## Phase 2 control-plane backup tests
+
+`internal/backup` tests authenticated multi-chunk and empty-stream round trips,
+tamper/truncation/wrong-key/trailing-data rejection, strict key parsing,
+checksum tamper detection, symlink/traversal rejection, exclusive scheduler
+locking, and pair-aware retention that leaves unknown files untouched.
+
+The CI/VPS rehearsal is:
+
+```bash
+bash deploy/validation/run-control-plane-backup-phase2.sh
+```
+
+It creates two uniquely named disposable PostgreSQL 18 containers and a private
+network/volume, applies all public migrations to the source, inserts a sentinel,
+starts the real scheduler, verifies the encrypted custom archive, proves the
+plaintext sentinel is absent from it, restores into the second database, and
+checks the sentinel/schema. A trap deletes the exact containers, network,
+volume, and image on success or failure. The script never targets an active
+OpenCloud database.

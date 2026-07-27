@@ -219,12 +219,36 @@ Rules:
 
 ## 9. Backups
 
-- PostgreSQL: scheduled `pg_dump`/PITR; restores are rehearsed and documented in a
-  runbook before they're needed.
+- The Phase 2 control-plane baseline is an opt-in `control-plane-backup` Compose
+  profile. It runs `pg_dump --format=custom --no-owner --no-privileges`
+  immediately at startup and then on `BACKUP_INTERVAL_SECONDS` (24 hours by
+  default).
+- The dump stream is never written plaintext to the backup volume. The Go
+  backup binary encrypts 64 KiB chunks with AES-256-GCM, a fresh random nonce
+  prefix, monotonic per-chunk nonces, and authenticated header/sequence/length
+  metadata. It publishes the encrypted archive and SHA-256 sidecar atomically
+  with mode `0600`.
+- `BACKUP_ENCRYPTION_KEY` is an external base64-encoded 32-byte secret. Losing
+  it makes the archives unrecoverable; rotating it requires retaining the old
+  key until every archive encrypted with that key has expired.
+- Retention removes only regular files matching OpenCloud's generated archive
+  pattern and their regular checksum sidecars. It never traverses directories,
+  follows symlinks, or runs broad prune commands.
+- Restore first verifies the checksum, authenticates/decrypts to an ephemeral
+  mode-`0600` temp file, asks `pg_restore` to parse the archive, and requires
+  both an exact target database-name confirmation and the literal destructive
+  gate. The rehearsal restores into a second disposable PostgreSQL instance.
+- The Compose named volume is a development/staging default, not sufficient
+  production disaster recovery. Production must mount an access-controlled,
+  encrypted off-host destination (or replicate completed encrypted artifacts
+  off-host), monitor scheduler failures, and rehearse from that copy.
 - Redis: persistence (AOF) is for warm restart convenience, not as a source of
   truth — recovery always assumes PostgreSQL is authoritative.
 - Customer site volumes and databases are backed up by the active provider; see
   [`HOSTING.md`](HOSTING.md).
+
+Operational steps and the destructive restore gate are in
+[`runbooks/control-plane-backup-restore.md`](runbooks/control-plane-backup-restore.md).
 
 ## 10. Phase 1 tenancy tables
 
@@ -248,5 +272,6 @@ pins the new migration too. Site rows retain lifecycle history through
 never credentials or provider secrets. Active site jobs are deduplicated by
 `kind` plus the internally generated `payload.site_id`.
 
-Database lifecycle tables and backup metadata are not part of this slice and
-must arrive as new additive migrations.
+Database lifecycle tables and backup metadata are not part of the provisioning
+core migration and must arrive as new additive migrations. The control-plane
+backup implementation does not add schema or alter any shipped migration.

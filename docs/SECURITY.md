@@ -149,7 +149,22 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
 - Customer DB credentials are shown **once** on creation and not stored in
   plaintext.
 - Money stored as integer minor units; PII access is logged.
-- Backups are encrypted at rest and access-controlled ([`DATABASE.md`](DATABASE.md#9-backups)).
+- Control-plane backups use chunked AES-256-GCM with a fresh random nonce prefix
+  per archive. Every chunk, including the terminal record, is authenticated; a
+  SHA-256 sidecar also detects storage or transfer corruption before restore
+  ([`DATABASE.md`](DATABASE.md#9-backups)).
+- `BACKUP_ENCRYPTION_KEY` is a separate 256-bit key injected by a secret manager.
+  It must never be committed, logged, stored beside the archives, or reused as a
+  database/application credential. Losing the key makes the archives
+  unrecoverable; compromising it requires key rotation plus a fresh backup set.
+- Backup archives and sidecars are mode `0600` inside a mode `0700` directory.
+  Restore plaintext exists only in a mode `0600` temporary file, preferably on
+  memory-backed temporary storage, and is removed after verify/restore.
+- The Compose volume is only a local retention layer. Production readiness
+  requires encrypted off-host copies, independent access control, monitoring,
+  and a successful restore rehearsal from the off-host copy. Until those
+  operational controls exist, backup capability is implemented but not claimed
+  production-ready.
 
 ## 14. Secure SDLC
 
