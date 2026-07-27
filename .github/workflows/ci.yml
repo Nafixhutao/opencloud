@@ -141,6 +141,8 @@ jobs:
         run: go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1
       - name: encrypted control-plane backup restore rehearsal
         working-directory: .
+        env:
+          VALIDATION_SUFFIX: ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: bash deploy/validation/run-control-plane-backup-phase2.sh
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
