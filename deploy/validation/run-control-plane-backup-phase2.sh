@@ -18,6 +18,7 @@ restore_database="opencloud_restore"
 validation_password="validation-only-password"
 source_url="postgres://opencloud:${validation_password}@${source_name}:5432/${source_database}?sslmode=disable"
 restore_url="postgres://opencloud:${validation_password}@${restore_name}:5432/${restore_database}?sslmode=disable"
+validation_stage="initialization"
 
 cleanup() {
   docker rm -f "${source_name}" "${restore_name}" "${schedule_name}" >/dev/null 2>&1 || true
@@ -25,9 +26,27 @@ cleanup() {
   docker network rm "${network_name}" >/dev/null 2>&1 || true
   docker image rm "${image_name}" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT
+
+finish() {
+  status=$?
+  trap - EXIT
+  cleanup
+  if [[ "${status}" -ne 0 ]]; then
+    printf 'backup_validation_failed_stage=%s status=%d\n' "${validation_stage}" "${status}" >&2
+  fi
+  exit "${status}"
+}
+
+mark_stage() {
+  validation_stage="$1"
+  printf 'backup_validation_stage=%s\n' "${validation_stage}"
+}
+
+trap finish EXIT
+mark_stage cleanup
 cleanup
 
+mark_stage create_resources
 docker network create "${network_name}" >/dev/null
 docker volume create "${volume_name}" >/dev/null
 
@@ -57,6 +76,7 @@ for container in "${source_name}" "${restore_name}"; do
   docker exec "${container}" pg_isready -U opencloud >/dev/null
 done
 
+mark_stage apply_migrations
 docker run --rm \
   --network "${network_name}" \
   -v "$(pwd)/backend/migrations:/migrations:ro" \
@@ -72,8 +92,10 @@ docker exec "${source_name}" psql -U opencloud -d "${source_database}" -v ON_ERR
   "INSERT INTO accounts (id, name, status) VALUES ('${sentinel_id}', 'backup restore sentinel', 'active')" \
   >/dev/null
 
+mark_stage build_backup_image
 docker build --target backup -t "${image_name}" backend >/dev/null
 backup_key="$(openssl rand -base64 32)"
+mark_stage run_scheduler
 docker run -d \
   --name "${schedule_name}" \
   --network "${network_name}" \
@@ -112,6 +134,7 @@ if [[ ! "${backup_file}" =~ ^opencloud-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{16}\.dump\.oc
   exit 4
 fi
 
+mark_stage verify_archive
 docker run --rm \
   --network "${network_name}" \
   -e "BACKUP_ENCRYPTION_KEY=${backup_key}" \
@@ -132,6 +155,7 @@ if docker run --rm -v "${volume_name}:/backups:ro" alpine:3.23 \
   exit 5
 fi
 
+mark_stage restore_archive
 docker run --rm \
   --network "${network_name}" \
   -e "BACKUP_ENCRYPTION_KEY=${backup_key}" \
@@ -172,4 +196,5 @@ if printf '%s\n' "${artifact_listing}" | grep -Eq '\.tmp$|\.dump$'; then
   exit 6
 fi
 
+mark_stage complete
 printf 'backup_restore_rehearsal=passed\n'
