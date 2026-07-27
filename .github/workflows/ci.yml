@@ -86,7 +86,7 @@ jobs:
           bash deploy/spikes/docker-caddy/run_test.sh
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w .'; exit 1; }
@@ -139,6 +139,9 @@ jobs:
         env:
           DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
         run: go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1
+      - name: encrypted control-plane backup restore rehearsal
+        working-directory: .
+        run: bash deploy/validation/run-control-plane-backup-phase2.sh
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: docker build
