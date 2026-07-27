@@ -12,6 +12,7 @@ in [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md); this covers the release process.
 | Artifact | Built from | Contents |
 |---|---|---|
 | `opencloud-backend` image | `backend/Dockerfile` (multi-stage) | `api`, `worker`, and `migrate` binaries |
+| `opencloud-control-plane-backup` image | `backend/Dockerfile` (`backup` target) | PostgreSQL 18 client tools + static encrypted backup/restore orchestrator |
 | `opencloud-frontend` image | root `Dockerfile` (`runner` target) | Next.js standalone server |
 | `opencloud-auth-migrate` image | root `Dockerfile` (`auth-migrate` target) | Better Auth migration runtime |
 
@@ -28,6 +29,8 @@ Runs on every PR and on merge to `main`. **Merges are blocked unless CI is green
 1. Backend:  gofmt check · golangci-lint · vet · unit/real-Postgres tests · migration round trip · govulncheck · docker build
 2. Frontend: Better Auth migration · auth/UI tests · oxlint · tsc --noEmit · npm run build · npm audit
 3. Image publishing and automatic deployment are added with the release pipeline.
+4. Backup gate: authenticated encryption unit tests + a real disposable
+   scheduled `pg_dump`/verify/restore rehearsal against two PostgreSQL instances.
 ```
 
 See [`TESTING.md`](TESTING.md) for the test layers and [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -151,6 +154,26 @@ If any check fails, roll back (§7) and investigate before re-attempting.
 - Tag releases with SemVer (`vMAJOR.MINOR.PATCH`).
 - Move `CHANGELOG.md`'s **[Unreleased]** section under the new version + date on
   release ([`../CHANGELOG.md`](../CHANGELOG.md)).
+
+## 12. Control-plane backup rollout
+
+The backup service is opt-in and must not be enabled merely because its image
+exists:
+
+1. Generate a 32-byte key in the deployment secret manager. Never place the
+   production value in `.env`, shell history, an image, or the repository.
+2. Mount an encrypted off-host destination (or an access-controlled local spool
+   with immediate off-host replication) at `/backups`.
+3. Start `docker compose --profile backup up -d control-plane-backup`.
+4. Alert on container restarts/exits and confirm a fresh `.dump.ocb` plus
+   `.sha256` pair arrives on schedule.
+5. Run `verify`, copy the artifact to an isolated environment, and perform the
+   full restore rehearsal in
+   [`runbooks/control-plane-backup-restore.md`](runbooks/control-plane-backup-restore.md).
+
+The named Compose volume is suitable for local/staging rehearsal only. It is
+co-located with the control plane and therefore does not satisfy production
+disaster-recovery requirements by itself. No production restore is automated.
 
 ## Phase 1 deploy notes
 

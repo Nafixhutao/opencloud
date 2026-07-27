@@ -14,6 +14,13 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Encrypted Phase 2 control-plane backup/restore (stacked review branch, not
+  deployed):** a non-root opt-in Compose scheduler streams PostgreSQL 18 custom
+  dumps through chunked authenticated AES-256-GCM encryption, atomically
+  publishes SHA-256 sidecars, applies allowlisted pair-aware retention, and
+  requires exact destructive confirmation for restores. CI performs a real
+  two-Postgres rehearsal, verifies the encrypted archive catalog, restores a
+  sentinel, asserts plaintext is absent, and cleans every disposable resource.
 - **Phase 2 site-provisioning core (review branch, not deployed):** additive
   `nodes`, `sites`, and durable `jobs` schema; atomically reserved least-loaded
   placement; tenant-scoped asynchronous site create/suspend/resume/delete APIs;
@@ -41,10 +48,12 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   events for login, password reset, profile, and admin role/status changes.
 
 ### Changed
+- The backend build and CI toolchain now require Go 1.26.5, closing standard
+  library vulnerabilities reported against the prior 1.26.2 build.
 - Phase 1 is technically complete and staging-verified; production activation is
-  explicitly deferred. Phase 2 remains incomplete until database lifecycle and
-  scheduled backup/rehearsed restore are implemented and the site-provisioning
-  review branch passes CI and review.
+  explicitly deferred. Phase 2 remains incomplete until customer database
+  lifecycle is implemented, both review branches pass review/CI, and the
+  production backup key/off-host destination are configured and verified.
 - Bun `up` now assigns one rollback group per migration instead of grouping all
   pending files. Production stays forward-only; a development `down` can only
   target the newest migration. Production mail configuration fails fast unless

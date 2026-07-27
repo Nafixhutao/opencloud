@@ -30,15 +30,22 @@ docker-compose.yml
 ├── auth-migrate  # one-shot Better Auth migrations (auth.* — ADR 0006); after migrate
 ├── api           # Go API (:8080) + internal metrics (:9090)
 ├── worker        # Go job worker; starts after migrate succeeds
-└── dashboard     # Next.js standalone (:3000); starts after auth-migrate succeeds
+├── dashboard     # Next.js standalone (:3000); starts after auth-migrate succeeds
+└── control-plane-backup # opt-in profile; encrypted scheduled pg_dump
 ```
 
-- `api`, `worker`, and `migrate` use `backend/Dockerfile`; the image carries all
-  three binaries and each service selects one command.
+- `api`, `worker`, and `migrate` use the `runtime` target in
+  `backend/Dockerfile`; it also carries the operator-only `bootstrap-admin`
+  binary. The separate `backup` target adds PostgreSQL client tools plus only
+  the `control-plane-backup` orchestrator.
 - `dashboard` and `auth-migrate` use the root `Dockerfile` (multi-stage; the
   `runner` target serves the standalone Next.js build, the `auth-migrate` target
   runs `npm run auth:migrate`).
 - PostgreSQL uses a named volume. Redis is disposable by design.
+- `control-plane-backup` is disabled unless the `backup` profile is selected.
+  Its PostgreSQL-client image runs as the unprivileged `postgres` user with a
+  read-only root filesystem, all capabilities dropped, `no-new-privileges`, a
+  bounded tmpfs for restore verification, and a dedicated mode-`0700` volume.
 - API, metrics, and dashboard ports bind to host loopback for local development.
 - Prometheus and Grafana services land in later roadmap phases.
 
@@ -80,6 +87,9 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `HESTIA_API_URL` | worker | optional fallback node API base |
 | `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
 | `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
+| `CONTROL_PLANE_BACKUP_KEY` | backup profile | external base64-encoded 32-byte AES-256 key; empty/malformed fails closed |
+| `CONTROL_PLANE_BACKUP_RETENTION_DAYS` | backup profile | generated archive retention (default 14 days) |
+| `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | backup profile | schedule interval (default 86400; minimum 300) |
 | `LOG_LEVEL` | all | `debug`/`info`/`warn`/`error` |
 | `API_URL` | frontend | backend base URL (server-side) |
 | `CORS_ORIGINS` | api | allowlist (no `*` in production) |
@@ -100,6 +110,10 @@ provisioned externally and verified in staging before email is considered live.
 | **production** | live | hardened; secrets from manager; backups + alerting on |
 
 Configuration differs **only** by environment variables, not by code paths.
+The local named backup volume is not an off-host production strategy. Production
+activation requires secret-manager key injection, an encrypted off-host
+destination/replication path, failure alerting, and a restore rehearsal from the
+off-host copy.
 
 ## 5. Monitoring (Prometheus + Grafana)
 

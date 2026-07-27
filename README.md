@@ -72,8 +72,10 @@ opencloud/
 
 > **Status:** Phase 1 auth/accounts is implemented, security-hardened, and
 > verified in staging; its production release is deliberately deferred. Phase 2
-> provisioning core is in progress on a review branch and is not deployed.
-> Database lifecycle and backup/restore remain outstanding. See
+> provisioning core is in progress on review branches and is not deployed.
+> Encrypted scheduled control-plane backup plus a disposable restore rehearsal
+> are implemented in the stacked control-plane-backup branch; customer database
+> lifecycle remains outstanding. See
 > [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
@@ -138,6 +140,8 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
 | `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
 | `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
+| `CONTROL_PLANE_BACKUP_KEY` | External base64 AES-256 key for the opt-in encrypted backup profile |
+| `CONTROL_PLANE_BACKUP_RETENTION_DAYS` / `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | Backup retention and schedule |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
 
 See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
@@ -158,6 +162,7 @@ npm run build                       # production build
 
 # Stack
 docker compose logs -f api          # tail the API service
+docker compose --profile backup up -d control-plane-backup
 docker compose down                 # stop everything
 ```
 

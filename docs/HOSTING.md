@@ -19,8 +19,10 @@ The Phase 0 spike is disposable and proves the host can create one constrained
 container, route a real hostname through Caddy, repeat the operation without
 duplicates, and clean up only OpenCloud-labeled resources. The Phase 2
 site-provisioning review slice implements the durable queue, customer APIs,
-worker, and Docker/Caddy adapter. It is not a production deployment and does not
-yet include database lifecycle or backup/restore.
+worker, and Docker/Caddy adapter. A stacked Phase 2 branch adds encrypted
+scheduled control-plane PostgreSQL backup plus a disposable restore rehearsal.
+Neither branch is a production deployment; customer database lifecycle and site
+volume/database backups remain outstanding.
 
 ## 2. Provisioner boundary
 

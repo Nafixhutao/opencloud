@@ -14,8 +14,10 @@ Phase 1 (Auth & accounts) is technically implemented, hardened, and verified in
 staging. Production activation is deliberately deferred; external mail/OAuth
 credentials and a production release approval remain operational gates, not
 missing Phase 1 code. Phase 2 is now **in progress** with a review branch for the
-site-provisioning vertical slice. That slice is not merged or deployed, and the
-database lifecycle plus backup/restore work below remains outstanding.
+site-provisioning vertical slice and a stacked branch for encrypted
+control-plane backup/restore. Neither is merged or deployed. Customer database
+lifecycle remains outstanding, and off-host production backup storage/key
+custody remain deployment gates.
 
 ---
 
@@ -104,7 +106,11 @@ The heart of the platform: drive Docker/Caddy through a provider-neutral boundar
 - Database lifecycle: scoped PostgreSQL/MariaDB DB + user provisioning
 - 🚧 Reconciliation job: detect/repair managed site state without adopting or
   deleting unrelated Docker/Caddy resources
-- Basic control-plane backups: scheduled `pg_dump` + one rehearsed restore
+- 🚧 Basic control-plane backups: an opt-in non-root Compose scheduler now streams
+  `pg_dump` into authenticated AES-256-GCM chunk encryption, publishes atomic
+  checksummed artifacts, prunes only generated archive pairs, and has a real
+  disposable restore rehearsal. It remains a review-branch feature; production
+  still needs external key custody and an off-host encrypted destination.
 
 **Exit criteria:** a customer can create and delete a working website from the
 dashboard, backed by a real isolated site container — and the control-plane DB is backed up
