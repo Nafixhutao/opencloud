@@ -46,10 +46,12 @@ trap finish EXIT
 mark_stage cleanup
 cleanup
 
-mark_stage create_resources
+mark_stage create_network
 docker network create "${network_name}" >/dev/null
+mark_stage create_volume
 docker volume create "${volume_name}" >/dev/null
 
+mark_stage start_source_database
 docker run -d \
   --name "${source_name}" \
   --network "${network_name}" \
@@ -58,6 +60,7 @@ docker run -d \
   -e "POSTGRES_DB=${source_database}" \
   postgres:18-alpine >/dev/null
 
+mark_stage start_restore_database
 docker run -d \
   --name "${restore_name}" \
   --network "${network_name}" \
@@ -67,6 +70,7 @@ docker run -d \
   postgres:18-alpine >/dev/null
 
 for container in "${source_name}" "${restore_name}"; do
+  mark_stage "wait_database_${container}"
   for _ in $(seq 1 60); do
     if docker exec "${container}" pg_isready -U opencloud >/dev/null 2>&1; then
       break
