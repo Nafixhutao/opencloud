@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +33,7 @@ type managedDatabaseFixture struct {
 	audit     *repository.AuditRepo
 	svc       *service.ManagedDatabaseService
 	fake      *provisioner.FakeDatabase
+	cipher    *credential.Cipher
 	processor *queue.Processor
 }
 
@@ -90,6 +93,7 @@ func newManagedDatabaseFixture(t *testing.T) *managedDatabaseFixture {
 		audit:     audit,
 		svc:       svc,
 		fake:      fake,
+		cipher:    cipher,
 		processor: processor,
 	}
 	t.Cleanup(func() {
@@ -341,12 +345,129 @@ func TestManagedDatabaseDeleteIntentWinsInFlightProvision(t *testing.T) {
 	available, err := fx.rows.CredentialExists(ctx, row.ID)
 	require.NoError(t, err)
 	require.False(t, available)
-	require.True(t, fx.fake.Exists(row.ID))
+	require.False(t, fx.fake.Exists(row.ID), "superseded job must not create a resource")
 
 	processManagedDatabaseJob(ctx, t, fx.jobs, fx.processor, model.JobDeleteDatabase)
 	current, err = fx.rows.GetForWorker(ctx, row.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.DatabaseDeleted, current.Status)
+	require.False(t, fx.fake.Exists(row.ID))
+}
+
+func TestConcurrentManagedDatabaseDeleteSerializesAheadOfClaimedProvision(t *testing.T) {
+	fx := newManagedDatabaseFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	row, err := fx.svc.Create(
+		ctx,
+		"database-actor",
+		fx.account.ID,
+		uuid.NewString(),
+		service.CreateDatabaseRequest{Name: "delete_first", Engine: model.DatabaseEnginePostgres},
+	)
+	require.NoError(t, err)
+	provisionJob, err := fx.jobs.Claim(ctx, "database-provision-worker")
+	require.NoError(t, err)
+	require.Equal(t, model.JobProvisionDatabase, provisionJob.Kind)
+
+	_, err = fx.svc.Delete(ctx, "database-actor", fx.account.ID, row.ID)
+	require.NoError(t, err)
+	deleteJob, err := fx.jobs.Claim(ctx, "database-delete-worker")
+	require.NoError(t, err)
+	require.Equal(t, model.JobDeleteDatabase, deleteJob.Kind)
+
+	controlled := newDeleteFirstDatabaseProvisioner(fx.fake)
+	processor := fx.processorWith(controlled)
+	deleteResult := make(chan error, 1)
+	go func() {
+		deleteResult <- processor.Handle(ctx, deleteJob, "database-delete-worker")
+	}()
+	requireChannelClosed(ctx, t, controlled.deleteStarted)
+
+	provisionInvoked := make(chan struct{})
+	provisionResult := make(chan error, 1)
+	go func() {
+		close(provisionInvoked)
+		provisionResult <- processor.Handle(ctx, provisionJob, "database-provision-worker")
+	}()
+	requireChannelClosed(ctx, t, provisionInvoked)
+	close(controlled.releaseDelete)
+
+	require.NoError(t, requireChannelValue(ctx, t, deleteResult))
+	require.NoError(t, requireChannelValue(ctx, t, provisionResult))
+	require.Zero(t, controlled.createCalls.Load())
+	require.False(t, fx.fake.Exists(row.ID))
+
+	current, err := fx.rows.GetForWorker(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.DatabaseDeleted, current.Status)
+	available, err := fx.rows.CredentialExists(ctx, row.ID)
+	require.NoError(t, err)
+	require.False(t, available)
+	activeJobs, err := fx.db.NewSelect().
+		Model((*model.Job)(nil)).
+		Where("account_id = ?", fx.account.ID).
+		Where("status IN (?, ?)", model.JobQueued, model.JobRunning).
+		Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, activeJobs)
+}
+
+func TestSupersededManagedDatabaseCleanupFailureDoesNotCompleteProvision(t *testing.T) {
+	fx := newManagedDatabaseFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	row, err := fx.svc.Create(
+		ctx,
+		"database-actor",
+		fx.account.ID,
+		uuid.NewString(),
+		service.CreateDatabaseRequest{Name: "cleanup_retry", Engine: model.DatabaseEnginePostgres},
+	)
+	require.NoError(t, err)
+	provisionJob, err := fx.jobs.Claim(ctx, "database-cleanup-worker")
+	require.NoError(t, err)
+	require.Equal(t, model.JobProvisionDatabase, provisionJob.Kind)
+
+	controlled := newBlockedCreateDatabaseProvisioner(fx.fake)
+	processor := fx.processorWith(controlled)
+	provisionResult := make(chan error, 1)
+	go func() {
+		provisionResult <- processor.Handle(ctx, provisionJob, "database-cleanup-worker")
+	}()
+	requireChannelClosed(ctx, t, controlled.createFinished)
+
+	_, err = fx.svc.Delete(ctx, "database-actor", fx.account.ID, row.ID)
+	require.NoError(t, err)
+	close(controlled.releaseCreate)
+
+	err = requireChannelValue(ctx, t, provisionResult)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "remove superseded provisioned database")
+	require.True(t, fx.fake.Exists(row.ID))
+
+	storedJob := new(model.Job)
+	require.NoError(t, fx.db.NewSelect().Model(storedJob).Where("id = ?", provisionJob.ID).Scan(ctx))
+	require.Equal(t, model.JobRunning, storedJob.Status)
+	available, err := fx.rows.CredentialExists(ctx, row.ID)
+	require.NoError(t, err)
+	require.False(t, available)
+
+	require.NoError(
+		t,
+		fx.jobs.Retry(
+			ctx,
+			provisionJob.ID,
+			"database-cleanup-worker",
+			"provisioner operation failed",
+			time.Now().UTC(),
+		),
+	)
+	controlled.failDelete.Store(false)
+	processManagedDatabaseJob(ctx, t, fx.jobs, processor, model.JobDeleteDatabase)
+	processManagedDatabaseJob(ctx, t, fx.jobs, processor, model.JobProvisionDatabase)
 	require.False(t, fx.fake.Exists(row.ID))
 }
 
@@ -368,6 +489,127 @@ func TestManagedDatabaseTenantScopeHidesCrossAccountRows(t *testing.T) {
 	_, err = fx.svc.Delete(ctx, "other-actor", uuid.New(), row.ID)
 	require.Error(t, err)
 	require.Equal(t, "NOT_FOUND", apperr.As(err).Code)
+}
+
+func (f *managedDatabaseFixture) processorWith(
+	databaseProvisioner provisioner.DatabaseProvisioner,
+) *queue.Processor {
+	return queue.NewProcessor(
+		f.db,
+		repository.NewSiteRepo(f.db),
+		repository.NewNodeRepo(f.db),
+		f.jobs,
+		f.audit,
+		provisioner.NewFake(),
+		f.rows,
+		databaseProvisioner,
+		f.cipher,
+	)
+}
+
+type deleteFirstDatabaseProvisioner struct {
+	delegate      *provisioner.FakeDatabase
+	deleteStarted chan struct{}
+	releaseDelete chan struct{}
+	createCalls   atomic.Int32
+}
+
+func newDeleteFirstDatabaseProvisioner(
+	delegate *provisioner.FakeDatabase,
+) *deleteFirstDatabaseProvisioner {
+	return &deleteFirstDatabaseProvisioner{
+		delegate:      delegate,
+		deleteStarted: make(chan struct{}),
+		releaseDelete: make(chan struct{}),
+	}
+}
+
+func (p *deleteFirstDatabaseProvisioner) CreateDatabase(
+	ctx context.Context,
+	spec provisioner.DatabaseSpec,
+) (provisioner.DatabaseCredentials, error) {
+	p.createCalls.Add(1)
+	return p.delegate.CreateDatabase(ctx, spec)
+}
+
+func (p *deleteFirstDatabaseProvisioner) DeleteDatabase(
+	ctx context.Context,
+	ref provisioner.DatabaseRef,
+) error {
+	close(p.deleteStarted)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.releaseDelete:
+		return p.delegate.DeleteDatabase(ctx, ref)
+	}
+}
+
+type blockedCreateDatabaseProvisioner struct {
+	delegate       *provisioner.FakeDatabase
+	createFinished chan struct{}
+	releaseCreate  chan struct{}
+	failDelete     atomic.Bool
+}
+
+func newBlockedCreateDatabaseProvisioner(
+	delegate *provisioner.FakeDatabase,
+) *blockedCreateDatabaseProvisioner {
+	provider := &blockedCreateDatabaseProvisioner{
+		delegate:       delegate,
+		createFinished: make(chan struct{}),
+		releaseCreate:  make(chan struct{}),
+	}
+	provider.failDelete.Store(true)
+	return provider
+}
+
+func (p *blockedCreateDatabaseProvisioner) CreateDatabase(
+	ctx context.Context,
+	spec provisioner.DatabaseSpec,
+) (provisioner.DatabaseCredentials, error) {
+	credentials, err := p.delegate.CreateDatabase(ctx, spec)
+	if err != nil {
+		return provisioner.DatabaseCredentials{}, err
+	}
+	close(p.createFinished)
+	select {
+	case <-ctx.Done():
+		return provisioner.DatabaseCredentials{}, ctx.Err()
+	case <-p.releaseCreate:
+		return credentials, nil
+	}
+}
+
+func (p *blockedCreateDatabaseProvisioner) DeleteDatabase(
+	ctx context.Context,
+	ref provisioner.DatabaseRef,
+) error {
+	if p.failDelete.Load() {
+		return errors.New("forced compensating cleanup failure")
+	}
+	return p.delegate.DeleteDatabase(ctx, ref)
+}
+
+func requireChannelClosed(ctx context.Context, t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-ch:
+	}
+}
+
+func requireChannelValue[T any](ctx context.Context, t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+		var zero T
+		return zero
+	case value := <-ch:
+		return value
+	}
 }
 
 func processManagedDatabaseJob(

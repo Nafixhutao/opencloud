@@ -38,6 +38,30 @@ func (r *ManagedDatabaseRepo) LockCreateRequest(
 	return err
 }
 
+// LockProviderOperation serializes data-plane calls for one managed database.
+// This is a session-scoped lock: callers must use a dedicated connection and
+// release the lock on that same connection.
+func (r *ManagedDatabaseRepo) LockProviderOperation(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) error {
+	scope := "managed-database-provider:" + databaseID.String()
+	_, err := r.db.NewRaw(`SELECT pg_advisory_lock(hashtextextended(?, 0))`, scope).Exec(ctx)
+	return err
+}
+
+// UnlockProviderOperation releases a session-scoped data-plane operation lock.
+func (r *ManagedDatabaseRepo) UnlockProviderOperation(
+	ctx context.Context,
+	databaseID uuid.UUID,
+) (bool, error) {
+	scope := "managed-database-provider:" + databaseID.String()
+	var unlocked bool
+	err := r.db.NewRaw(`SELECT pg_advisory_unlock(hashtextextended(?, 0))`, scope).
+		Scan(ctx, &unlocked)
+	return unlocked, err
+}
+
 // Create inserts one provisioning intent.
 func (r *ManagedDatabaseRepo) Create(ctx context.Context, database *model.ManagedDatabase) error {
 	now := time.Now().UTC()

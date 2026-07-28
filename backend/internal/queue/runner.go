@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	defaultPollInterval = 2 * time.Second
-	defaultLeaseTimeout = 10 * time.Minute
-	reconcileInterval   = 5 * time.Minute
-	maxRetryBackoff     = 5 * time.Minute
+	defaultPollInterval   = 2 * time.Second
+	defaultLeaseTimeout   = 10 * time.Minute
+	reconcileInterval     = 5 * time.Minute
+	maxRetryBackoff       = 5 * time.Minute
+	databaseUnlockTimeout = 5 * time.Second
 )
 
 // Runner claims and executes jobs until its context is cancelled.
@@ -329,7 +330,7 @@ func (p *Processor) handleDatabase(
 	ctx context.Context,
 	job *model.Job,
 	workerID string,
-) error {
+) (err error) {
 	if p.databases == nil || p.databaseProvisioner == nil || p.credentialCipher == nil {
 		return errors.New("customer database provisioner is not configured")
 	}
@@ -337,7 +338,34 @@ func (p *Processor) handleDatabase(
 	if err := json.Unmarshal(job.Payload, &payload); err != nil || payload.DatabaseID == uuid.Nil {
 		return errors.New("invalid database job payload")
 	}
-	row, err := p.databases.GetForWorker(ctx, payload.DatabaseID)
+
+	conn, err := p.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("reserve database operation connection: %w", err)
+	}
+	rows := p.databases.WithDB(conn)
+	if err := rows.LockProviderOperation(ctx, payload.DatabaseID); err != nil {
+		return errors.Join(
+			fmt.Errorf("lock database provider operation: %w", err),
+			conn.Close(),
+		)
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			databaseUnlockTimeout,
+		)
+		defer cancel()
+		unlocked, unlockErr := rows.UnlockProviderOperation(unlockCtx, payload.DatabaseID)
+		if unlockErr != nil {
+			err = errors.Join(err, fmt.Errorf("unlock database provider operation: %w", unlockErr))
+		} else if !unlocked {
+			err = errors.Join(err, errors.New("database provider operation lock was not held"))
+		}
+		err = errors.Join(err, conn.Close())
+	}()
+
+	row, err := rows.GetForWorker(ctx, payload.DatabaseID)
 	if err != nil {
 		return fmt.Errorf("load job database: %w", err)
 	}
@@ -351,12 +379,27 @@ func (p *Processor) handleDatabase(
 
 	switch job.Kind {
 	case model.JobProvisionDatabase:
+		if row.Status != model.DatabaseProvisioning {
+			return p.completeDatabaseProvision(ctx, conn, job, workerID, row.ID, nil)
+		}
 		credentials, err := p.databaseProvisioner.CreateDatabase(
 			ctx,
 			provisioner.DatabaseSpec(ref),
 		)
 		if err != nil {
 			return err
+		}
+		current, err := rows.GetForWorker(ctx, row.ID)
+		if err != nil {
+			credentials.Password = ""
+			return fmt.Errorf("reload provisioned database: %w", err)
+		}
+		if current.Status != model.DatabaseProvisioning {
+			credentials.Password = ""
+			if err := p.databaseProvisioner.DeleteDatabase(ctx, ref); err != nil {
+				return fmt.Errorf("remove superseded provisioned database: %w", err)
+			}
+			return p.completeDatabaseProvision(ctx, conn, job, workerID, row.ID, nil)
 		}
 		plaintext, err := json.Marshal(credentials)
 		credentials.Password = ""
@@ -368,12 +411,12 @@ func (p *Processor) handleDatabase(
 		if err != nil {
 			return err
 		}
-		return p.completeDatabaseProvision(ctx, job, workerID, row.ID, envelope)
+		return p.completeDatabaseProvision(ctx, conn, job, workerID, row.ID, envelope)
 	case model.JobDeleteDatabase, model.JobCleanupDatabase:
 		if err := p.databaseProvisioner.DeleteDatabase(ctx, ref); err != nil {
 			return err
 		}
-		return p.completeDatabaseDelete(ctx, job, workerID, row.ID)
+		return p.completeDatabaseDelete(ctx, conn, job, workerID, row.ID)
 	default:
 		return fmt.Errorf("unsupported database job kind %q", job.Kind)
 	}
@@ -381,12 +424,13 @@ func (p *Processor) handleDatabase(
 
 func (p *Processor) completeDatabaseProvision(
 	ctx context.Context,
+	conn bun.Conn,
 	job *model.Job,
 	workerID string,
 	databaseID uuid.UUID,
 	envelope []byte,
 ) error {
-	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	return conn.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		rows := p.databases.WithDB(tx)
 		jobs := p.jobs.WithDB(tx)
 		audit := p.audit.WithDB(tx)
@@ -398,6 +442,9 @@ func (p *Processor) completeDatabaseProvision(
 		action := model.AuditDatabaseProvisioned
 		resultStatus := current.Status
 		if current.Status == model.DatabaseProvisioning {
+			if len(envelope) == 0 {
+				return errors.New("provisioned database credential envelope is missing")
+			}
 			if err := rows.StoreCredential(ctx, databaseID, envelope); err != nil {
 				return err
 			}
@@ -406,8 +453,9 @@ func (p *Processor) completeDatabaseProvision(
 			}
 			resultStatus = model.DatabaseActive
 		} else {
-			// A newer delete intent wins. The delete job will remove the
-			// idempotently-created data-plane resource; no credential is stored.
+			// The provider operation lock and preflight status check prevent a
+			// superseded job from creating a resource. If delete intent arrived
+			// during CreateDatabase, the resource was compensated before this tx.
 			action = model.AuditDatabaseProvisionSuperseded
 		}
 		aid := current.AccountID
@@ -431,11 +479,12 @@ func (p *Processor) completeDatabaseProvision(
 
 func (p *Processor) completeDatabaseDelete(
 	ctx context.Context,
+	conn bun.Conn,
 	job *model.Job,
 	workerID string,
 	databaseID uuid.UUID,
 ) error {
-	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	return conn.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		rows := p.databases.WithDB(tx)
 		jobs := p.jobs.WithDB(tx)
 		audit := p.audit.WithDB(tx)
