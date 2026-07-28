@@ -13,11 +13,11 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 Phase 1 (Auth & accounts) is technically implemented, hardened, and verified in
 staging. Production activation is deliberately deferred; external mail/OAuth
 credentials and a production release approval remain operational gates, not
-missing Phase 1 code. Phase 2 is now **in progress** with a review branch for the
-site-provisioning vertical slice and a stacked branch for encrypted
-control-plane backup/restore. A third stacked review branch implements the
-opt-in PostgreSQL/MariaDB customer database lifecycle. None is merged or
-deployed. CI/review, dedicated TLS database targets, external encryption-key
+missing Phase 1 code. Phase 2 is **in progress**: the site-provisioning core is
+merged into `main`, while PR #26 is the active review branch for encrypted
+control-plane backup/restore and the opt-in PostgreSQL/MariaDB customer database
+lifecycle. Nothing in Phase 2 is deployed. Review and green CI on the hardened
+PR head, dedicated verified-TLS database targets, external encryption-key
 custody, and off-host production backup storage remain release gates.
 
 ---
@@ -106,9 +106,10 @@ The heart of the platform: drive Docker/Caddy through a provider-neutral boundar
   tenant-scoped APIs and a status-polled dashboard
 - 🚧 Database lifecycle: additive tenant-scoped schema, idempotent asynchronous
   PostgreSQL/MariaDB database + least-privilege user provisioning, encrypted
-  one-time credential reveal, delete/cleanup compensation, and dashboard flows.
-  The stacked review branch defaults the feature off and still requires CI,
-  review, and disposable real-engine validation before merge.
+  one-time credential reveal, per-database serialized provider operations,
+  delete/cleanup compensation, and paginated dashboard flows. The PR #26 review
+  branch defaults the feature off and still requires review, green CI on the
+  hardened head, and disposable real-engine validation before merge.
 - 🚧 Reconciliation job: detect/repair managed site state without adopting or
   deleting unrelated Docker/Caddy resources
 - 🚧 Basic control-plane backups: an opt-in non-root Compose scheduler now streams

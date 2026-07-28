@@ -115,10 +115,12 @@ worker additionally fails fast unless both data-plane admin targets are
 configured and reachable. Admin URLs/DSNs and the encryption key come from the
 orchestrator secret store. The worker rejects a customer PostgreSQL target that
 resolves to the same configured host/port as the control plane. Production
-admin connections must require certificate-verified TLS without plaintext
-fallback, while customer endpoints use TLS and private worker-to-admin
-networking. Rotate the envelope key only after pending credential rows are
-revealed or revoked.
+PostgreSQL admin connections must use `sslmode=verify-full` for certificate and
+hostname verification on every resolved target, with no plaintext or unverified
+fallback. MariaDB admin connections likewise require a certificate-verifying
+TLS profile. Customer endpoints use TLS and private worker-to-admin networking.
+Rotate the envelope key only after pending credential rows are revealed or
+revoked.
 
 ## 4. Environments
 

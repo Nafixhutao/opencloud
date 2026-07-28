@@ -324,6 +324,14 @@ internal identifiers and server-quoted literals. The approved
 `go-sql-driver/mysql` dependency is required because `database/sql` has no
 MariaDB/MySQL driver in the standard library.
 
+Provision, delete, and cleanup calls for one database acquire the same
+session-scoped PostgreSQL advisory lock on a dedicated connection. The worker
+re-reads desired state after acquiring it, so a delete that completed first
+prevents a stale provision job from creating anything. If delete intent arrives
+during creation, the worker removes the newly created resource before completing
+the provision job; cleanup failure is returned for retry. The advisory lock
+spans the provider call without holding a SQL transaction open.
+
 The data-plane admin connections are separate worker-only secrets and must
 never equal the control-plane `DATABASE_URL`. `CUSTOMER_DATABASES_ENABLED=false`
 is the default until both targets, TLS endpoints, and the shared external

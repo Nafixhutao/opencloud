@@ -71,14 +71,13 @@ opencloud/
 ```
 
 > **Status:** Phase 1 auth/accounts is implemented, security-hardened, and
-> verified in staging; its production release is deliberately deferred. Phase 2
-> provisioning core is in progress on review branches and is not deployed.
-> Encrypted scheduled control-plane backup plus a disposable restore rehearsal
-> are implemented in the stacked control-plane-backup branch. The next stacked
-> branch implements an opt-in PostgreSQL/MariaDB customer database lifecycle,
-> one-time credential delivery, and a responsive database dashboard. All Phase 2
-> slices still require review and green CI. See
-> [`ROADMAP.md`](ROADMAP.md).
+> verified in staging; its production release is deliberately deferred. The
+> Phase 2 site-provisioning core is merged into `main` but is not deployed.
+> PR #26 is the active review branch for encrypted scheduled control-plane
+> backup/restore plus the opt-in PostgreSQL/MariaDB customer database lifecycle,
+> one-time credential delivery, and a paginated database dashboard. Review,
+> green CI on the hardened head, and explicit release approval remain required.
+> See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
 
@@ -146,7 +145,7 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `CONTROL_PLANE_BACKUP_RETENTION_DAYS` / `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | Backup retention and schedule |
 | `CUSTOMER_DATABASES_ENABLED` | Opt-in customer database lifecycle; disabled by default |
 | `CUSTOMER_DATABASE_CREDENTIAL_KEY` | External base64 AES-256 key used only for pending one-time database credentials |
-| `CUSTOMER_POSTGRES_ADMIN_URL` / `CUSTOMER_MARIADB_ADMIN_DSN` | Worker-only admin connections to dedicated customer database targets |
+| `CUSTOMER_POSTGRES_ADMIN_URL` / `CUSTOMER_MARIADB_ADMIN_DSN` | Worker-only admin connections to dedicated customer database targets; PostgreSQL production uses `sslmode=verify-full` |
 | `CUSTOMER_POSTGRES_HOST` / `CUSTOMER_MARIADB_HOST` | Public customer endpoints returned after credential reveal |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
 

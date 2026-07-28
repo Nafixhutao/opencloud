@@ -182,6 +182,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
+- Customer database provision/delete/cleanup provider calls are serialized per
+  database across horizontal workers with a session advisory lock and a fresh
+  desired-state check. A delete that arrives during creation triggers immediate
+  compensating cleanup, and cleanup failure leaves the job retryable instead of
+  reporting success or orphaning a database/login.
+- Database pagination now flows through the browser client and BFF, with bounded
+  query parameters, accessible Previous/Next controls, page-aware query caching,
+  and automatic fallback when deletion empties the final page.
 - Last-active-admin count/update is serialized in one transaction with a
   transaction-scoped PostgreSQL advisory lock; self-demotion/self-disable remain
   forbidden. Membership creation uses advisory locking plus `ON CONFLICT` and
@@ -239,6 +247,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Security
+- Production customer PostgreSQL administration now requires certificate and
+  hostname verification (`sslmode=verify-full`) on the primary connection and
+  every fallback; encrypted-but-unverified `allow`, `prefer`, `require`, and
+  `verify-ca` configurations fail closed.
 - Phase 2 customer site responses omit account/node placement, image, internal
   port, and runtime-limit fields. Repeated customer delete requests converge on
   the original terminal state without a second job or capacity decrement.

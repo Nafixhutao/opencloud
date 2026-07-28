@@ -183,6 +183,16 @@ tenant isolation, job payload secrecy, delete winning over in-flight
 provisioning, concurrent one-time reveal, and audit-trigger failures that roll
 back create, completion, and credential consumption. The fake data-plane
 provider proves the full durable job lifecycle without external credentials.
+The delete/provision regression starts separately claimed jobs on different
+workers, forces deletion to own the provider-operation lock first, and proves a
+stale provision never creates an orphan. A second failure-path test creates a
+resource, injects compensating-delete failure, and proves the provision job is
+not completed before durable retry and deletion converge.
+
+Frontend behavior coverage uses more than 25 database rows, requests the second
+page through the BFF, deletes its resource, and verifies navigation returns to
+the last valid page. Route tests also prove invalid page values are normalized
+and `per_page` is capped before proxying.
 
 The real adapter integration test requires disposable targets:
 

@@ -152,7 +152,9 @@ Database jobs extend the existing queue with `provision_database`,
 `delete_database`, and compensating `cleanup_database`. Their JSON payload is
 exactly a server-generated `database_id`. Provider work occurs outside a
 transaction; completion status, encrypted credential publication, audit, and
-job completion commit together afterward.
+job completion commit together afterward. Provider calls for the same database
+are serialized across workers with a session advisory lock held on a dedicated
+connection, without keeping a SQL transaction open during the external call.
 
 ## 4. Bun models
 
@@ -294,4 +296,6 @@ Migration `20260727010000_create_customer_databases` adds `databases` and
 editing the provisioning-core or any shipped Phase 1 migration. The encrypted
 credential row is deleted in the same transaction as its reveal audit, so
 concurrent callers have at most one winner. The control-plane backup
-implementation does not add schema or alter any shipped migration.
+implementation does not add schema or alter any shipped migration. No migration
+was added or rewritten for provider-operation serialization or dashboard
+pagination.

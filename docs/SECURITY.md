@@ -112,8 +112,9 @@ error codes before they can reach logs.
 - TLS for PostgreSQL and Redis connections in production.
 - Customer PostgreSQL/MariaDB endpoints and worker admin connections require
   certificate-verified TLS in production. Startup rejects a false advertised
-  TLS requirement, PostgreSQL plaintext fallback, or MariaDB
-  `false`/`preferred`/`skip-verify` TLS modes.
+  TLS requirement, PostgreSQL modes other than `sslmode=verify-full` (including
+  encrypted-but-unverified `require`), plaintext or unverified fallbacks, or
+  MariaDB `false`/`preferred`/`skip-verify` TLS modes.
 - Internal-only services (metrics, datastores) bound to the private network, never
   the public internet.
 

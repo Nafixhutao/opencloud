@@ -150,8 +150,10 @@ services are never joined or changed.
   dedicated PostgreSQL/MariaDB admin targets, externally managed
   `CUSTOMER_DATABASE_CREDENTIAL_KEY`, public TLS endpoints, and
   `CUSTOMER_DATABASES_ENABLED=true`. The customer targets must not equal the
-  control-plane `DATABASE_URL`; enabling this is a reviewed staging/production
-  release action, not a default Compose behavior.
+  control-plane `DATABASE_URL`; production PostgreSQL administration requires
+  `sslmode=verify-full` with a certificate valid for the configured hostname.
+  Enabling this is a reviewed staging/production release action, not a default
+  Compose behavior.
 
 ## 10. Post-deploy verification
 
