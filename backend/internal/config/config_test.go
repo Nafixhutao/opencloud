@@ -156,9 +156,11 @@ func TestValidateProvisioner(t *testing.T) {
 		{
 			name: "Docker defaults are complete",
 			cfg: Config{Provisioner: ProvisionerConfig{
-				Backend:      "docker",
-				DockerSocket: "/var/run/docker.sock",
-				CaddyAPIURL:  "http://127.0.0.1:2019",
+				Backend:       "docker",
+				DockerSocket:  "/var/run/docker.sock",
+				CaddyAPIURL:   "http://127.0.0.1:2019",
+				CaddyServerID: "srv0",
+				SiteImage:     "opencloud/site-static:phase2",
 			}},
 		},
 		{

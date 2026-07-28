@@ -280,3 +280,26 @@ a decimal lib (money is `int64` cents — see `CODING_STANDARDS.md`).
 - Membership provisioning uses a per-user advisory lock and
   `INSERT ... ON CONFLICT`, so concurrent callers converge without orphan
   accounts or aborted-transaction re-reads.
+
+## Phase 2 site-provisioning slice
+
+- `internal/model`: Node, Site, Job
+- `internal/repository`: NodeRepo, SiteRepo, JobRepo
+- `internal/service`: tenant-scoped SiteService and global audited NodeService
+- `internal/queue`: atomic `SKIP LOCKED` claim, exponential retry, stale-job
+  reaper, compensating cleanup, and periodic reconciliation
+- `internal/provisioner`: concurrency-safe fake and a Docker/Caddy adapter using
+  deterministic resource names plus complete ownership-label checks
+- `cmd/worker`: the only process that executes provider calls; provider work is
+  never performed inside the API transaction
+
+Create reserves node capacity, inserts the site and job, and appends the audit
+row in one transaction. External Docker/Caddy work happens after commit. The
+worker then commits the resulting status, job completion, and audit event in one
+database transaction. Exact-once `capacity_released_at` accounting prevents
+retries from decrementing node usage twice. A delete intent wins over an older
+in-flight provision/suspend/resume result.
+
+The current slice supports only the curated static-site template. Database
+provisioning, backup/restore, Hestia, DNS ownership automation, and a production
+Docker authorization boundary are deliberately not claimed.

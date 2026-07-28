@@ -14,6 +14,17 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 2 site-provisioning core (review branch, not deployed):** additive
+  `nodes`, `sites`, and durable `jobs` schema; atomically reserved least-loaded
+  placement; tenant-scoped asynchronous site create/suspend/resume/delete APIs;
+  audited admin node management; retry/backoff, stale-job recovery, cleanup, and
+  reconciliation workers; an ownership-checked Docker/Caddy adapter with a
+  concurrency-safe fake; a constrained static-site runtime; and a responsive
+  dashboard using TanStack Query plus real Testing Library interaction tests.
+- **Phase 2 integration coverage:** concurrent placement and idempotency,
+  transactional audit failure rollback, job claim uniqueness, exact capacity
+  release, delete-versus-in-flight-provision ordering, full fake-provider
+  lifecycle, and an opt-in real disposable Docker/Caddy lifecycle test.
 - **Phase 1 auth hardening:** required email verification, one-time verification
   claims, real configurable Nodemailer SMTP delivery with TLS, authenticated
   password-change and login-failure audit events, safe admin name/email
@@ -30,6 +41,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   events for login, password reset, profile, and admin role/status changes.
 
 ### Changed
+- Phase 1 is technically complete and staging-verified; production activation is
+  explicitly deferred. Phase 2 remains incomplete until database lifecycle and
+  scheduled backup/rehearsed restore are implemented and the site-provisioning
+  review branch passes CI and review.
 - Bun `up` now assigns one rollback group per migration instead of grouping all
   pending files. Production stays forward-only; a development `down` can only
   target the newest migration. Production mail configuration fails fast unless
@@ -205,6 +220,9 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Security
+- Phase 2 customer site responses omit account/node placement, image, internal
+  port, and runtime-limit fields. Repeated customer delete requests converge on
+  the original terminal state without a second job or capacity decrement.
 - Phase 1 migration files are pinned by committed SHA-256 checksums and explicit
   immutable-history tests. `audit_logs` UPDATE/DELETE is rejected by database
   triggers, while verification storage contains only SHA-256 token digests—never

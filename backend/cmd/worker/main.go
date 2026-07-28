@@ -1,25 +1,21 @@
-// Command worker runs the OpenCloud background job worker. It shares all
-// wiring with cmd/api and differs only in what it starts: instead of serving
-// HTTP it polls the Postgres `jobs` queue (BACKEND.md §3, ADR 0002).
-//
-// The queue itself lands in Phase 2; for now this is the runnable skeleton —
-// it boots the same dependencies and idles on a tick until SIGTERM, so
-// `docker compose up` brings a healthy worker container up alongside the API.
+// Command worker runs the OpenCloud background job worker. It shares startup
+// wiring with the API, claims PostgreSQL jobs, and alone reaches the hosting
+// backend (BACKEND.md section 3, ADR 0002).
 package main
 
 import (
 	"context"
+	"fmt"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/app"
+	"github.com/nazxf/opencloud/backend/internal/provisioner"
+	"github.com/nazxf/opencloud/backend/internal/queue"
+	"github.com/nazxf/opencloud/backend/internal/repository"
 )
-
-// pollInterval is how often the worker will claim jobs once the queue exists.
-const pollInterval = 2 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -33,24 +29,40 @@ func main() {
 	if err := deps.Cfg.ValidateProvisioner(); err != nil {
 		deps.Log.Fatal("invalid provisioner configuration", zap.Error(err))
 	}
+	siteProvisioner, err := buildProvisioner(deps)
+	if err != nil {
+		deps.Log.Fatal("initialize provisioner", zap.Error(err))
+	}
+
+	sites := repository.NewSiteRepo(deps.DB)
+	nodes := repository.NewNodeRepo(deps.DB)
+	jobs := repository.NewJobRepo(deps.DB)
+	audit := repository.NewAuditRepo(deps.DB)
+	processor := queue.NewProcessor(deps.DB, sites, nodes, jobs, audit, siteProvisioner)
+	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(
 		"worker started",
-		zap.Duration("poll_interval", pollInterval),
 		zap.String("provisioner_backend", string(deps.Cfg.Provisioner.Backend)),
 	)
+	runner.Run(ctx)
+	deps.Log.Info("worker shutting down")
+}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			deps.Log.Info("worker shutting down")
-			return
-		case <-ticker.C:
-			// ponytail: no-op until the jobs queue lands (Phase 2). This is
-			// where the worker will claim + run jobs with SKIP LOCKED.
-		}
+func buildProvisioner(deps *app.Deps) (provisioner.SiteProvisioner, error) {
+	switch deps.Cfg.Provisioner.Backend {
+	case provisioner.BackendFake:
+		return provisioner.NewFake(), nil
+	case provisioner.BackendDocker:
+		return provisioner.NewDocker(
+			deps.Cfg.Provisioner.DockerSocket,
+			deps.Cfg.Provisioner.CaddyAPIURL,
+			deps.Cfg.Provisioner.CaddyServerID,
+			deps.Cfg.Provisioner.SiteImage,
+		)
+	case provisioner.BackendHestia:
+		return nil, fmt.Errorf("hestia adapter is not implemented; use Docker or fake")
+	default:
+		return nil, fmt.Errorf("unsupported provisioner backend %q", deps.Cfg.Provisioner.Backend)
 	}
 }

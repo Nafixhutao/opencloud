@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BrandLogo } from '@/components/brand-logo';
+import { QueryProvider } from '@/components/providers/query-provider';
 import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
 
@@ -47,6 +48,9 @@ export default async function DashboardLayout({
               <Link href="/account" className={navLink}>
                 Account
               </Link>
+              <Link href="/sites" className={navLink}>
+                Sites
+              </Link>
               {isAdmin ? (
                 <Link href="/admin/users" className={navLink}>
                   Users
@@ -63,7 +67,7 @@ export default async function DashboardLayout({
           </div>
         </div>
       </header>
-      {children}
+      <QueryProvider>{children}</QueryProvider>
     </div>
   );
 }

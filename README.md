@@ -70,9 +70,11 @@ opencloud/
 └── docker-compose.yml    # dashboard + backend + migration gates + datastores
 ```
 
-> **Status:** Phase 1 auth/accounts is implemented and security-hardened, but
-> production email/OAuth activation still requires operator-supplied provider
-> credentials and staging verification. See [`ROADMAP.md`](ROADMAP.md).
+> **Status:** Phase 1 auth/accounts is implemented, security-hardened, and
+> verified in staging; its production release is deliberately deferred. Phase 2
+> provisioning core is in progress on a review branch and is not deployed.
+> Database lifecycle and backup/restore remain outstanding. See
+> [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
 
@@ -80,7 +82,7 @@ opencloud/
 
 - **Docker** 24+ and **Docker Compose** v2
 - **Go** 1.26+ (for backend dev outside Docker)
-- **Node.js** 20+ and **npm** (for frontend dev)
+- **Node.js** 22+ and **npm** (for frontend dev; matches the production image)
 - Linux + Caddy for the real Docker provisioning spike (optional for UI/backend
   development, where the provisioner can use a fake)
 

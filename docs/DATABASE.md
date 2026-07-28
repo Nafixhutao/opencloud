@@ -62,27 +62,38 @@ CREATE TABLE accounts (
 
 -- nodes: hosting capacity registered by backend driver (Docker or fallback Hestia)
 CREATE TABLE nodes (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hostname    TEXT NOT NULL UNIQUE,
-    status      TEXT NOT NULL DEFAULT 'online'
-                CHECK (status IN ('online','draining','offline')),
-    capacity    INT  NOT NULL DEFAULT 0,
-    used        INT  NOT NULL DEFAULT 0,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hostname          TEXT NOT NULL UNIQUE,
+    backend           TEXT NOT NULL CHECK (backend IN ('docker','hestia','fake')),
+    status            TEXT NOT NULL DEFAULT 'online'
+                      CHECK (status IN ('online','draining','offline')),
+    capacity_sites    INT  NOT NULL CHECK (capacity_sites > 0),
+    used_sites        INT  NOT NULL DEFAULT 0
+                      CHECK (used_sites BETWEEN 0 AND capacity_sites),
+    provider_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- sites: a customer website on a node
 CREATE TABLE sites (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id  UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    node_id     UUID NOT NULL REFERENCES nodes(id),
-    domain      TEXT NOT NULL,
-    status      TEXT NOT NULL DEFAULT 'provisioning'
-                CHECK (status IN ('provisioning','active','suspended','failed','deleting')),
-    php_version TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id           UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    node_id              UUID NOT NULL REFERENCES nodes(id),
+    domain               TEXT NOT NULL,
+    image                TEXT NOT NULL,
+    internal_port        INT NOT NULL,
+    memory_bytes         BIGINT NOT NULL,
+    nano_cpus            BIGINT NOT NULL,
+    status               TEXT NOT NULL DEFAULT 'provisioning'
+                         CHECK (status IN ('provisioning','active','suspending',
+                         'suspended','resuming','deleting','deleted','failed')),
+    idempotency_key      TEXT,
+    last_error           TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at           TIMESTAMPTZ,
+    capacity_released_at TIMESTAMPTZ,
     UNIQUE (domain)
 );
 CREATE INDEX idx_sites_account_id ON sites(account_id);
@@ -98,7 +109,10 @@ CREATE TABLE jobs (
     status      TEXT NOT NULL DEFAULT 'queued'
                 CHECK (status IN ('queued','running','succeeded','failed')),
     attempts    INT  NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 5,
     run_at      TIMESTAMPTZ NOT NULL DEFAULT now(),  -- future = retry backoff
+    locked_at   TIMESTAMPTZ,
+    locked_by   TEXT,
     payload     JSONB NOT NULL,
     last_error  TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -175,6 +189,9 @@ go run ./cmd/migrate down           # roll back one Bun migration (dev)
 - Composite indexes match query shape (e.g. `(account_id, created_at DESC)`).
 - Open transactions late, commit early; **never hold a transaction across a
   hosting-provider call** — provisioning is async and goes through the queue.
+- Least-loaded node selection and `used_sites` reservation execute under one
+  transaction-scoped PostgreSQL advisory lock. Capacity release is marked on
+  each site and can occur exactly once even when delete/cleanup jobs retry.
 
 ## 7. Multi-tenancy enforcement
 
@@ -221,3 +238,15 @@ Rules:
 - `audit_logs` is append-only at the database boundary: UPDATE and DELETE are
   rejected by triggers. Privileged domain mutations append their audit row in
   the same transaction.
+
+## 11. Phase 2 provisioning tables
+
+Migration `20260726010000_create_provisioning_core` adds `nodes`, `sites`, and
+`jobs` without changing any shipped Phase 1 migration. The checksum manifest
+pins the new migration too. Site rows retain lifecycle history through
+`deleted_at`; the worker stores only generic operational errors in `last_error`,
+never credentials or provider secrets. Active site jobs are deduplicated by
+`kind` plus the internally generated `payload.site_id`.
+
+Database lifecycle tables and backup metadata are not part of this slice and
+must arrive as new additive migrations.

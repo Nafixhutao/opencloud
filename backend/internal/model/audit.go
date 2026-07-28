@@ -22,6 +22,19 @@ const (
 	AuditAdminUserViewed   = "admin.user.view"
 	AuditAdminBootstrap    = "admin.bootstrap"
 	AuditMembershipEnsured = "account.membership.ensure"
+	AuditSiteCreateQueued  = "site.create.queued"
+	AuditSiteProvisioned   = "site.provision.complete"
+	AuditSiteSuspendQueued = "site.suspend.queued"
+	AuditSiteSuspended     = "site.suspend.complete"
+	AuditSiteResumeQueued  = "site.resume.queued"
+	AuditSiteResumed       = "site.resume.complete"
+	AuditSiteDeleteQueued  = "site.delete.queued"
+	AuditSiteDeleted       = "site.delete.complete"
+	AuditSiteFailed        = "site.lifecycle.failed"
+	AuditSiteReconciled    = "site.reconcile"
+	AuditNodeRegistered    = "admin.node.register"
+	AuditAdminNodesListed  = "admin.nodes.list"
+	AuditNodeStatusChanged = "admin.node.status_change"
 )
 
 // AuditLog is an append-only sensitive-action record (SECURITY §12).
