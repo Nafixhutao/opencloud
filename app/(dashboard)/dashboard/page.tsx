@@ -22,9 +22,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { apiJSON } from '@/lib/api';
-import type { DatabasesEnvelope } from '@/lib/databases';
+import type { ResourceOverviewEnvelope } from '@/lib/resource-overview';
 import { getSession } from '@/lib/session';
-import type { SitesEnvelope } from '@/lib/sites';
 import { cn } from '@/lib/utils';
 
 // oxlint-disable-next-line react/only-export-components -- Next.js reads this page export.
@@ -64,29 +63,25 @@ export default async function DashboardPage() {
     month: 'short',
     year: 'numeric',
   }).format(new Date(session.user.createdAt));
-  const [sitesResult, databasesResult] = await Promise.allSettled([
-    apiJSON<SitesEnvelope>('/api/v1/sites'),
-    apiJSON<DatabasesEnvelope>('/api/v1/databases'),
-  ]);
-  const sites = sitesResult.status === 'fulfilled' ? sitesResult.value.data : null;
-  const databases =
-    databasesResult.status === 'fulfilled' ? databasesResult.value.data : null;
-  const activeSites = sites?.filter((site) => site.status === 'active').length ?? 0;
-  const activeDatabases =
-    databases?.filter((database) => database.status === 'active').length ?? 0;
+  const overview = await apiJSON<ResourceOverviewEnvelope>('/api/v1/overview').then(
+    (response) => response.data,
+    () => null,
+  );
   const metrics = [
     {
       label: 'Active Sites',
-      value: sites ? String(activeSites) : 'Unavailable',
-      detail: sites ? `${sites.length} total workloads` : 'Control plane unavailable',
+      value: overview ? String(overview.sites_active) : 'Unavailable',
+      detail: overview
+        ? `${overview.sites_total} total workloads`
+        : 'Control plane unavailable',
       icon: Globe2,
     },
     { label: 'Domains', value: '0', detail: 'No routes connected', icon: HardDrive },
     {
       label: 'Databases',
-      value: databases ? String(databases.length) : 'Unavailable',
-      detail: databases
-        ? `${activeDatabases} active instances`
+      value: overview ? String(overview.databases_total) : 'Unavailable',
+      detail: overview
+        ? `${overview.databases_active} active instances`
         : 'Control plane unavailable',
       icon: Database,
     },
@@ -195,10 +190,10 @@ export default async function DashboardPage() {
           </CardContent>
           <CardFooter className="gap-2 text-sm text-muted-foreground">
             <CheckCircle2 className="size-4 text-info" aria-hidden="true" />
-            {sites === null
+            {overview === null
               ? 'Site state is temporarily unavailable.'
-              : activeSites > 0
-                ? `${activeSites} active ${activeSites === 1 ? 'site' : 'sites'} in this workspace.`
+              : overview.sites_active > 0
+                ? `${overview.sites_active} active ${overview.sites_active === 1 ? 'site' : 'sites'} in this workspace.`
                 : 'No deployments yet. Create a site to begin the workflow.'}
           </CardFooter>
         </Card>

@@ -67,6 +67,7 @@ func New(
 	auditRepo := repository.NewAuditRepo(db)
 	siteRepo := repository.NewSiteRepo(db)
 	databaseRepo := repository.NewManagedDatabaseRepo(db)
+	overviewRepo := repository.NewResourceOverviewRepo(db)
 	nodeRepo := repository.NewNodeRepo(db)
 	jobRepo := repository.NewJobRepo(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
@@ -88,10 +89,12 @@ func New(
 		cfg.CustomerDatabases.Enabled,
 		databaseCipher,
 	)
+	overviewSvc := service.NewResourceOverviewService(overviewRepo)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
 	databaseH := handler.NewManagedDatabaseHandler(databaseSvc)
+	overviewH := handler.NewResourceOverviewHandler(overviewSvc)
 
 	v1 := r.Group("/api/v1")
 	// Global API rate limit (cheap abuse guard); auth routes have tighter limits.
@@ -111,6 +114,7 @@ func New(
 		{
 			authed.GET("/me", acctH.Me)
 			authed.PATCH("/me", middleware.RateLimit(rdb, "me-write", 30, time.Minute), acctH.UpdateMe)
+			authed.GET("/overview", overviewH.Get)
 			authed.GET("/sites", siteH.List)
 			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
 			authed.GET("/sites/:id", siteH.Get)

@@ -37,8 +37,7 @@ func NewManagedDatabaseHandler(svc *service.ManagedDatabaseService) *ManagedData
 
 // List handles GET /api/v1/databases.
 func (h *ManagedDatabaseHandler) List(c *gin.Context) {
-	page := queryInt(c, "page", 1)
-	perPage := queryInt(c, "per_page", 25)
+	page, perPage := queryPagination(c)
 	rows, total, err := h.svc.List(
 		c.Request.Context(),
 		middleware.AccountID(c),
