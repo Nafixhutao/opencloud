@@ -39,10 +39,10 @@ For every new dependency:
 | Dashboard/admin UI | shadcn/ui + Tailwind CSS | **Adopted — Phase 1** | Add primitives per screen, never `--all` |
 | Marketing UI | Astryx + StyleX | **Planned — marketing rework** | First rebuilt marketing route; keep separate from shadcn route groups |
 | Forms and client validation | react-hook-form + zod + resolver | **Adopted — Phase 1** | Shared form pattern; backend still re-validates |
-| Interactive server state | TanStack Query | **Planned — Phase 2** | Client mutations, cache invalidation, retry, or polling provisioning until `active` / `failed` |
+| Interactive server state | TanStack Query | **Adopted — Phase 2** | Site/database mutations, cache invalidation, and transitional-state polling |
 | Complex data tables | TanStack Table | **Planned — Phase 2+** | Sorting, filtering, pagination, selection, or reusable table behavior exceeds a simple semantic table |
 | Usage charts | Recharts | **Planned — Phase 5** | Real metering/billing time-series data is available |
-| Component tests | Vitest + React Testing Library | **Planned — Phase 1** | First logic-bearing dashboard tests; do not test static presentation for its own sake |
+| Component tests | Vitest + React Testing Library | **Adopted — Phase 1/2** | Logic-bearing auth, site, and database dashboard behavior |
 | Browser journeys | Playwright | **Planned — Phase 2** | A complete signup → login → provision → delete journey can run against a stack |
 | Localization | next-intl | **Conditional — Phase 7** | A second supported locale and translation workflow are committed |
 | Very large lists | TanStack Virtual | **Conditional** | Measured rendering problems from hundreds/thousands of visible rows |
@@ -59,6 +59,7 @@ Detailed rendering, state, and component rules remain in
 | Cloudflare DNS | Official Cloudflare Go client | **Planned — Phase 3** | Provisioner implements zone and record management |
 | PostgreSQL integration tests | Testcontainers for Go | **Planned — Phase 2** | Repository/job-queue tests need isolated real PostgreSQL lifecycle beyond the CI service container |
 | Metrics | Prometheus Go client | **Adopted** | Existing API and worker metrics |
+| MariaDB driver | `github.com/go-sql-driver/mysql` | **Adopted — Phase 2** | First real PostgreSQL/MariaDB customer lifecycle; Go `database/sql` has no MariaDB driver |
 | Distributed tracing | OpenTelemetry for Go | **Conditional — Phase 6** | API → database/job → worker/provisioner traces have an operating collector and a concrete diagnostic need |
 
 OpenAPI generators may produce contract types/clients, but they must not bypass

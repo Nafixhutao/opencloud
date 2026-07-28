@@ -137,6 +137,23 @@ Other resource tables (`domains`, `databases`, `mailboxes`, `dns_zones`,
 `certificates`, `plans`, `subscriptions`) follow the same pattern: `id`,
 `account_id`, optional `node_id`, `status`, timestamps, scoped indexes.
 
+Phase 2 implements `databases` as a tenant-owned desired-state row with
+`postgres|mariadb` engine, internal deterministic physical database/user names,
+async status, and an account-scoped idempotency key. A separate
+`database_credentials` one-to-one row holds only a versioned AES-256-GCM
+ciphertext. Its deletion is the durable one-time-reveal marker; plaintext never
+enters the control-plane schema. List/detail queries project only safe fields
+plus `credential_available` and never return the physical identifiers.
+Database checks independently enforce the customer-label and physical-name
+allowlists, idempotency-key bound, deleted-status timestamp invariant, and
+minimum authenticated-envelope size.
+
+Database jobs extend the existing queue with `provision_database`,
+`delete_database`, and compensating `cleanup_database`. Their JSON payload is
+exactly a server-generated `database_id`. Provider work occurs outside a
+transaction; completion status, encrypted credential publication, audit, and
+job completion commit together afterward.
+
 ## 4. Bun models
 
 Each table maps to a struct in `internal/model`. Keep tags explicit.
@@ -272,6 +289,9 @@ pins the new migration too. Site rows retain lifecycle history through
 never credentials or provider secrets. Active site jobs are deduplicated by
 `kind` plus the internally generated `payload.site_id`.
 
-Database lifecycle tables and backup metadata are not part of the provisioning
-core migration and must arrive as new additive migrations. The control-plane
-backup implementation does not add schema or alter any shipped migration.
+Migration `20260727010000_create_customer_databases` adds `databases` and
+`database_credentials`, and extends the durable job-kind constraint, without
+editing the provisioning-core or any shipped Phase 1 migration. The encrypted
+credential row is deleted in the same transaction as its reveal audit, so
+concurrent callers have at most one winner. The control-plane backup
+implementation does not add schema or alter any shipped migration.

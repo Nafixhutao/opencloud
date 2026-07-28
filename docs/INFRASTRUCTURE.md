@@ -87,6 +87,13 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `HESTIA_API_URL` | worker | optional fallback node API base |
 | `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
 | `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
+| `CUSTOMER_DATABASES_ENABLED` | api, worker | explicit customer PostgreSQL/MariaDB lifecycle opt-in; default `false` |
+| `CUSTOMER_DATABASE_CREDENTIAL_KEY` | api, worker | external base64-encoded 32-byte AES-GCM key for unrevealed credentials |
+| `CUSTOMER_POSTGRES_ADMIN_URL` | worker | worker-only admin URL for the dedicated customer PostgreSQL target |
+| `CUSTOMER_MARIADB_ADMIN_DSN` | worker | worker-only admin DSN for the dedicated customer MariaDB target |
+| `CUSTOMER_POSTGRES_HOST` / `CUSTOMER_POSTGRES_PORT` | api, worker | customer-visible PostgreSQL TLS endpoint |
+| `CUSTOMER_MARIADB_HOST` / `CUSTOMER_MARIADB_PORT` | api, worker | customer-visible MariaDB TLS endpoint |
+| `CUSTOMER_DATABASE_TLS_REQUIRED` | api, worker | advertised endpoint TLS requirement; production refuses `false` |
 | `CONTROL_PLANE_BACKUP_KEY` | backup profile | external base64-encoded 32-byte AES-256 key; empty/malformed fails closed |
 | `CONTROL_PLANE_BACKUP_RETENTION_DAYS` | backup profile | generated archive retention (default 14 days) |
 | `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | backup profile | schedule interval (default 86400; minimum 300) |
@@ -100,6 +107,18 @@ checked-in file. Rotate on exposure.
 The dashboard validates production mail configuration at startup and refuses
 non-delivery adapters or incomplete SMTP credentials. Credentials must be
 provisioned externally and verified in staging before email is considered live.
+
+Customer database lifecycle is opt-in so an existing deployment cannot
+accidentally provision into the control-plane PostgreSQL. When enabled, the API
+fails fast unless the credential key and public endpoints are complete; the
+worker additionally fails fast unless both data-plane admin targets are
+configured and reachable. Admin URLs/DSNs and the encryption key come from the
+orchestrator secret store. The worker rejects a customer PostgreSQL target that
+resolves to the same configured host/port as the control plane. Production
+admin connections must require certificate-verified TLS without plaintext
+fallback, while customer endpoints use TLS and private worker-to-admin
+networking. Rotate the envelope key only after pending credential rows are
+revealed or revoked.
 
 ## 4. Environments
 

@@ -79,6 +79,14 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   allowlists before they reach the provisioner.
 - Escape/encode output; the frontend relies on React's escaping plus a strict CSP.
 
+Customer database DDL is the narrow identifier exception because SQL protocols
+cannot bind an identifier. Customer labels never reach DDL: the service derives
+`ocdb_<uuidhex>` / `ocu_<uuidhex>`, the provisioner re-validates the exact
+pattern, PostgreSQL uses server-side `format(%I/%L)`, and MariaDB uses only the
+validated internal identifier plus server-side `QUOTE(?)` literals. Driver
+errors from statements carrying a generated password are reduced to engine
+error codes before they can reach logs.
+
 ## 6. Secrets management
 
 - All secrets via environment / secret manager, loaded by Viper. **Never commit
@@ -88,12 +96,24 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   (permissioned Docker boundary, loopback/private Caddy admin API, scoped fallback
   Hestia access key, and a DB user that can't `DROP`).
 - Redact secrets at the logging boundary ([`BACKEND.md`](BACKEND.md#11-logging-zap)).
+- `CUSTOMER_DATABASE_CREDENTIAL_KEY` is a separate external base64 32-byte key
+  shared only by API/worker. It is not the backup key, Better Auth secret,
+  target admin credential, or control-plane database password.
+- Only one customer-credential key is active in this slice. Before planned
+  rotation, reveal or revoke every pending credential and verify
+  `database_credentials` is empty; changing the key while rows remain makes
+  those envelopes unreadable. Exposure requires target credential replacement,
+  not merely changing the envelope key.
 
 ## 7. Transport security
 
 - **HTTPS everywhere** with HSTS. Caddy manages customer certificates and renewal
   ([`HOSTING.md`](HOSTING.md#5-domains-and-https)).
 - TLS for PostgreSQL and Redis connections in production.
+- Customer PostgreSQL/MariaDB endpoints and worker admin connections require
+  certificate-verified TLS in production. Startup rejects a false advertised
+  TLS requirement, PostgreSQL plaintext fallback, or MariaDB
+  `false`/`preferred`/`skip-verify` TLS modes.
 - Internal-only services (metrics, datastores) bound to the private network, never
   the public internet.
 
@@ -143,11 +163,22 @@ Authentication is owned by **better-auth** in the Next.js BFF, not the Go backen
   Auth owns password credential transactions in `auth.*`; if the following
   domain audit append fails, the API returns `AUDIT_FAILED` and never reports
   success. A durable outbox is deferred until cross-database delivery exists.
+- Customer database create/delete intent, provisioning completion/failure,
+  cleanup, and credential reveal are audited. Domain state and audit commit in
+  one control-plane transaction. A provider result is retried when that
+  completion transaction fails, so external success is never reported without
+  durable status and audit.
 
 ## 13. Data protection & privacy
 
-- Customer DB credentials are shown **once** on creation and not stored in
-  plaintext.
+- Customer DB credentials are generated in worker memory and stored only as a
+  versioned AES-256-GCM envelope bound to the database UUID. They never enter
+  job payloads, logs, audit metadata, or normal resource responses.
+- Reveal locks the resource and ciphertext, authenticates/decrypts in memory,
+  appends its audit event, and deletes the ciphertext in one transaction. Only
+  one concurrent caller succeeds. The response is `no-store`; losing that
+  successful response is intentionally at-most-once and requires a future
+  explicit credential-rotation flow rather than replaying the secret.
 - Money stored as integer minor units; PII access is logged.
 - Control-plane backups use chunked AES-256-GCM with a fresh random nonce prefix
   per archive. Every chunk, including the terminal record, is authenticated; a

@@ -15,9 +15,10 @@ staging. Production activation is deliberately deferred; external mail/OAuth
 credentials and a production release approval remain operational gates, not
 missing Phase 1 code. Phase 2 is now **in progress** with a review branch for the
 site-provisioning vertical slice and a stacked branch for encrypted
-control-plane backup/restore. Neither is merged or deployed. Customer database
-lifecycle remains outstanding, and off-host production backup storage/key
-custody remain deployment gates.
+control-plane backup/restore. A third stacked review branch implements the
+opt-in PostgreSQL/MariaDB customer database lifecycle. None is merged or
+deployed. CI/review, dedicated TLS database targets, external encryption-key
+custody, and off-host production backup storage remain release gates.
 
 ---
 
@@ -103,7 +104,11 @@ The heart of the platform: drive Docker/Caddy through a provider-neutral boundar
   retries/backoff, stale-job recovery, and compensating cleanup
 - 🚧 Site lifecycle: create → active → suspend/resume → delete, exposed through
   tenant-scoped APIs and a status-polled dashboard
-- Database lifecycle: scoped PostgreSQL/MariaDB DB + user provisioning
+- 🚧 Database lifecycle: additive tenant-scoped schema, idempotent asynchronous
+  PostgreSQL/MariaDB database + least-privilege user provisioning, encrypted
+  one-time credential reveal, delete/cleanup compensation, and dashboard flows.
+  The stacked review branch defaults the feature off and still requires CI,
+  review, and disposable real-engine validation before merge.
 - 🚧 Reconciliation job: detect/repair managed site state without adopting or
   deleting unrelated Docker/Caddy resources
 - 🚧 Basic control-plane backups: an opt-in non-root Compose scheduler now streams
@@ -112,9 +117,12 @@ The heart of the platform: drive Docker/Caddy through a provider-neutral boundar
   disposable restore rehearsal. It remains a review-branch feature; production
   still needs external key custody and an off-host encrypted destination.
 
-**Exit criteria:** a customer can create and delete a working website from the
-dashboard, backed by a real isolated site container — and the control-plane DB is backed up
-on a schedule with a tested restore.
+**Exit criteria:** a customer can create and delete a working website and a
+scoped PostgreSQL/MariaDB database from the dashboard, backed by isolated real
+providers, and the control-plane DB is backed up on a schedule with a tested
+restore. This remains in progress until the stacked branches are reviewed,
+green in CI, and merged. Production activation has separate secret, TLS,
+off-host storage, staging verification, and approval gates.
 
 ## Phase 3 — Domains, DNS & SSL ⏳
 

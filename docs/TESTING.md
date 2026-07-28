@@ -172,6 +172,36 @@ The test creates twice, suspends twice, resumes twice, deletes twice, verifies
 HTTP routing, and checks final absence. It must never point at the active Caddy
 admin API.
 
+## Phase 2 customer database tests
+
+Frontend behavior tests validate the create form, selected engine payload,
+transitional status, explicit one-time reveal confirmation, returned credential
+display, and typed delete confirmation.
+
+Real control-plane PostgreSQL integration covers concurrent idempotent create,
+tenant isolation, job payload secrecy, delete winning over in-flight
+provisioning, concurrent one-time reveal, and audit-trigger failures that roll
+back create, completion, and credential consumption. The fake data-plane
+provider proves the full durable job lifecycle without external credentials.
+
+The real adapter integration test requires disposable targets:
+
+```bash
+bash deploy/validation/run-postgres-phase2.sh
+bash deploy/validation/run-customer-databases-phase2.sh
+```
+
+The first script proves migration `up`/idempotent `up`/latest `down`/`up`,
+preserves earlier Phase 1/2 data, and runs service integration. The second
+creates isolated real targets; for both engines it creates a scoped
+database/user, proves the credential can write only its database, retries create
+with password rotation while preserving data, rejects the old password, deletes
+twice, and confirms both physical database and login are absent. CI pins
+disposable PostgreSQL 18 and MariaDB 11.8.8 services. Both scripts use unique
+resource names, refuse to reuse existing objects, and remove only their own
+containers, network, and cache volumes. No test may point at the control-plane
+database or an active customer target.
+
 ## Phase 2 control-plane backup tests
 
 `internal/backup` tests authenticated multi-chunk and empty-stream round trips,

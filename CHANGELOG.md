@@ -14,6 +14,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 2 customer database lifecycle (stacked review branch, not deployed):**
+  an additive tenant-scoped `databases`/`database_credentials` schema; durable
+  asynchronous PostgreSQL/MariaDB provision, delete, and cleanup jobs; real
+  least-privilege provider adapters; AES-256-GCM encrypted pending credentials;
+  audited at-most-once credential reveal; fail-closed production configuration;
+  and a responsive database dashboard with real interaction tests. CI exercises
+  both disposable engines, password rotation, privilege isolation, idempotent
+  teardown, concurrent create/reveal behavior, and audit rollback paths.
 - **Encrypted Phase 2 control-plane backup/restore (stacked review branch, not
   deployed):** a non-root opt-in Compose scheduler streams PostgreSQL 18 custom
   dumps through chunked authenticated AES-256-GCM encryption, atomically
@@ -51,9 +59,11 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 - The backend build and CI toolchain now require Go 1.26.5, closing standard
   library vulnerabilities reported against the prior 1.26.2 build.
 - Phase 1 is technically complete and staging-verified; production activation is
-  explicitly deferred. Phase 2 remains incomplete until customer database
-  lifecycle is implemented, both review branches pass review/CI, and the
-  production backup key/off-host destination are configured and verified.
+  explicitly deferred. Phase 2 remains incomplete until the stacked site,
+  backup, and database review branches pass review/CI and merge. Dedicated TLS
+  customer-database targets, external credential/backup key custody, off-host
+  backup storage, staging verification, and release approval remain production
+  gates.
 - Bun `up` now assigns one rollback group per migration instead of grouping all
   pending files. Production stays forward-only; a development `down` can only
   target the newest migration. Production mail configuration fails fast unless

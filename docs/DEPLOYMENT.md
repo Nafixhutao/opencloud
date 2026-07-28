@@ -26,7 +26,7 @@ working `docker buildx` plugin; on Ubuntu 24.04 the package is `docker-buildx`.
 Runs on every PR and on merge to `main`. **Merges are blocked unless CI is green.**
 
 ```
-1. Backend:  gofmt check · golangci-lint · vet · unit/real-Postgres tests · migration round trip · govulncheck · docker build
+1. Backend:  gofmt check · golangci-lint · vet · unit/real-Postgres tests · real PostgreSQL/MariaDB customer lifecycle · migration round trip · govulncheck · docker build
 2. Frontend: Better Auth migration · auth/UI tests · oxlint · tsc --noEmit · npm run build · npm audit
 3. Image publishing and automatic deployment are added with the release pipeline.
 4. Backup gate: authenticated encryption unit tests + a real disposable
@@ -129,6 +129,14 @@ configuration. The tagged Docker/Caddy integration test uses fixed deterministic
 resource names so cleanup can target exactly those objects. Passing this
 validation does not authorize staging promotion or production deployment.
 
+The customer-database slice is validated on a separate disposable Docker
+network with one control-plane PostgreSQL, one dedicated customer PostgreSQL,
+and one dedicated MariaDB. The rehearsal covers create/retry/password rotation,
+least-privilege isolation, one-time credential consumption, delete/cleanup, and
+migration `up`/idempotent `up`/`down`/`up`. Its script must remove only the
+uniquely named containers, volumes, and network it created; active OpenCloud
+services are never joined or changed.
+
 ## 9. Secrets & config at deploy time
 
 - Production secrets come from the orchestrator's secret store, injected as env
@@ -138,6 +146,12 @@ validation does not authorize staging promotion or production deployment.
   `BETTER_AUTH_SECRET` invalidates active sessions/tokens (clients re-authenticate),
   and the Go API picks up the new signing key automatically from the JWKS at
   `AUTH_JWKS_URL` — no API secret to rotate for auth.
+- Customer databases remain disabled unless the worker receives separate
+  dedicated PostgreSQL/MariaDB admin targets, externally managed
+  `CUSTOMER_DATABASE_CREDENTIAL_KEY`, public TLS endpoints, and
+  `CUSTOMER_DATABASES_ENABLED=true`. The customer targets must not equal the
+  control-plane `DATABASE_URL`; enabling this is a reviewed staging/production
+  release action, not a default Compose behavior.
 
 ## 10. Post-deploy verification
 
