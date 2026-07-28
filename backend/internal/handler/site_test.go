@@ -37,3 +37,29 @@ func TestSiteResponseHidesControlPlanePlacementDetails(t *testing.T) {
 	require.NotContains(t, string(raw), "memory_bytes")
 	require.NotContains(t, string(raw), "nano_cpus")
 }
+
+func TestManagedDatabaseResponseHidesTenantAndPhysicalIdentifiers(t *testing.T) {
+	now := time.Now().UTC()
+	row := &model.ManagedDatabase{
+		ID:                   uuid.New(),
+		AccountID:            uuid.New(),
+		Name:                 "orders",
+		Engine:               model.DatabaseEnginePostgres,
+		PhysicalDatabaseName: "ocdb_0123456789abcdef0123456789abcdef",
+		PhysicalUsername:     "ocu_0123456789abcdef0123456789abcdef",
+		Status:               model.DatabaseActive,
+		IdempotencyKey:       "private-idempotency-key",
+		CredentialAvailable:  true,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+
+	raw, err := json.Marshal(newManagedDatabaseResponse(row))
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"name":"orders"`)
+	require.Contains(t, string(raw), `"credential_available":true`)
+	require.NotContains(t, string(raw), row.AccountID.String())
+	require.NotContains(t, string(raw), row.PhysicalDatabaseName)
+	require.NotContains(t, string(raw), row.PhysicalUsername)
+	require.NotContains(t, string(raw), row.IdempotencyKey)
+}

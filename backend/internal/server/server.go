@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/config"
+	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/handler"
 	"github.com/nazxf/opencloud/backend/internal/metrics"
 	"github.com/nazxf/opencloud/backend/internal/middleware"
@@ -36,7 +37,14 @@ type Server struct {
 // New builds the router, mounts middleware and routes, and returns a Server
 // ready to Run. Middleware order: request-id → logger → recovery → cors →
 // ratelimit → auth (BACKEND.md §5).
-func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *metrics.Metrics) *Server {
+func New(
+	cfg *config.Config,
+	log *zap.Logger,
+	db *bun.DB,
+	rdb *redis.Client,
+	m *metrics.Metrics,
+	databaseCipher *credential.Cipher,
+) *Server {
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -58,6 +66,7 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 	acctRepo := repository.NewAccountRepo(db)
 	auditRepo := repository.NewAuditRepo(db)
 	siteRepo := repository.NewSiteRepo(db)
+	databaseRepo := repository.NewManagedDatabaseRepo(db)
 	nodeRepo := repository.NewNodeRepo(db)
 	jobRepo := repository.NewJobRepo(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
@@ -71,9 +80,18 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 		cfg.Provisioner.SiteImage,
 	)
 	nodeSvc := service.NewNodeService(db, nodeRepo, auditRepo)
+	databaseSvc := service.NewManagedDatabaseService(
+		db,
+		databaseRepo,
+		jobRepo,
+		auditRepo,
+		cfg.CustomerDatabases.Enabled,
+		databaseCipher,
+	)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
+	databaseH := handler.NewManagedDatabaseHandler(databaseSvc)
 
 	v1 := r.Group("/api/v1")
 	// Global API rate limit (cheap abuse guard); auth routes have tighter limits.
@@ -99,6 +117,23 @@ func New(cfg *config.Config, log *zap.Logger, db *bun.DB, rdb *redis.Client, m *
 			authed.POST("/sites/:id/suspend", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Suspend)
 			authed.POST("/sites/:id/resume", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Resume)
 			authed.DELETE("/sites/:id", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Delete)
+			authed.GET("/databases", databaseH.List)
+			authed.POST(
+				"/databases",
+				middleware.RateLimit(rdb, "database-write", 30, time.Minute),
+				databaseH.Create,
+			)
+			authed.GET("/databases/:id", databaseH.Get)
+			authed.DELETE(
+				"/databases/:id",
+				middleware.RateLimit(rdb, "database-write", 30, time.Minute),
+				databaseH.Delete,
+			)
+			authed.POST(
+				"/databases/:id/credentials/reveal",
+				middleware.RateLimit(rdb, "database-credential", 10, time.Minute),
+				databaseH.RevealCredential,
+			)
 
 			admin := authed.Group("/admin")
 			admin.Use(middleware.RequireRole(model.RoleAdmin))

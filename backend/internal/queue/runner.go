@@ -13,6 +13,7 @@ import (
 	"github.com/uptrace/bun"
 	"go.uber.org/zap"
 
+	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/model"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/repository"
@@ -175,12 +176,15 @@ func retryBackoff(attempt int) time.Duration {
 // Processor executes one provider operation and commits its control-plane
 // transition plus audit event with the job completion.
 type Processor struct {
-	db          *bun.DB
-	sites       *repository.SiteRepo
-	nodes       *repository.NodeRepo
-	jobs        *repository.JobRepo
-	audit       *repository.AuditRepo
-	provisioner provisioner.SiteProvisioner
+	db                  *bun.DB
+	sites               *repository.SiteRepo
+	nodes               *repository.NodeRepo
+	databases           *repository.ManagedDatabaseRepo
+	jobs                *repository.JobRepo
+	audit               *repository.AuditRepo
+	provisioner         provisioner.SiteProvisioner
+	databaseProvisioner provisioner.DatabaseProvisioner
+	credentialCipher    *credential.Cipher
 }
 
 // NewProcessor constructs a Processor.
@@ -191,14 +195,20 @@ func NewProcessor(
 	jobs *repository.JobRepo,
 	audit *repository.AuditRepo,
 	p provisioner.SiteProvisioner,
+	databases *repository.ManagedDatabaseRepo,
+	databaseProvisioner provisioner.DatabaseProvisioner,
+	credentialCipher *credential.Cipher,
 ) *Processor {
 	return &Processor{
-		db:          db,
-		sites:       sites,
-		nodes:       nodes,
-		jobs:        jobs,
-		audit:       audit,
-		provisioner: p,
+		db:                  db,
+		sites:               sites,
+		nodes:               nodes,
+		databases:           databases,
+		jobs:                jobs,
+		audit:               audit,
+		provisioner:         p,
+		databaseProvisioner: databaseProvisioner,
+		credentialCipher:    credentialCipher,
 	}
 }
 
@@ -209,6 +219,15 @@ type sitePayload struct {
 // Handle executes an idempotent provider call, then atomically persists its
 // domain state, audit row, and successful job status.
 func (p *Processor) Handle(ctx context.Context, job *model.Job, workerID string) error {
+	switch job.Kind {
+	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
+		return p.handleDatabase(ctx, job, workerID)
+	default:
+		return p.handleSite(ctx, job, workerID)
+	}
+}
+
+func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID string) error {
 	var payload sitePayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil || payload.SiteID == uuid.Nil {
 		return errors.New("invalid job payload")
@@ -302,6 +321,160 @@ func (p *Processor) Handle(ctx context.Context, job *model.Job, workerID string)
 	})
 }
 
+type databasePayload struct {
+	DatabaseID uuid.UUID `json:"database_id"`
+}
+
+func (p *Processor) handleDatabase(
+	ctx context.Context,
+	job *model.Job,
+	workerID string,
+) error {
+	if p.databases == nil || p.databaseProvisioner == nil || p.credentialCipher == nil {
+		return errors.New("customer database provisioner is not configured")
+	}
+	var payload databasePayload
+	if err := json.Unmarshal(job.Payload, &payload); err != nil || payload.DatabaseID == uuid.Nil {
+		return errors.New("invalid database job payload")
+	}
+	row, err := p.databases.GetForWorker(ctx, payload.DatabaseID)
+	if err != nil {
+		return fmt.Errorf("load job database: %w", err)
+	}
+	ref := provisioner.DatabaseRef{
+		DatabaseID:   row.ID,
+		AccountID:    row.AccountID,
+		Engine:       row.Engine,
+		DatabaseName: row.PhysicalDatabaseName,
+		Username:     row.PhysicalUsername,
+	}
+
+	switch job.Kind {
+	case model.JobProvisionDatabase:
+		credentials, err := p.databaseProvisioner.CreateDatabase(
+			ctx,
+			provisioner.DatabaseSpec(ref),
+		)
+		if err != nil {
+			return err
+		}
+		plaintext, err := json.Marshal(credentials)
+		credentials.Password = ""
+		if err != nil {
+			return err
+		}
+		defer clear(plaintext)
+		envelope, err := p.credentialCipher.Encrypt(row.ID, plaintext)
+		if err != nil {
+			return err
+		}
+		return p.completeDatabaseProvision(ctx, job, workerID, row.ID, envelope)
+	case model.JobDeleteDatabase, model.JobCleanupDatabase:
+		if err := p.databaseProvisioner.DeleteDatabase(ctx, ref); err != nil {
+			return err
+		}
+		return p.completeDatabaseDelete(ctx, job, workerID, row.ID)
+	default:
+		return fmt.Errorf("unsupported database job kind %q", job.Kind)
+	}
+}
+
+func (p *Processor) completeDatabaseProvision(
+	ctx context.Context,
+	job *model.Job,
+	workerID string,
+	databaseID uuid.UUID,
+	envelope []byte,
+) error {
+	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		rows := p.databases.WithDB(tx)
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+
+		current, err := rows.GetForWorkerForUpdate(ctx, databaseID)
+		if err != nil {
+			return err
+		}
+		action := model.AuditDatabaseProvisioned
+		resultStatus := current.Status
+		if current.Status == model.DatabaseProvisioning {
+			if err := rows.StoreCredential(ctx, databaseID, envelope); err != nil {
+				return err
+			}
+			if err := rows.SetWorkerStatus(ctx, databaseID, model.DatabaseActive, nil); err != nil {
+				return err
+			}
+			resultStatus = model.DatabaseActive
+		} else {
+			// A newer delete intent wins. The delete job will remove the
+			// idempotently-created data-plane resource; no credential is stored.
+			action = model.AuditDatabaseProvisionSuperseded
+		}
+		aid := current.AccountID
+		if err := audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			Action:    action,
+			Target:    stringPointer(databaseID.String()),
+			Metadata: map[string]any{
+				"name":     current.Name,
+				"engine":   current.Engine,
+				"job_id":   job.ID.String(),
+				"job_kind": job.Kind,
+				"status":   resultStatus,
+			},
+		}); err != nil {
+			return err
+		}
+		return jobs.Complete(ctx, job.ID, workerID)
+	})
+}
+
+func (p *Processor) completeDatabaseDelete(
+	ctx context.Context,
+	job *model.Job,
+	workerID string,
+	databaseID uuid.UUID,
+) error {
+	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		rows := p.databases.WithDB(tx)
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+
+		current, err := rows.GetForWorkerForUpdate(ctx, databaseID)
+		if err != nil {
+			return err
+		}
+		if err := rows.DeleteCredential(ctx, databaseID); err != nil {
+			return err
+		}
+		action := model.AuditDatabaseCleanupCompleted
+		resultStatus := current.Status
+		if job.Kind == model.JobDeleteDatabase {
+			if err := rows.MarkDeleted(ctx, databaseID); err != nil {
+				return err
+			}
+			action = model.AuditDatabaseDeleted
+			resultStatus = model.DatabaseDeleted
+		}
+		aid := current.AccountID
+		if err := audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			Action:    action,
+			Target:    stringPointer(databaseID.String()),
+			Metadata: map[string]any{
+				"name":     current.Name,
+				"engine":   current.Engine,
+				"job_id":   job.ID.String(),
+				"job_kind": job.Kind,
+				"status":   resultStatus,
+			},
+		}); err != nil {
+			return err
+		}
+		return jobs.Complete(ctx, job.ID, workerID)
+	})
+}
+
 func (p *Processor) reconcile(ctx context.Context, site *model.Site, ref provisioner.SiteRef) error {
 	observed, err := p.provisioner.SiteStatus(ctx, ref)
 	if err != nil {
@@ -354,6 +527,15 @@ func (p *Processor) reconcile(ctx context.Context, site *model.Site, ref provisi
 // Exhaust atomically fails a job, marks the resource failed, appends an audit,
 // and enqueues compensating cleanup after failed provisioning.
 func (p *Processor) Exhaust(ctx context.Context, job *model.Job, workerID, safeError string) error {
+	switch job.Kind {
+	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
+		return p.exhaustDatabase(ctx, job, workerID, safeError)
+	default:
+		return p.exhaustSite(ctx, job, workerID, safeError)
+	}
+}
+
+func (p *Processor) exhaustSite(ctx context.Context, job *model.Job, workerID, safeError string) error {
 	var payload sitePayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return err
@@ -392,6 +574,68 @@ func (p *Processor) Exhaust(ctx context.Context, job *model.Job, workerID, safeE
 			return err
 		}
 		return nil
+	})
+}
+
+func (p *Processor) exhaustDatabase(
+	ctx context.Context,
+	job *model.Job,
+	workerID, safeError string,
+) error {
+	if p.databases == nil {
+		return errors.New("customer database repository is not configured")
+	}
+	var payload databasePayload
+	if err := json.Unmarshal(job.Payload, &payload); err != nil || payload.DatabaseID == uuid.Nil {
+		return errors.New("invalid database job payload")
+	}
+	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		rows := p.databases.WithDB(tx)
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+
+		current, err := rows.GetForWorkerForUpdate(ctx, payload.DatabaseID)
+		if err != nil {
+			return err
+		}
+		if err := jobs.Fail(ctx, job.ID, workerID, safeError); err != nil {
+			return err
+		}
+		if err := rows.DeleteCredential(ctx, current.ID); err != nil {
+			return err
+		}
+		if current.Status != model.DatabaseDeleting && current.Status != model.DatabaseDeleted {
+			if err := rows.SetWorkerStatus(ctx, current.ID, model.DatabaseFailed, &safeError); err != nil {
+				return err
+			}
+		} else if job.Kind == model.JobDeleteDatabase {
+			if err := rows.SetWorkerStatus(ctx, current.ID, model.DatabaseFailed, &safeError); err != nil {
+				return err
+			}
+		}
+		if job.Kind == model.JobProvisionDatabase && current.Status != model.DatabaseDeleting {
+			aid := current.AccountID
+			if _, err := jobs.Enqueue(
+				ctx,
+				&aid,
+				model.JobCleanupDatabase,
+				databasePayload{DatabaseID: current.ID},
+			); err != nil {
+				return err
+			}
+		}
+		aid := current.AccountID
+		return audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			Action:    model.AuditDatabaseFailed,
+			Target:    stringPointer(current.ID.String()),
+			Metadata: map[string]any{
+				"name":     current.Name,
+				"engine":   current.Engine,
+				"job_id":   job.ID.String(),
+				"job_kind": job.Kind,
+			},
+		})
 	})
 }
 

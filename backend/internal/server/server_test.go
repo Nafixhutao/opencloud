@@ -18,7 +18,7 @@ func TestRecoveredPanicIsObserved(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	m := metrics.New()
-	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, m)
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, m, nil)
 	r := s.http.Handler.(*gin.Engine)
 	r.GET("/panic", func(_ *gin.Context) { panic("boom") })
 
@@ -50,7 +50,7 @@ func TestRecoveredPanicIsObserved(t *testing.T) {
 func TestHTTPTimeoutsAreConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New())
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New(), nil)
 	require.Equal(t, 10*time.Second, s.http.ReadHeaderTimeout)
 	require.Equal(t, 30*time.Second, s.http.ReadTimeout)
 	require.Equal(t, 30*time.Second, s.http.WriteTimeout)
@@ -61,7 +61,7 @@ func TestHTTPTimeoutsAreConfigured(t *testing.T) {
 func TestMetricsUsesSeparateListener(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New())
+	s := New(&config.Config{HTTPAddr: ":0", MetricsAddr: ":0"}, zap.NewNop(), nil, nil, metrics.New(), nil)
 
 	public := httptest.NewRecorder()
 	s.http.Handler.ServeHTTP(public, httptest.NewRequest(http.MethodGet, "/metrics", nil))
