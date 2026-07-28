@@ -31,6 +31,7 @@ export type DatabaseCredentials = {
 type DatabaseEnvelope = { data: ManagedDatabase };
 type CredentialEnvelope = { data: DatabaseCredentials };
 type ErrorEnvelope = { error?: { code?: string; message?: string } };
+export type DatabaseListParams = { page: number; perPage: number };
 
 export class DatabaseAPIError extends Error {
   constructor(
@@ -63,8 +64,15 @@ async function databaseRequest<T>(path: string, init?: RequestInit): Promise<T> 
   return body as T;
 }
 
-export function listDatabases(): Promise<DatabasesEnvelope> {
-  return databaseRequest<DatabasesEnvelope>('/api/databases');
+export function listDatabases({
+  page,
+  perPage,
+}: DatabaseListParams): Promise<DatabasesEnvelope> {
+  const query = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+  });
+  return databaseRequest<DatabasesEnvelope>(`/api/databases?${query}`);
 }
 
 export function createDatabase(

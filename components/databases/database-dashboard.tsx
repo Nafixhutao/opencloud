@@ -13,7 +13,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -91,6 +91,8 @@ const statusLabel: Record<ManagedDatabase['status'], string> = {
 
 export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
   const queryClient = useQueryClient();
+  const perPage = initialData.meta.per_page || 25;
+  const [page, setPage] = useState(initialData.meta.page || 1);
   const [revealed, setRevealed] = useState<{
     database: ManagedDatabase;
     credentials: DatabaseCredentials;
@@ -100,9 +102,9 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
     defaultValues: { name: '', engine: 'postgres' },
   });
   const databasesQuery = useQuery({
-    queryKey: ['databases'],
-    queryFn: listDatabases,
-    initialData,
+    queryKey: ['databases', page, perPage],
+    queryFn: () => listDatabases({ page, perPage }),
+    initialData: page === initialData.meta.page ? initialData : undefined,
     refetchInterval: (query) =>
       query.state.data && hasPendingDatabases(query.state.data.data) ? 2_000 : false,
   });
@@ -115,6 +117,7 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
     }: CreateDatabaseValues & { key: string }) => createDatabase(name, engine, key),
     onSuccess: async () => {
       form.reset({ name: '', engine: 'postgres' });
+      setPage(1);
       await queryClient.invalidateQueries({ queryKey: ['databases'] });
     },
   });
@@ -127,6 +130,38 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
       await queryClient.invalidateQueries({ queryKey: ['databases'] });
     },
   });
+  const databasesEnvelope = databasesQuery.data ?? {
+    data: [],
+    meta: {
+      page,
+      per_page: perPage,
+      total: initialData.meta.total,
+    },
+  };
+  const totalPages = Math.max(
+    1,
+    Math.ceil(databasesEnvelope.meta.total / databasesEnvelope.meta.per_page),
+  );
+
+  useEffect(() => {
+    if (
+      databasesQuery.isFetching ||
+      !databasesQuery.data ||
+      databasesQuery.data.data.length > 0 ||
+      page <= 1
+    ) {
+      return;
+    }
+    const lastPage = Math.max(
+      1,
+      Math.ceil(
+        databasesQuery.data.meta.total / databasesQuery.data.meta.per_page,
+      ),
+    );
+    if (page > lastPage) {
+      setPage(lastPage);
+    }
+  }, [databasesQuery.data, databasesQuery.isFetching, page]);
   const revealMutation = useMutation({
     mutationFn: ({
       database,
@@ -239,12 +274,20 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
             </h2>
           </div>
           <p className="text-sm text-muted-foreground tabular-nums">
-            {databasesQuery.data.meta.total}{' '}
-            {databasesQuery.data.meta.total === 1 ? 'database' : 'databases'}
+            {databasesEnvelope.meta.total}{' '}
+            {databasesEnvelope.meta.total === 1 ? 'database' : 'databases'}
           </p>
         </div>
 
-        {databasesQuery.data.data.length === 0 ? (
+        {databasesQuery.isPending ? (
+          <div
+            role="status"
+            className="flex min-h-64 items-center justify-center gap-2 rounded-lg border text-sm text-muted-foreground"
+          >
+            <Spinner />
+            Loading databasesâ€¦
+          </div>
+        ) : databasesEnvelope.data.length === 0 ? (
           <Empty className="min-h-64 border">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -271,7 +314,7 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {databasesQuery.data.data.map((database) => (
+                  {databasesEnvelope.data.map((database) => (
                     <TableRow key={database.id}>
                       <TableCell>
                         <DatabaseIdentity database={database} />
@@ -304,7 +347,7 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
             </div>
 
             <ul className="flex flex-col gap-3 md:hidden">
-              {databasesQuery.data.data.map((database) => (
+              {databasesEnvelope.data.map((database) => (
                 <li key={database.id} className="flex flex-col gap-4 rounded-lg border p-4">
                   <div className="flex items-start justify-between gap-3">
                     <DatabaseIdentity database={database} />
@@ -330,7 +373,37 @@ export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
             </ul>
           </>
         )}
-        {hasPendingDatabases(databasesQuery.data.data) ? (
+        {totalPages > 1 ? (
+          <nav
+            aria-label="Database pagination"
+            className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+          >
+            <p className="text-sm text-muted-foreground tabular-nums">
+              Page {page} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || databasesQuery.isFetching}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || databasesQuery.isFetching}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </nav>
+        ) : null}
+        {hasPendingDatabases(databasesEnvelope.data) ? (
           <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner />
             Refreshing lifecycle status…

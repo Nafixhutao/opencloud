@@ -168,6 +168,72 @@ describe('DatabaseDashboard', () => {
       expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'DELETE' }),
     );
   });
+
+  it('loads and deletes a database beyond the first 25, then returns to the last valid page', async () => {
+    const firstPage = Array.from({ length: 25 }, (_, index) =>
+      managedDatabase({
+        id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+        name: `database_${index + 1}`,
+      }),
+    );
+    const database26 = managedDatabase({
+      id: '00000000-0000-0000-0000-000000000026',
+      name: 'database_26',
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [database26],
+          meta: { page: 2, per_page: 25, total: 26 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ data: { ...database26, status: 'deleting' } }, 202),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [],
+          meta: { page: 2, per_page: 25, total: 25 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: firstPage,
+          meta: { page: 1, per_page: 25, total: 25 },
+        }),
+      );
+    renderDashboard({
+      data: firstPage,
+      meta: { page: 1, per_page: 25, total: 26 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findAllByText('database_26')).not.toHaveLength(0);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/databases?page=2&per_page=25',
+    );
+
+    fireEvent.click(
+      within(screen.getByRole('table')).getByRole('button', { name: 'Delete' }),
+    );
+    fireEvent.change(await screen.findByLabelText('Database name'), {
+      target: { value: 'database_26' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete database' }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/databases/${database26.id}`,
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(
+        ([path]) => path === '/api/databases?page=1&per_page=25',
+      )).toBe(true),
+    );
+  });
 });
 
 function managedDatabase(
