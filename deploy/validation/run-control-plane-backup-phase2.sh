@@ -42,6 +42,32 @@ mark_stage() {
   printf 'backup_validation_stage=%s\n' "${validation_stage}"
 }
 
+wait_for_database() {
+  local container="$1"
+  local database="$2"
+
+  for _ in $(seq 1 60); do
+    # The official PostgreSQL entrypoint briefly starts a temporary server
+    # during initialization. pg_isready can succeed against that server just
+    # before it is shut down. PID 1 becomes postgres only after initialization
+    # is complete, and the SQL probe also proves the requested database exists.
+    if docker exec "${container}" sh -euc \
+      'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 &&
+      test "$(
+        docker exec "${container}" psql \
+          -U opencloud \
+          -d "${database}" \
+          -Atqc 'SELECT 1' 2>/dev/null
+      )" = "1"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  docker logs --tail 100 "${container}" >&2 || true
+  return 1
+}
+
 trap finish EXIT
 mark_stage cleanup
 cleanup
@@ -69,16 +95,10 @@ docker run -d \
   -e "POSTGRES_DB=${restore_database}" \
   postgres:18-alpine >/dev/null
 
-for container in "${source_name}" "${restore_name}"; do
-  mark_stage "wait_database_${container}"
-  for _ in $(seq 1 60); do
-    if docker exec "${container}" pg_isready -U opencloud >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
-  docker exec "${container}" pg_isready -U opencloud >/dev/null
-done
+mark_stage "wait_database_${source_name}"
+wait_for_database "${source_name}" "${source_database}"
+mark_stage "wait_database_${restore_name}"
+wait_for_database "${restore_name}" "${restore_database}"
 
 mark_stage apply_migrations
 docker run --rm \
