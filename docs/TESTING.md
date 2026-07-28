@@ -171,3 +171,72 @@ go test -tags=integration ./internal/provisioner \
 The test creates twice, suspends twice, resumes twice, deletes twice, verifies
 HTTP routing, and checks final absence. It must never point at the active Caddy
 admin API.
+
+## Phase 2 customer database tests
+
+Frontend behavior tests validate the create form, selected engine payload,
+transitional status, explicit one-time reveal confirmation, returned credential
+display, and typed delete confirmation.
+
+Real control-plane PostgreSQL integration covers concurrent idempotent create,
+tenant isolation, job payload secrecy, delete winning over in-flight
+provisioning, concurrent one-time reveal, and audit-trigger failures that roll
+back create, completion, and credential consumption. The fake data-plane
+provider proves the full durable job lifecycle without external credentials.
+The delete/provision regression starts separately claimed jobs on different
+workers, forces deletion to own the provider-operation lock first, and proves a
+stale provision never creates an orphan. A second failure-path test creates a
+resource, injects compensating-delete failure, and proves the provision job is
+not completed before durable retry and deletion converge.
+
+Frontend behavior coverage uses more than 25 database rows, requests the second
+page through the BFF, deletes its resource, and verifies navigation returns to
+the last valid page. Route tests also prove invalid page values are normalized
+and `per_page` is capped before proxying.
+
+Dashboard overview coverage renders aggregate totals and active counts above 25
+and asserts the server component makes one overview request rather than reading
+first-page collection arrays. PostgreSQL handler integration inserts live,
+inactive, deleted, and cross-tenant resources, then proves the aggregate
+excludes deleted/foreign rows. The same suite requests `per_page=1000` through
+site, database, and admin-user list handlers and verifies their response
+metadata reports the canonical cap of 100.
+
+The real adapter integration test requires disposable targets:
+
+```bash
+bash deploy/validation/run-postgres-phase2.sh
+bash deploy/validation/run-customer-databases-phase2.sh
+```
+
+The first script proves migration `up`/idempotent `up`/latest `down`/`up`,
+preserves earlier Phase 1/2 data, and runs service integration. The second
+creates isolated real targets; for both engines it creates a scoped
+database/user, proves the credential can write only its database, retries create
+with password rotation while preserving data, rejects the old password, deletes
+twice, and confirms both physical database and login are absent. CI pins
+disposable PostgreSQL 18 and MariaDB 11.8.8 services. Both scripts use unique
+resource names, refuse to reuse existing objects, and remove only their own
+containers, network, and cache volumes. No test may point at the control-plane
+database or an active customer target.
+
+## Phase 2 control-plane backup tests
+
+`internal/backup` tests authenticated multi-chunk and empty-stream round trips,
+tamper/truncation/wrong-key/trailing-data rejection, strict key parsing,
+checksum tamper detection, symlink/traversal rejection, exclusive scheduler
+locking, and pair-aware retention that leaves unknown files untouched.
+
+The CI/VPS rehearsal is:
+
+```bash
+bash deploy/validation/run-control-plane-backup-phase2.sh
+```
+
+It creates two uniquely named disposable PostgreSQL 18 containers and a private
+network/volume, applies all public migrations to the source, inserts a sentinel,
+starts the real scheduler, verifies the encrypted custom archive, proves the
+plaintext sentinel is absent from it, restores into the second database, and
+checks the sentinel/schema. A trap deletes the exact containers, network,
+volume, and image on success or failure. The script never targets an active
+OpenCloud database.

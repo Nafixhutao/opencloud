@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -63,8 +64,7 @@ func (h *AccountHandler) UpdateMe(c *gin.Context) {
 
 // ListUsers handles GET /api/v1/admin/users.
 func (h *AccountHandler) ListUsers(c *gin.Context) {
-	page := queryInt(c, "page", 1)
-	perPage := queryInt(c, "per_page", 25)
+	page, perPage := queryPagination(c)
 	users, total, err := h.svc.ListUsers(c.Request.Context(), middleware.UserID(c), page, perPage)
 	if err != nil {
 		respondError(c, err)
@@ -116,17 +116,24 @@ func queryInt(c *gin.Context, key string, def int) int {
 	if v == "" {
 		return def
 	}
-	var n int
-	for _, ch := range v {
-		if ch < '0' || ch > '9' {
-			return def
-		}
-		n = n*10 + int(ch-'0')
-	}
-	if n == 0 {
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
 		return def
 	}
 	return n
+}
+
+func queryPagination(c *gin.Context) (int, int) {
+	page := queryInt(c, "page", 1)
+	perPage := queryInt(c, "per_page", 25)
+	if perPage > 100 {
+		perPage = 100
+	}
+	maxInt := int(^uint(0) >> 1)
+	if page > 1 && page-1 > maxInt/perPage {
+		page = 1
+	}
+	return page, perPage
 }
 
 // respondError maps typed errors to the API envelope.

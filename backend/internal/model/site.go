@@ -85,12 +85,15 @@ type Job struct {
 
 // Job kind and status values define the durable provisioning queue protocol.
 const (
-	JobProvisionSite = "provision_site"
-	JobDeleteSite    = "delete_site"
-	JobSuspendSite   = "suspend_site"
-	JobResumeSite    = "resume_site"
-	JobCleanupSite   = "cleanup_site"
-	JobReconcileSite = "reconcile_site"
+	JobProvisionSite     = "provision_site"
+	JobDeleteSite        = "delete_site"
+	JobSuspendSite       = "suspend_site"
+	JobResumeSite        = "resume_site"
+	JobCleanupSite       = "cleanup_site"
+	JobReconcileSite     = "reconcile_site"
+	JobProvisionDatabase = "provision_database"
+	JobDeleteDatabase    = "delete_database"
+	JobCleanupDatabase   = "cleanup_database"
 
 	JobQueued    = "queued"
 	JobRunning   = "running"

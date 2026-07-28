@@ -51,6 +51,9 @@ export default async function DashboardLayout({
               <Link href="/sites" className={navLink}>
                 Sites
               </Link>
+              <Link href="/databases" className={navLink}>
+                Databases
+              </Link>
               {isAdmin ? (
                 <Link href="/admin/users" className={navLink}>
                   Users

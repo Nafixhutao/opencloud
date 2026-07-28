@@ -5,6 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 validation_id="${OPENCLOUD_VALIDATION_ID:-019f8d57}"
 postgres_name="opencloud-phase2-pg-${validation_id}"
 network_name="opencloud-phase2-net-${validation_id}"
+go_cache_volume="opencloud-phase2-go-cache-${validation_id}"
+go_mod_volume="opencloud-phase2-go-mod-${validation_id}"
 database_url="postgres://opencloud:opencloud@${postgres_name}:5432/opencloud?sslmode=disable"
 
 case "$validation_id" in
@@ -19,13 +21,22 @@ if docker network inspect "$network_name" >/dev/null 2>&1; then
   echo "refusing to reuse existing network: $network_name" >&2
   exit 1
 fi
+for volume in "$go_cache_volume" "$go_mod_volume"; do
+  if docker volume inspect "$volume" >/dev/null 2>&1; then
+    echo "refusing to reuse existing volume: $volume" >&2
+    exit 1
+  fi
+done
 
 cleanup() {
   docker container rm -f "$postgres_name" >/dev/null 2>&1 || true
   docker network rm "$network_name" >/dev/null 2>&1 || true
+  docker volume rm "$go_cache_volume" "$go_mod_volume" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
+docker volume create --label "opencloud.validation=${validation_id}" "$go_cache_volume" >/dev/null
+docker volume create --label "opencloud.validation=${validation_id}" "$go_mod_volume" >/dev/null
 docker network create \
   --label "opencloud.validation=${validation_id}" \
   "$network_name" >/dev/null
@@ -56,10 +67,10 @@ go_in_validation() {
     --network "$network_name" \
     -e "DATABASE_URL=${database_url}" \
     -v "${repo_root}:/src" \
-    -v "${repo_root}/.gocache:/root/.cache/go-build" \
-    -v "${repo_root}/.gomodcache:/go/pkg/mod" \
+    -v "${go_cache_volume}:/root/.cache/go-build" \
+    -v "${go_mod_volume}:/go/pkg/mod" \
     -w /src/backend \
-    golang:1.26-bookworm \
+    golang:1.26.5-bookworm \
     sh -c "$1"
 }
 
@@ -89,6 +100,59 @@ psql_value "
   VALUES ('00000000-0000-0000-0000-000000000257', 'phase2-migration-sentinel', 'migration.phase2.sentinel', 'phase2-migration-sentinel');
 " >/dev/null
 
+if psql_value "
+  INSERT INTO public.databases (
+    id, account_id, name, engine, physical_database_name,
+    physical_username, status, idempotency_key
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000259',
+    '00000000-0000-0000-0000-000000000257',
+    '9-invalid',
+    'postgres',
+    'ocdb_00000000000000000000000000000259',
+    'ocu_00000000000000000000000000000259',
+    'active',
+    'migration-invalid-name'
+  );
+" >/dev/null 2>&1; then
+  echo "database name constraint unexpectedly accepted invalid input" >&2
+  exit 1
+fi
+
+psql_value "
+  INSERT INTO public.databases (
+    id, account_id, name, engine, physical_database_name,
+    physical_username, status, idempotency_key
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000258',
+    '00000000-0000-0000-0000-000000000257',
+    'migration_sentinel',
+    'postgres',
+    'ocdb_00000000000000000000000000000258',
+    'ocu_00000000000000000000000000000258',
+    'active',
+    'migration-valid-database'
+  );
+" >/dev/null
+if psql_value "
+  UPDATE public.databases
+  SET status = 'deleted'
+  WHERE id = '00000000-0000-0000-0000-000000000258';
+" >/dev/null 2>&1; then
+  echo "database lifecycle constraint accepted deleted status without deleted_at" >&2
+  exit 1
+fi
+if psql_value "
+  INSERT INTO public.database_credentials (database_id, ciphertext)
+  VALUES (
+    '00000000-0000-0000-0000-000000000258',
+    decode(repeat('00', 32), 'hex')
+  );
+" >/dev/null 2>&1; then
+  echo "credential envelope constraint accepted a truncated envelope" >&2
+  exit 1
+fi
+
 go_in_validation "go run ./cmd/migrate up"
 test "$schema_up" = "$(schema_hash)"
 test "$(psql_value "SELECT count(*) FROM public.account_memberships WHERE user_id = 'phase2-migration-sentinel'")" = "1"
@@ -96,11 +160,13 @@ test "$(psql_value "SELECT count(*) FROM public.account_memberships WHERE user_i
 go_in_validation "go run ./cmd/migrate down"
 test "$(psql_value "SELECT count(*) FROM public.account_memberships WHERE user_id = 'phase2-migration-sentinel'")" = "1"
 test "$(psql_value "SELECT count(*) FROM public.audit_logs WHERE action = 'migration.phase2.sentinel'")" = "1"
-test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('nodes','sites','jobs')")" = "0"
+test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('nodes','sites','jobs')")" = "3"
+test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('databases','database_credentials')")" = "0"
 
 go_in_validation "go run ./cmd/migrate up"
 test "$schema_up" = "$(schema_hash)"
-test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('nodes','sites','jobs')")" = "3"
+test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('nodes','sites','jobs','databases','database_credentials')")" = "5"
+test "$(psql_value "SELECT convalidated AND pg_get_constraintdef(oid) LIKE '%provision_database%' AND pg_get_constraintdef(oid) LIKE '%delete_database%' AND pg_get_constraintdef(oid) LIKE '%cleanup_database%' FROM pg_constraint WHERE conrelid='public.jobs'::regclass AND conname='jobs_kind_check'")" = "t"
 test "$(psql_value "SELECT count(*) FROM public.audit_logs WHERE action = 'migration.phase2.sentinel'")" = "1"
 
 go_in_validation "go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1"

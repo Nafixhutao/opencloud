@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -208,6 +210,272 @@ func TestValidateProvisioner(t *testing.T) {
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("ValidateProvisioner() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedKey := base64.StdEncoding.EncodeToString(key)
+
+	tests := []struct {
+		name        string
+		cfg         Config
+		validateAPI bool
+		wantErr     bool
+	}{
+		{
+			name:        "disabled capability needs no secrets",
+			cfg:         Config{Provisioner: ProvisionerConfig{Backend: "fake"}},
+			validateAPI: true,
+		},
+		{
+			name: "enabled API rejects missing credential key",
+			cfg: Config{CustomerDatabases: CustomerDatabaseConfig{
+				Enabled:      true,
+				PostgresHost: "postgres.example.test",
+				PostgresPort: 5432,
+				MariaDBHost:  "mariadb.example.test",
+				MariaDBPort:  3306,
+				TLSRequired:  true,
+			}},
+			validateAPI: true,
+			wantErr:     true,
+		},
+		{
+			name: "enabled worker requires separate admin targets",
+			cfg: Config{
+				Provisioner: ProvisionerConfig{Backend: "fake"},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:       true,
+					CredentialKey: encodedKey,
+					PostgresHost:  "postgres.example.test",
+					PostgresPort:  5432,
+					MariaDBHost:   "mariadb.example.test",
+					MariaDBPort:   3306,
+					TLSRequired:   true,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "complete API configuration succeeds",
+			cfg: Config{CustomerDatabases: CustomerDatabaseConfig{
+				Enabled:       true,
+				CredentialKey: encodedKey,
+				PostgresHost:  "postgres.example.test",
+				PostgresPort:  5432,
+				MariaDBHost:   "mariadb.example.test",
+				MariaDBPort:   3306,
+				TLSRequired:   true,
+			}},
+			validateAPI: true,
+		},
+		{
+			name: "complete worker configuration succeeds",
+			cfg: Config{
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=disable",
+				Provisioner: ProvisionerConfig{Backend: "fake"},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal/postgres",
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			},
+		},
+		{
+			name: "worker rejects customer PostgreSQL on control-plane target",
+			cfg: Config{
+				DatabaseURL: "postgres://control:secret@postgres.internal:5432/opencloud?sslmode=disable",
+				Provisioner: ProvisionerConfig{Backend: "fake"},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=disable",
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "production worker requires TLS for both admin targets",
+			cfg: Config{
+				Env:         "production",
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
+				Provisioner: ProvisionerConfig{
+					Backend:       "docker",
+					DockerSocket:  "/var/run/docker.sock",
+					CaddyAPIURL:   "https://caddy.internal:2019",
+					CaddyServerID: "srv0",
+					SiteImage:     "opencloud/site-static:phase2",
+				},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=disable",
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/?tls=false",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "production worker rejects unverified MariaDB TLS",
+			cfg: Config{
+				Env:         "production",
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
+				Provisioner: ProvisionerConfig{
+					Backend:       "docker",
+					DockerSocket:  "/var/run/docker.sock",
+					CaddyAPIURL:   "https://caddy.internal:2019",
+					CaddyServerID: "srv0",
+					SiteImage:     "opencloud/site-static:phase2",
+				},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=verify-full",
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/?tls=skip-verify",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "production worker accepts verified TLS admin targets",
+			cfg: Config{
+				Env:         "production",
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
+				Provisioner: ProvisionerConfig{
+					Backend:       "docker",
+					DockerSocket:  "/var/run/docker.sock",
+					CaddyAPIURL:   "https://caddy.internal:2019",
+					CaddyServerID: "srv0",
+					SiteImage:     "opencloud/site-static:phase2",
+				},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=verify-full",
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/?tls=true",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			},
+		},
+		{
+			name: "production rejects plaintext customer endpoints",
+			cfg: Config{
+				Env:          "production",
+				AuthIssuer:   "https://auth.example.test",
+				AuthAudience: "https://auth.example.test",
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:       true,
+					CredentialKey: encodedKey,
+					PostgresHost:  "postgres.example.test",
+					PostgresPort:  5432,
+					MariaDBHost:   "mariadb.example.test",
+					MariaDBPort:   3306,
+					TLSRequired:   false,
+				},
+			},
+			validateAPI: true,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			if tt.validateAPI {
+				err = tt.cfg.ValidateAPI()
+			} else {
+				err = tt.cfg.ValidateProvisioner()
+			}
+			if tt.wantErr && err == nil {
+				t.Fatal("validation succeeded, want error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("validation failed: %v", err)
+			}
+		})
+	}
+}
+
+func TestProductionCustomerPostgresRequiresCertificateAndHostnameVerification(
+	t *testing.T,
+) {
+	encodedKey := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	tests := []struct {
+		sslMode string
+		wantErr bool
+	}{
+		{sslMode: "disable", wantErr: true},
+		{sslMode: "allow", wantErr: true},
+		{sslMode: "prefer", wantErr: true},
+		{sslMode: "require", wantErr: true},
+		{sslMode: "verify-ca", wantErr: true},
+		{sslMode: "verify-full"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.sslMode, func(t *testing.T) {
+			cfg := Config{
+				Env:         "production",
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
+				Provisioner: ProvisionerConfig{
+					Backend:       "docker",
+					DockerSocket:  "/var/run/docker.sock",
+					CaddyAPIURL:   "https://caddy.internal:2019",
+					CaddyServerID: "srv0",
+					SiteImage:     "opencloud/site-static:phase2",
+				},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=" + tt.sslMode,
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/?tls=true",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			}
+
+			err := cfg.ValidateProvisioner()
+			if tt.wantErr && err == nil {
+				t.Fatalf("sslmode=%s unexpectedly passed production validation", tt.sslMode)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("sslmode=%s unexpectedly failed production validation: %v", tt.sslMode, err)
 			}
 		})
 	}

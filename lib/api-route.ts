@@ -10,7 +10,14 @@ export async function proxyAPI(
   try {
     const response = await apiFetch(path, init);
     const body = await response.json().catch(() => null);
-    return NextResponse.json(body, { status: response.status });
+    const proxied = NextResponse.json(body, { status: response.status });
+    for (const name of ['cache-control', 'pragma']) {
+      const value = response.headers.get(name);
+      if (value) {
+        proxied.headers.set(name, value);
+      }
+    }
+    return proxied;
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHENTICATED') {
       return NextResponse.json(

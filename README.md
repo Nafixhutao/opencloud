@@ -71,10 +71,13 @@ opencloud/
 ```
 
 > **Status:** Phase 1 auth/accounts is implemented, security-hardened, and
-> verified in staging; its production release is deliberately deferred. Phase 2
-> provisioning core is in progress on a review branch and is not deployed.
-> Database lifecycle and backup/restore remain outstanding. See
-> [`ROADMAP.md`](ROADMAP.md).
+> verified in staging; its production release is deliberately deferred. The
+> Phase 2 site-provisioning core is merged into `main` but is not deployed.
+> PR #26 is the active review branch for encrypted scheduled control-plane
+> backup/restore plus the opt-in PostgreSQL/MariaDB customer database lifecycle,
+> one-time credential delivery, and a paginated database dashboard. Review,
+> green CI on the hardened head, and explicit release approval remain required.
+> See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
 
@@ -138,6 +141,12 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
 | `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
 | `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
+| `CONTROL_PLANE_BACKUP_KEY` | External base64 AES-256 key for the opt-in encrypted backup profile |
+| `CONTROL_PLANE_BACKUP_RETENTION_DAYS` / `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | Backup retention and schedule |
+| `CUSTOMER_DATABASES_ENABLED` | Opt-in customer database lifecycle; disabled by default |
+| `CUSTOMER_DATABASE_CREDENTIAL_KEY` | External base64 AES-256 key used only for pending one-time database credentials |
+| `CUSTOMER_POSTGRES_ADMIN_URL` / `CUSTOMER_MARIADB_ADMIN_DSN` | Worker-only admin connections to dedicated customer database targets; PostgreSQL production uses `sslmode=verify-full` |
+| `CUSTOMER_POSTGRES_HOST` / `CUSTOMER_MARIADB_HOST` | Public customer endpoints returned after credential reveal |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
 
 See [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) for the full reference.
@@ -158,6 +167,7 @@ npm run build                       # production build
 
 # Stack
 docker compose logs -f api          # tail the API service
+docker compose --profile backup up -d control-plane-backup
 docker compose down                 # stop everything
 ```
 

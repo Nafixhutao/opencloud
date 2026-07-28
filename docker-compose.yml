@@ -82,6 +82,13 @@ services:
       AUTH_AUDIENCE: ${AUTH_AUDIENCE:-http://localhost:3000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
+      CUSTOMER_DATABASES_ENABLED: ${CUSTOMER_DATABASES_ENABLED:-false}
+      CUSTOMER_DATABASE_CREDENTIAL_KEY: ${CUSTOMER_DATABASE_CREDENTIAL_KEY:-}
+      CUSTOMER_POSTGRES_HOST: ${CUSTOMER_POSTGRES_HOST:-}
+      CUSTOMER_POSTGRES_PORT: ${CUSTOMER_POSTGRES_PORT:-5432}
+      CUSTOMER_MARIADB_HOST: ${CUSTOMER_MARIADB_HOST:-}
+      CUSTOMER_MARIADB_PORT: ${CUSTOMER_MARIADB_PORT:-3306}
+      CUSTOMER_DATABASE_TLS_REQUIRED: ${CUSTOMER_DATABASE_TLS_REQUIRED:-true}
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
@@ -113,10 +120,51 @@ services:
       HESTIA_ACCESS_KEY: ${HESTIA_ACCESS_KEY:-}
       HESTIA_SECRET_KEY: ${HESTIA_SECRET_KEY:-}
       HESTIA_API_KEY: ${HESTIA_API_KEY:-}
+      CUSTOMER_DATABASES_ENABLED: ${CUSTOMER_DATABASES_ENABLED:-false}
+      CUSTOMER_DATABASE_CREDENTIAL_KEY: ${CUSTOMER_DATABASE_CREDENTIAL_KEY:-}
+      CUSTOMER_POSTGRES_ADMIN_URL: ${CUSTOMER_POSTGRES_ADMIN_URL:-}
+      CUSTOMER_POSTGRES_HOST: ${CUSTOMER_POSTGRES_HOST:-}
+      CUSTOMER_POSTGRES_PORT: ${CUSTOMER_POSTGRES_PORT:-5432}
+      CUSTOMER_MARIADB_ADMIN_DSN: ${CUSTOMER_MARIADB_ADMIN_DSN:-}
+      CUSTOMER_MARIADB_HOST: ${CUSTOMER_MARIADB_HOST:-}
+      CUSTOMER_MARIADB_PORT: ${CUSTOMER_MARIADB_PORT:-3306}
+      CUSTOMER_DATABASE_TLS_REQUIRED: ${CUSTOMER_DATABASE_TLS_REQUIRED:-true}
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+
+  # Opt-in encrypted control-plane backups. Start explicitly with:
+  # docker compose --profile backup up -d control-plane-backup
+  # Production key material must come from an orchestrator secret, never .env.
+  control-plane-backup:
+    profiles: ["backup"]
+    build:
+      context: ./backend
+      target: backup
+    command: ["/app/control-plane-backup", "schedule"]
+    environment:
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      BACKUP_ENCRYPTION_KEY: ${CONTROL_PLANE_BACKUP_KEY:-}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${CONTROL_PLANE_BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${CONTROL_PLANE_BACKUP_INTERVAL_SECONDS:-86400}
+      RESTORE_TEMP_DIR: /tmp
+    volumes:
+      - control_plane_backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=0700,uid=70,gid=70
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
         condition: service_healthy
 
   dashboard:
@@ -148,3 +196,4 @@ services:
 
 volumes:
   pgdata:
+  control_plane_backups:

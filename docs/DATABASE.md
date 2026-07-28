@@ -137,6 +137,25 @@ Other resource tables (`domains`, `databases`, `mailboxes`, `dns_zones`,
 `certificates`, `plans`, `subscriptions`) follow the same pattern: `id`,
 `account_id`, optional `node_id`, `status`, timestamps, scoped indexes.
 
+Phase 2 implements `databases` as a tenant-owned desired-state row with
+`postgres|mariadb` engine, internal deterministic physical database/user names,
+async status, and an account-scoped idempotency key. A separate
+`database_credentials` one-to-one row holds only a versioned AES-256-GCM
+ciphertext. Its deletion is the durable one-time-reveal marker; plaintext never
+enters the control-plane schema. List/detail queries project only safe fields
+plus `credential_available` and never return the physical identifiers.
+Database checks independently enforce the customer-label and physical-name
+allowlists, idempotency-key bound, deleted-status timestamp invariant, and
+minimum authenticated-envelope size.
+
+Database jobs extend the existing queue with `provision_database`,
+`delete_database`, and compensating `cleanup_database`. Their JSON payload is
+exactly a server-generated `database_id`. Provider work occurs outside a
+transaction; completion status, encrypted credential publication, audit, and
+job completion commit together afterward. Provider calls for the same database
+are serialized across workers with a session advisory lock held on a dedicated
+connection, without keeping a SQL transaction open during the external call.
+
 ## 4. Bun models
 
 Each table maps to a struct in `internal/model`. Keep tags explicit.
@@ -219,12 +238,36 @@ Rules:
 
 ## 9. Backups
 
-- PostgreSQL: scheduled `pg_dump`/PITR; restores are rehearsed and documented in a
-  runbook before they're needed.
+- The Phase 2 control-plane baseline is an opt-in `control-plane-backup` Compose
+  profile. It runs `pg_dump --format=custom --no-owner --no-privileges`
+  immediately at startup and then on `BACKUP_INTERVAL_SECONDS` (24 hours by
+  default).
+- The dump stream is never written plaintext to the backup volume. The Go
+  backup binary encrypts 64 KiB chunks with AES-256-GCM, a fresh random nonce
+  prefix, monotonic per-chunk nonces, and authenticated header/sequence/length
+  metadata. It publishes the encrypted archive and SHA-256 sidecar atomically
+  with mode `0600`.
+- `BACKUP_ENCRYPTION_KEY` is an external base64-encoded 32-byte secret. Losing
+  it makes the archives unrecoverable; rotating it requires retaining the old
+  key until every archive encrypted with that key has expired.
+- Retention removes only regular files matching OpenCloud's generated archive
+  pattern and their regular checksum sidecars. It never traverses directories,
+  follows symlinks, or runs broad prune commands.
+- Restore first verifies the checksum, authenticates/decrypts to an ephemeral
+  mode-`0600` temp file, asks `pg_restore` to parse the archive, and requires
+  both an exact target database-name confirmation and the literal destructive
+  gate. The rehearsal restores into a second disposable PostgreSQL instance.
+- The Compose named volume is a development/staging default, not sufficient
+  production disaster recovery. Production must mount an access-controlled,
+  encrypted off-host destination (or replicate completed encrypted artifacts
+  off-host), monitor scheduler failures, and rehearse from that copy.
 - Redis: persistence (AOF) is for warm restart convenience, not as a source of
   truth — recovery always assumes PostgreSQL is authoritative.
 - Customer site volumes and databases are backed up by the active provider; see
   [`HOSTING.md`](HOSTING.md).
+
+Operational steps and the destructive restore gate are in
+[`runbooks/control-plane-backup-restore.md`](runbooks/control-plane-backup-restore.md).
 
 ## 10. Phase 1 tenancy tables
 
@@ -248,5 +291,11 @@ pins the new migration too. Site rows retain lifecycle history through
 never credentials or provider secrets. Active site jobs are deduplicated by
 `kind` plus the internally generated `payload.site_id`.
 
-Database lifecycle tables and backup metadata are not part of this slice and
-must arrive as new additive migrations.
+Migration `20260727010000_create_customer_databases` adds `databases` and
+`database_credentials`, and extends the durable job-kind constraint, without
+editing the provisioning-core or any shipped Phase 1 migration. The encrypted
+credential row is deleted in the same transaction as its reveal audit, so
+concurrent callers have at most one winner. The control-plane backup
+implementation does not add schema or alter any shipped migration. No migration
+was added or rewritten for provider-operation serialization or dashboard
+pagination.

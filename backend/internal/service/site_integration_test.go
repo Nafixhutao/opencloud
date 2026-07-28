@@ -287,7 +287,7 @@ func TestSiteLifecycleThroughDurableJobsReleasesCapacityExactlyOnce(t *testing.T
 	fx := newPhase2Fixture(t, 1)
 	ctx := context.Background()
 	fake := provisioner.NewFake()
-	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake)
+	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake, nil, nil, nil)
 
 	site, err := fx.svc.Create(
 		ctx,
@@ -349,7 +349,7 @@ func TestDeleteIntentWinsAgainstInFlightProvisionCompletion(t *testing.T) {
 	fx := newPhase2Fixture(t, 1)
 	ctx := context.Background()
 	fake := provisioner.NewFake()
-	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake)
+	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake, nil, nil, nil)
 
 	site, err := fx.svc.Create(
 		ctx,

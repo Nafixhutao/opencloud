@@ -112,6 +112,15 @@ func RateLimited(msg string) *Error {
 	return New(http.StatusTooManyRequests, "RATE_LIMITED", msg)
 }
 
+// Unavailable returns a 503 error for an intentionally disabled or unhealthy
+// optional capability.
+func Unavailable(msg string) *Error {
+	if msg == "" {
+		msg = "service temporarily unavailable"
+	}
+	return New(http.StatusServiceUnavailable, "UNAVAILABLE", msg)
+}
+
 // Internal returns a 500 error.
 func Internal(msg string) *Error {
 	if msg == "" {

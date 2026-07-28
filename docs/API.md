@@ -88,7 +88,9 @@ Base URL: `/api/v1` · Format: JSON · Auth: JWT (see [`SECURITY.md`](SECURITY.m
 ## 6. Pagination, filtering, sorting
 
 - Pagination: `?page=1&per_page=25`. `per_page` defaults to 25 and is capped
-  (e.g. 100) to protect the DB. Total returned in `meta.total`.
+  at 100 to protect the DB. Invalid values fall back to defaults, and
+  `meta.page`/`meta.per_page` always return the canonical values actually used
+  by the query. Total returned in `meta.total`.
 - Large/hot collections may use cursor pagination: `?cursor=…&limit=…` returning
   `meta.next_cursor`.
 - Filtering: explicit query params (`?status=active`). No arbitrary query DSL.
@@ -143,6 +145,15 @@ owns sign-up, sign-in, social login, session, logout, and the JWT/JWKS endpoints
 The Go API exposes **no** auth endpoints; every route below requires a valid
 better-auth JWT, and the current user/tenant is read from its claims.
 
+### Resource overview
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/overview` | tenant-scoped live site/database totals and active counts |
+
+The overview is calculated by one aggregate database statement and excludes
+soft-deleted rows. Dashboard metrics never infer totals or status counts from a
+paginated collection.
+
 ### Sites
 | Method | Path | Purpose |
 |---|---|---|
@@ -176,8 +187,52 @@ control-plane placement, image, port, and resource-limit fields.
 ### Databases
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/databases` | planned: list databases |
-| `POST` | `/databases` | planned: provision a scoped database (async) |
+| `GET`  | `/databases?page=&per_page=` | list caller's databases (paginated) |
+| `POST` | `/databases` | provision a scoped database (async → `202`; requires `Idempotency-Key`) |
+| `GET` | `/databases/{id}` | caller-owned database detail + status |
+| `POST` | `/databases/{id}/credentials/reveal` | reveal encrypted credentials exactly once |
+| `DELETE` | `/databases/{id}` | delete the scoped database and login (async → `202`) |
+
+Create body:
+
+```json
+{ "name": "orders", "engine": "postgres" }
+```
+
+`engine` is `postgres` or `mariadb`. `name` is a customer-facing label; the
+worker derives separate physical database and username identifiers from the
+resource UUID, and those identifiers are not returned in normal resource
+responses. Status progresses through `provisioning`, `active`, `deleting`,
+`deleted`, or `failed`.
+
+When an active resource has `"credential_available": true`, the caller may
+explicitly reveal it once:
+
+```json
+{
+  "data": {
+    "engine": "postgres",
+    "host": "postgres.example.com",
+    "port": 5432,
+    "database": "ocdb_…",
+    "username": "ocu_…",
+    "password": "shown-only-in-this-response",
+    "tls_required": true
+  }
+}
+```
+
+The response is `Cache-Control: no-store`. The API appends an audit row and
+deletes the encrypted credential in the same transaction before returning it.
+Concurrent reveals therefore produce one success and one `409`. If the client
+loses the successful response, it cannot reveal the value again; rotation is a
+future explicit lifecycle operation, not a hidden retry. Delete intent revokes
+an unrevealed credential transactionally.
+
+All database routes are tenant-scoped and return `404` for another account's
+UUID. Create, delete, and reveal return `503 UNAVAILABLE` when
+`CUSTOMER_DATABASES_ENABLED=false`; list/detail remain readable. Job payloads
+contain only the server-generated `database_id`, never credentials.
 
 ### Admin
 | Method | Path | Purpose |

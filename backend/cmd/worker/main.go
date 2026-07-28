@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/app"
+	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/queue"
 	"github.com/nazxf/opencloud/backend/internal/repository"
@@ -33,17 +34,57 @@ func main() {
 	if err != nil {
 		deps.Log.Fatal("initialize provisioner", zap.Error(err))
 	}
+	var databaseProvisioner provisioner.DatabaseProvisioner
+	var databaseCipher *credential.Cipher
+	if deps.Cfg.CustomerDatabases.Enabled {
+		databaseCipher, err = credential.New(deps.Cfg.CustomerDatabases.CredentialKey)
+		if err != nil {
+			deps.Log.Fatal("initialize customer database credential cipher", zap.Error(err))
+		}
+		sqlProvisioner, err := provisioner.NewSQLDatabaseProvisioner(
+			ctx,
+			deps.Cfg.CustomerDatabases.PostgresAdminURL,
+			provisioner.DatabaseEndpoint{
+				Host:        deps.Cfg.CustomerDatabases.PostgresHost,
+				Port:        deps.Cfg.CustomerDatabases.PostgresPort,
+				TLSRequired: deps.Cfg.CustomerDatabases.TLSRequired,
+			},
+			deps.Cfg.CustomerDatabases.MariaDBAdminDSN,
+			provisioner.DatabaseEndpoint{
+				Host:        deps.Cfg.CustomerDatabases.MariaDBHost,
+				Port:        deps.Cfg.CustomerDatabases.MariaDBPort,
+				TLSRequired: deps.Cfg.CustomerDatabases.TLSRequired,
+			},
+		)
+		if err != nil {
+			deps.Log.Fatal("initialize customer database provisioner", zap.Error(err))
+		}
+		defer sqlProvisioner.Close()
+		databaseProvisioner = sqlProvisioner
+	}
 
 	sites := repository.NewSiteRepo(deps.DB)
+	databases := repository.NewManagedDatabaseRepo(deps.DB)
 	nodes := repository.NewNodeRepo(deps.DB)
 	jobs := repository.NewJobRepo(deps.DB)
 	audit := repository.NewAuditRepo(deps.DB)
-	processor := queue.NewProcessor(deps.DB, sites, nodes, jobs, audit, siteProvisioner)
+	processor := queue.NewProcessor(
+		deps.DB,
+		sites,
+		nodes,
+		jobs,
+		audit,
+		siteProvisioner,
+		databases,
+		databaseProvisioner,
+		databaseCipher,
+	)
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(
 		"worker started",
 		zap.String("provisioner_backend", string(deps.Cfg.Provisioner.Backend)),
+		zap.Bool("customer_databases_enabled", deps.Cfg.CustomerDatabases.Enabled),
 	)
 	runner.Run(ctx)
 	deps.Log.Info("worker shutting down")

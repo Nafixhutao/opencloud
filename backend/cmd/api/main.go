@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/app"
+	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/metrics"
 	"github.com/nazxf/opencloud/backend/internal/server"
 )
@@ -28,8 +29,16 @@ func main() {
 	}
 	defer deps.Close()
 
+	var databaseCipher *credential.Cipher
+	if deps.Cfg.CustomerDatabases.Enabled {
+		databaseCipher, err = credential.New(deps.Cfg.CustomerDatabases.CredentialKey)
+		if err != nil {
+			deps.Log.Fatal("initialize customer database credential cipher", zap.Error(err))
+		}
+	}
+
 	m := metrics.New()
-	srv := server.New(deps.Cfg, deps.Log, deps.DB, deps.RDB, m)
+	srv := server.New(deps.Cfg, deps.Log, deps.DB, deps.RDB, m, databaseCipher)
 
 	if err := srv.Run(ctx); err != nil {
 		deps.Log.Fatal("api exited", zap.Error(err))

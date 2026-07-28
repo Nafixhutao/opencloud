@@ -14,6 +14,21 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 2 customer database lifecycle (stacked review branch, not deployed):**
+  an additive tenant-scoped `databases`/`database_credentials` schema; durable
+  asynchronous PostgreSQL/MariaDB provision, delete, and cleanup jobs; real
+  least-privilege provider adapters; AES-256-GCM encrypted pending credentials;
+  audited at-most-once credential reveal; fail-closed production configuration;
+  and a responsive database dashboard with real interaction tests. CI exercises
+  both disposable engines, password rotation, privilege isolation, idempotent
+  teardown, concurrent create/reveal behavior, and audit rollback paths.
+- **Encrypted Phase 2 control-plane backup/restore (stacked review branch, not
+  deployed):** a non-root opt-in Compose scheduler streams PostgreSQL 18 custom
+  dumps through chunked authenticated AES-256-GCM encryption, atomically
+  publishes SHA-256 sidecars, applies allowlisted pair-aware retention, and
+  requires exact destructive confirmation for restores. CI performs a real
+  two-Postgres rehearsal, verifies the encrypted archive catalog, restores a
+  sentinel, asserts plaintext is absent, and cleans every disposable resource.
 - **Phase 2 site-provisioning core (review branch, not deployed):** additive
   `nodes`, `sites`, and durable `jobs` schema; atomically reserved least-loaded
   placement; tenant-scoped asynchronous site create/suspend/resume/delete APIs;
@@ -41,10 +56,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   events for login, password reset, profile, and admin role/status changes.
 
 ### Changed
+- The backend build and CI toolchain now require Go 1.26.5, closing standard
+  library vulnerabilities reported against the prior 1.26.2 build.
 - Phase 1 is technically complete and staging-verified; production activation is
-  explicitly deferred. Phase 2 remains incomplete until database lifecycle and
-  scheduled backup/rehearsed restore are implemented and the site-provisioning
-  review branch passes CI and review.
+  explicitly deferred. Phase 2 remains incomplete until the stacked site,
+  backup, and database review branches pass review/CI and merge. Dedicated TLS
+  customer-database targets, external credential/backup key custody, off-host
+  backup storage, staging verification, and release approval remain production
+  gates.
 - Bun `up` now assigns one rollback group per migration instead of grouping all
   pending files. Production stays forward-only; a development `down` can only
   target the newest migration. Production mail configuration fails fast unless
@@ -163,6 +182,19 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and empty/unknown role, plus the no-`Auth` case.
 
 ### Fixed
+- Customer database provision/delete/cleanup provider calls are serialized per
+  database across horizontal workers with a session advisory lock and a fresh
+  desired-state check. A delete that arrives during creation triggers immediate
+  compensating cleanup, and cleanup failure leaves the job retryable instead of
+  reporting success or orphaning a database/login.
+- Database pagination now flows through the browser client and BFF, with bounded
+  query parameters, accessible Previous/Next controls, page-aware query caching,
+  and automatic fallback when deletion empties the final page. Backend list
+  metadata now reports the canonical page-size cap used by site, database, and
+  admin-user queries.
+- Dashboard resource metrics now come from one tenant-scoped aggregate query
+  instead of treating the first 25 site/database rows as complete collections;
+  totals and active counts exclude soft-deleted and cross-tenant resources.
 - Last-active-admin count/update is serialized in one transaction with a
   transaction-scoped PostgreSQL advisory lock; self-demotion/self-disable remain
   forbidden. Membership creation uses advisory locking plus `ON CONFLICT` and
@@ -220,6 +252,10 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `CreateDNSZone` (zones live in Cloudflare, not on a node — ADR 0003).
 
 ### Security
+- Production customer PostgreSQL administration now requires certificate and
+  hostname verification (`sslmode=verify-full`) on the primary connection and
+  every fallback; encrypted-but-unverified `allow`, `prefer`, `require`, and
+  `verify-ca` configurations fail closed.
 - Phase 2 customer site responses omit account/node placement, image, internal
   port, and runtime-limit fields. Repeated customer delete requests converge on
   the original terminal state without a second job or capacity decrement.

@@ -160,6 +160,13 @@ func (r *SiteRepo) List(ctx context.Context, acct uuid.UUID, p Page) ([]model.Si
 
 Schema, migrations, and indexing rules: [`DATABASE.md`](DATABASE.md).
 
+The authenticated dashboard uses `GET /api/v1/overview`. Its repository runs
+one tenant-scoped aggregate statement across live sites and databases, so total
+and active metrics remain correct beyond the first collection page without
+loading every resource. Collection handlers canonicalize `page` and
+`per_page` before both service dispatch and response metadata; the maximum page
+size is 100.
+
 ## 8. Provisioner
 
 - The **single gateway** to Docker, Caddy, Cloudflare, or fallback Hestia. The
@@ -258,6 +265,7 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 | `prometheus/client_golang` | `/metrics` endpoint, counters/histograms | — |
 | `go-redis/redis_rate` | Rate limiting middleware | Queueing (ADR 0002) |
 | `stretchr/testify` | `require`/`assert` in tests | Mock generation frameworks |
+| `go-sql-driver/mysql` | Worker-only MariaDB customer provisioning through `database/sql` | Control-plane PostgreSQL access or accepting unvalidated DDL identifiers |
 
 Deliberately **not** used: a validation lib (Gin bundles `validator/v10`), a
 migration tool (Bun has `bun/migrate`), an HTTP client lib (stdlib `net/http`),
@@ -300,6 +308,38 @@ database transaction. Exact-once `capacity_released_at` accounting prevents
 retries from decrementing node usage twice. A delete intent wins over an older
 in-flight provision/suspend/resume result.
 
-The current slice supports only the curated static-site template. Database
-provisioning, backup/restore, Hestia, DNS ownership automation, and a production
+The site slice supports only the curated static-site template. Customer site
+volume/database backup, Hestia, DNS ownership automation, and a production
 Docker authorization boundary are deliberately not claimed.
+
+## Phase 2 customer database lifecycle
+
+- `internal/model`: ManagedDatabase, DatabaseCredential, and database job kinds
+- `internal/repository`: tenant-scoped list/detail/mutation queries and locked,
+  one-time encrypted credential consumption
+- `internal/service`: idempotent async create/delete plus audited credential
+  reveal; each control-plane mutation, job, and audit shares one transaction
+- `internal/provisioner`: provider-neutral `DatabaseProvisioner`, test fake, and
+  real dedicated PostgreSQL/MariaDB target adapter
+- `internal/queue`: provider calls outside transactions; result status,
+  encrypted credential, audit, and job completion commit together
+
+Physical names are deterministic from the server-generated UUID and satisfy a
+strict internal allowlist before reaching DDL. PostgreSQL formatting uses the
+server's identifier/literal quoting; MariaDB DDL receives only validated
+internal identifiers and server-quoted literals. The approved
+`go-sql-driver/mysql` dependency is required because `database/sql` has no
+MariaDB/MySQL driver in the standard library.
+
+Provision, delete, and cleanup calls for one database acquire the same
+session-scoped PostgreSQL advisory lock on a dedicated connection. The worker
+re-reads desired state after acquiring it, so a delete that completed first
+prevents a stale provision job from creating anything. If delete intent arrives
+during creation, the worker removes the newly created resource before completing
+the provision job; cleanup failure is returned for retry. The advisory lock
+spans the provider call without holding a SQL transaction open.
+
+The data-plane admin connections are separate worker-only secrets and must
+never equal the control-plane `DATABASE_URL`. `CUSTOMER_DATABASES_ENABLED=false`
+is the default until both targets, TLS endpoints, and the shared external
+credential-encryption key are configured.
