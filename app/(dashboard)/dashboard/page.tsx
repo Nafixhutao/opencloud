@@ -21,7 +21,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { apiJSON } from '@/lib/api';
+import type { DatabasesEnvelope } from '@/lib/databases';
 import { getSession } from '@/lib/session';
+import type { SitesEnvelope } from '@/lib/sites';
 import { cn } from '@/lib/utils';
 
 // oxlint-disable-next-line react/only-export-components -- Next.js reads this page export.
@@ -61,10 +64,32 @@ export default async function DashboardPage() {
     month: 'short',
     year: 'numeric',
   }).format(new Date(session.user.createdAt));
+  const [sitesResult, databasesResult] = await Promise.allSettled([
+    apiJSON<SitesEnvelope>('/api/v1/sites'),
+    apiJSON<DatabasesEnvelope>('/api/v1/databases'),
+  ]);
+  const sites = sitesResult.status === 'fulfilled' ? sitesResult.value.data : null;
+  const databases =
+    databasesResult.status === 'fulfilled' ? databasesResult.value.data : null;
+  const activeSites = sites?.filter((site) => site.status === 'active').length ?? 0;
+  const activeDatabases =
+    databases?.filter((database) => database.status === 'active').length ?? 0;
   const metrics = [
-    { label: 'Active Sites', value: '0', detail: 'No deployments yet', icon: Globe2 },
+    {
+      label: 'Active Sites',
+      value: sites ? String(activeSites) : 'Unavailable',
+      detail: sites ? `${sites.length} total workloads` : 'Control plane unavailable',
+      icon: Globe2,
+    },
     { label: 'Domains', value: '0', detail: 'No routes connected', icon: HardDrive },
-    { label: 'Databases', value: '0', detail: 'No instances provisioned', icon: Database },
+    {
+      label: 'Databases',
+      value: databases ? String(databases.length) : 'Unavailable',
+      detail: databases
+        ? `${activeDatabases} active instances`
+        : 'Control plane unavailable',
+      icon: Database,
+    },
     {
       label: 'Email Status',
       value: session.user.emailVerified ? 'Verified' : 'Pending',
@@ -170,7 +195,11 @@ export default async function DashboardPage() {
           </CardContent>
           <CardFooter className="gap-2 text-sm text-muted-foreground">
             <CheckCircle2 className="size-4 text-info" aria-hidden="true" />
-            No deployments yet. Create a site to begin the workflow.
+            {sites === null
+              ? 'Site state is temporarily unavailable.'
+              : activeSites > 0
+                ? `${activeSites} active ${activeSites === 1 ? 'site' : 'sites'} in this workspace.`
+                : 'No deployments yet. Create a site to begin the workflow.'}
           </CardFooter>
         </Card>
 
