@@ -119,6 +119,38 @@ services:
       redis:
         condition: service_healthy
 
+  # Opt-in encrypted control-plane backups. Start explicitly with:
+  # docker compose --profile backup up -d control-plane-backup
+  # Production key material must come from an orchestrator secret, never .env.
+  control-plane-backup:
+    profiles: ["backup"]
+    build:
+      context: ./backend
+      target: backup
+    command: ["/app/control-plane-backup", "schedule"]
+    environment:
+      DATABASE_URL: postgres://opencloud:opencloud@postgres:5432/opencloud?sslmode=disable
+      BACKUP_ENCRYPTION_KEY: ${CONTROL_PLANE_BACKUP_KEY:-}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${CONTROL_PLANE_BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${CONTROL_PLANE_BACKUP_INTERVAL_SECONDS:-86400}
+      RESTORE_TEMP_DIR: /tmp
+    volumes:
+      - control_plane_backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=0700,uid=70,gid=70
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   dashboard:
     build:
       context: .
@@ -148,3 +180,4 @@ services:
 
 volumes:
   pgdata:
+  control_plane_backups:

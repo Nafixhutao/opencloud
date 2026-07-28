@@ -1,6 +1,6 @@
 module github.com/nazxf/opencloud/backend
 
-go 1.26.2
+go 1.26.5
 
 require (
 	github.com/MicahParks/keyfunc/v3 v3.8.0
