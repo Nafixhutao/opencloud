@@ -428,3 +428,55 @@ func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestProductionCustomerPostgresRequiresCertificateAndHostnameVerification(
+	t *testing.T,
+) {
+	encodedKey := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	tests := []struct {
+		sslMode string
+		wantErr bool
+	}{
+		{sslMode: "disable", wantErr: true},
+		{sslMode: "allow", wantErr: true},
+		{sslMode: "prefer", wantErr: true},
+		{sslMode: "require", wantErr: true},
+		{sslMode: "verify-ca", wantErr: true},
+		{sslMode: "verify-full"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.sslMode, func(t *testing.T) {
+			cfg := Config{
+				Env:         "production",
+				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
+				Provisioner: ProvisionerConfig{
+					Backend:       "docker",
+					DockerSocket:  "/var/run/docker.sock",
+					CaddyAPIURL:   "https://caddy.internal:2019",
+					CaddyServerID: "srv0",
+					SiteImage:     "opencloud/site-static:phase2",
+				},
+				CustomerDatabases: CustomerDatabaseConfig{
+					Enabled:          true,
+					CredentialKey:    encodedKey,
+					PostgresAdminURL: "postgres://admin:secret@postgres.internal:5432/postgres?sslmode=" + tt.sslMode,
+					PostgresHost:     "postgres.example.test",
+					PostgresPort:     5432,
+					MariaDBAdminDSN:  "admin:secret@tcp(mariadb.internal:3306)/?tls=true",
+					MariaDBHost:      "mariadb.example.test",
+					MariaDBPort:      3306,
+					TLSRequired:      true,
+				},
+			}
+
+			err := cfg.ValidateProvisioner()
+			if tt.wantErr && err == nil {
+				t.Fatalf("sslmode=%s unexpectedly passed production validation", tt.sslMode)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("sslmode=%s unexpectedly failed production validation: %v", tt.sslMode, err)
+			}
+		})
+	}
+}

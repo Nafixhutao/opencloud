@@ -275,12 +275,12 @@ func (c *Config) validateCustomerDatabaseAdminTargets() error {
 	if !c.IsProduction() {
 		return nil
 	}
-	if customerPostgres.TLSConfig == nil {
-		return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL must require verified TLS")
+	if customerPostgres.TLSConfig == nil || customerPostgres.TLSConfig.InsecureSkipVerify {
+		return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL must use sslmode=verify-full")
 	}
 	for _, fallback := range customerPostgres.Fallbacks {
-		if fallback.TLSConfig == nil {
-			return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL must not allow a plaintext fallback")
+		if fallback.TLSConfig == nil || fallback.TLSConfig.InsecureSkipVerify {
+			return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL fallbacks must use certificate and hostname verification")
 		}
 	}
 	switch strings.ToLower(strings.TrimSpace(customerMariaDB.TLSConfig)) {
