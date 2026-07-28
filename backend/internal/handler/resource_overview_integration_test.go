@@ -43,13 +43,18 @@ func TestResourceOverviewUsesTenantScopedAggregatesBeyondOnePage(t *testing.T) {
 	_, err := db.NewInsert().Model(&[]*model.Account{account, otherAccount}).Exec(ctx)
 	require.NoError(t, err)
 
-	node, err := repository.NewNodeRepo(db).Create(
+	nodeRepo := repository.NewNodeRepo(db)
+	node, err := nodeRepo.Create(
 		ctx,
 		"overview-"+uuid.NewString()+".invalid",
 		"fake",
 		200,
 		nil,
 	)
+	require.NoError(t, err)
+	// Handler and service packages share the CI database and run in parallel.
+	// Keep this fixture out of the global placement pool.
+	node, err = nodeRepo.SetStatus(ctx, node.ID, model.NodeOffline)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
