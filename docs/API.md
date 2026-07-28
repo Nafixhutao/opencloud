@@ -88,7 +88,9 @@ Base URL: `/api/v1` · Format: JSON · Auth: JWT (see [`SECURITY.md`](SECURITY.m
 ## 6. Pagination, filtering, sorting
 
 - Pagination: `?page=1&per_page=25`. `per_page` defaults to 25 and is capped
-  (e.g. 100) to protect the DB. Total returned in `meta.total`.
+  at 100 to protect the DB. Invalid values fall back to defaults, and
+  `meta.page`/`meta.per_page` always return the canonical values actually used
+  by the query. Total returned in `meta.total`.
 - Large/hot collections may use cursor pagination: `?cursor=…&limit=…` returning
   `meta.next_cursor`.
 - Filtering: explicit query params (`?status=active`). No arbitrary query DSL.
@@ -142,6 +144,15 @@ Auth is served by **better-auth** in the Next.js BFF under **`/api/auth/*`** —
 owns sign-up, sign-in, social login, session, logout, and the JWT/JWKS endpoints.
 The Go API exposes **no** auth endpoints; every route below requires a valid
 better-auth JWT, and the current user/tenant is read from its claims.
+
+### Resource overview
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/overview` | tenant-scoped live site/database totals and active counts |
+
+The overview is calculated by one aggregate database statement and excludes
+soft-deleted rows. Dashboard metrics never infer totals or status counts from a
+paginated collection.
 
 ### Sites
 | Method | Path | Purpose |

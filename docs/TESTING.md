@@ -194,6 +194,14 @@ page through the BFF, deletes its resource, and verifies navigation returns to
 the last valid page. Route tests also prove invalid page values are normalized
 and `per_page` is capped before proxying.
 
+Dashboard overview coverage renders aggregate totals and active counts above 25
+and asserts the server component makes one overview request rather than reading
+first-page collection arrays. PostgreSQL handler integration inserts live,
+inactive, deleted, and cross-tenant resources, then proves the aggregate
+excludes deleted/foreign rows. The same suite requests `per_page=1000` through
+site, database, and admin-user list handlers and verifies their response
+metadata reports the canonical cap of 100.
+
 The real adapter integration test requires disposable targets:
 
 ```bash

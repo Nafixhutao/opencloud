@@ -189,7 +189,12 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   reporting success or orphaning a database/login.
 - Database pagination now flows through the browser client and BFF, with bounded
   query parameters, accessible Previous/Next controls, page-aware query caching,
-  and automatic fallback when deletion empties the final page.
+  and automatic fallback when deletion empties the final page. Backend list
+  metadata now reports the canonical page-size cap used by site, database, and
+  admin-user queries.
+- Dashboard resource metrics now come from one tenant-scoped aggregate query
+  instead of treating the first 25 site/database rows as complete collections;
+  totals and active counts exclude soft-deleted and cross-tenant resources.
 - Last-active-admin count/update is serialized in one transaction with a
   transaction-scoped PostgreSQL advisory lock; self-demotion/self-disable remain
   forbidden. Membership creation uses advisory locking plus `ON CONFLICT` and

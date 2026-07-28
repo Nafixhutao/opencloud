@@ -160,6 +160,13 @@ func (r *SiteRepo) List(ctx context.Context, acct uuid.UUID, p Page) ([]model.Si
 
 Schema, migrations, and indexing rules: [`DATABASE.md`](DATABASE.md).
 
+The authenticated dashboard uses `GET /api/v1/overview`. Its repository runs
+one tenant-scoped aggregate statement across live sites and databases, so total
+and active metrics remain correct beyond the first collection page without
+loading every resource. Collection handlers canonicalize `page` and
+`per_page` before both service dispatch and response metadata; the maximum page
+size is 100.
+
 ## 8. Provisioner
 
 - The **single gateway** to Docker, Caddy, Cloudflare, or fallback Hestia. The

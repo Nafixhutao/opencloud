@@ -230,6 +230,10 @@ npm run test:ui # Vitest + Testing Library dashboard behavior tests
   page and size are part of the TanStack Query key, controls are keyboard
   accessible, and deleting the final row on the last page returns to the last
   valid page.
+- `/dashboard` reads one tenant-scoped `/api/v1/overview` aggregate instead of
+  treating the first paginated site/database arrays as complete collections.
+  Total and active metrics therefore remain accurate beyond 25 resources
+  without fetching every page into the server component.
 - The one-time credential panel is never persisted in browser storage and can be
   hidden immediately. Reloading does not reproduce a consumed password; the
   customer must delete and recreate the database if it is lost.

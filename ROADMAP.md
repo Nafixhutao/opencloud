@@ -103,13 +103,16 @@ The heart of the platform: drive Docker/Caddy through a provider-neutral boundar
 - 🚧 Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
   retries/backoff, stale-job recovery, and compensating cleanup
 - 🚧 Site lifecycle: create → active → suspend/resume → delete, exposed through
-  tenant-scoped APIs and a status-polled dashboard
+  tenant-scoped APIs and a status-polled dashboard. The workspace overview uses
+  one tenant-scoped aggregate query, so counts do not truncate at collection
+  page boundaries.
 - 🚧 Database lifecycle: additive tenant-scoped schema, idempotent asynchronous
   PostgreSQL/MariaDB database + least-privilege user provisioning, encrypted
   one-time credential reveal, per-database serialized provider operations,
-  delete/cleanup compensation, and paginated dashboard flows. The PR #26 review
-  branch defaults the feature off and still requires review, green CI on the
-  hardened head, and disposable real-engine validation before merge.
+  delete/cleanup compensation, canonical bounded pagination metadata, and
+  paginated dashboard flows. The PR #26 review branch defaults the feature off
+  and still requires review, green CI on the hardened head, and disposable
+  real-engine validation before merge.
 - 🚧 Reconciliation job: detect/repair managed site state without adopting or
   deleting unrelated Docker/Caddy resources
 - 🚧 Basic control-plane backups: an opt-in non-root Compose scheduler now streams
