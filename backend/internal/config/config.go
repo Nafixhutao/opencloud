@@ -9,6 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	mysql "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
+	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/spf13/viper"
 )
@@ -24,21 +27,26 @@ type Config struct {
 	RedisURL    string `mapstructure:"REDIS_URL"`
 
 	// Wired in later phases; loaded now so config never churns when they land.
-	AuthJWKSURL  string            `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
-	AuthIssuer   string            `mapstructure:"AUTH_ISSUER"`   // expected JWT iss (empty = skip check)
-	AuthAudience string            `mapstructure:"AUTH_AUDIENCE"` // expected JWT aud (empty = skip check)
-	CORSOrigins  string            `mapstructure:"CORS_ORIGINS"`
-	RateLimitRPS int               `mapstructure:"RATE_LIMIT_RPS"`
-	Provisioner  ProvisionerConfig `mapstructure:",squash"`
+	AuthJWKSURL       string                 `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
+	AuthIssuer        string                 `mapstructure:"AUTH_ISSUER"`   // expected JWT iss (empty = skip check)
+	AuthAudience      string                 `mapstructure:"AUTH_AUDIENCE"` // expected JWT aud (empty = skip check)
+	CORSOrigins       string                 `mapstructure:"CORS_ORIGINS"`
+	RateLimitRPS      int                    `mapstructure:"RATE_LIMIT_RPS"`
+	Provisioner       ProvisionerConfig      `mapstructure:",squash"`
+	CustomerDatabases CustomerDatabaseConfig `mapstructure:",squash"`
 }
 
 // ProvisionerConfig selects the hosting backend and carries only the connection
 // details the worker needs. Hestia stays available as a documented fallback.
 type ProvisionerConfig struct {
-	Backend      provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
-	DockerSocket string              `mapstructure:"DOCKER_SOCKET"`
-	CaddyAPIURL  string              `mapstructure:"CADDY_API_URL"`
-	Hestia       HestiaConfig        `mapstructure:",squash"`
+	Backend           provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
+	DockerSocket      string              `mapstructure:"DOCKER_SOCKET"`
+	CaddyAPIURL       string              `mapstructure:"CADDY_API_URL"`
+	CaddyServerID     string              `mapstructure:"CADDY_SERVER_ID"`
+	SiteImage         string              `mapstructure:"SITE_DEFAULT_IMAGE"`
+	CloudflareEnabled bool                `mapstructure:"CLOUDFLARE_API_ENABLED"`
+	CloudflareToken   string              `mapstructure:"CLOUDFLARE_API_TOKEN"`
+	Hestia            HestiaConfig        `mapstructure:",squash"`
 }
 
 // HestiaConfig holds fallback Hestia credentials. Access/secret keys are the
@@ -48,6 +56,20 @@ type HestiaConfig struct {
 	AccessKey string `mapstructure:"HESTIA_ACCESS_KEY"`
 	SecretKey string `mapstructure:"HESTIA_SECRET_KEY"`
 	APIKey    string `mapstructure:"HESTIA_API_KEY"`
+}
+
+// CustomerDatabaseConfig keeps control-plane and customer data-plane
+// connections separate. Admin URLs/DSNs are worker-only external secrets.
+type CustomerDatabaseConfig struct {
+	Enabled          bool   `mapstructure:"CUSTOMER_DATABASES_ENABLED"`
+	CredentialKey    string `mapstructure:"CUSTOMER_DATABASE_CREDENTIAL_KEY"`
+	PostgresAdminURL string `mapstructure:"CUSTOMER_POSTGRES_ADMIN_URL"`
+	PostgresHost     string `mapstructure:"CUSTOMER_POSTGRES_HOST"`
+	PostgresPort     int    `mapstructure:"CUSTOMER_POSTGRES_PORT"`
+	MariaDBAdminDSN  string `mapstructure:"CUSTOMER_MARIADB_ADMIN_DSN"`
+	MariaDBHost      string `mapstructure:"CUSTOMER_MARIADB_HOST"`
+	MariaDBPort      int    `mapstructure:"CUSTOMER_MARIADB_PORT"`
+	TLSRequired      bool   `mapstructure:"CUSTOMER_DATABASE_TLS_REQUIRED"`
 }
 
 // Load reads API/worker configuration, including both datastores.
@@ -68,9 +90,16 @@ func load(requireRedis bool) (*Config, error) {
 	v.SetDefault("METRICS_ADDR", ":9090")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("RATE_LIMIT_RPS", 10)
-	v.SetDefault("PROVISIONER_BACKEND", string(provisioner.BackendDocker))
+	v.SetDefault("PROVISIONER_BACKEND", string(provisioner.BackendFake))
 	v.SetDefault("DOCKER_SOCKET", "/var/run/docker.sock")
 	v.SetDefault("CADDY_API_URL", "http://127.0.0.1:2019")
+	v.SetDefault("CADDY_SERVER_ID", "srv0")
+	v.SetDefault("SITE_DEFAULT_IMAGE", "opencloud/site-static:phase2")
+	v.SetDefault("CLOUDFLARE_API_ENABLED", false)
+	v.SetDefault("CUSTOMER_DATABASES_ENABLED", false)
+	v.SetDefault("CUSTOMER_POSTGRES_PORT", 5432)
+	v.SetDefault("CUSTOMER_MARIADB_PORT", 3306)
+	v.SetDefault("CUSTOMER_DATABASE_TLS_REQUIRED", true)
 
 	// Explicitly bind every key: viper's Unmarshal only sees keys it already
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
@@ -78,8 +107,14 @@ func load(requireRedis bool) (*Config, error) {
 	for _, key := range []string{
 		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
-		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL",
+		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL", "CADDY_SERVER_ID",
+		"SITE_DEFAULT_IMAGE",
 		"HESTIA_API_URL", "HESTIA_ACCESS_KEY", "HESTIA_SECRET_KEY", "HESTIA_API_KEY",
+		"CLOUDFLARE_API_ENABLED", "CLOUDFLARE_API_TOKEN",
+		"CUSTOMER_DATABASES_ENABLED", "CUSTOMER_DATABASE_CREDENTIAL_KEY",
+		"CUSTOMER_POSTGRES_ADMIN_URL", "CUSTOMER_POSTGRES_HOST", "CUSTOMER_POSTGRES_PORT",
+		"CUSTOMER_MARIADB_ADMIN_DSN", "CUSTOMER_MARIADB_HOST", "CUSTOMER_MARIADB_PORT",
+		"CUSTOMER_DATABASE_TLS_REQUIRED",
 	} {
 		_ = v.BindEnv(key)
 	}
@@ -123,25 +158,23 @@ func (c *Config) validate(requireRedis bool) error {
 
 // ValidateAPI enforces settings used only by the HTTP API.
 func (c *Config) ValidateAPI() error {
-	if !c.IsProduction() {
-		return nil
-	}
-
 	var missing []string
 	// In production, iss/aud validation must not be a silent no-op: an empty
 	// value makes Auth skip that check, so a token merely signed by the trusted
 	// JWKS would pass regardless of who it was issued for. Fail fast instead
 	// (better-auth always emits iss/aud — default the BFF base URL, ADR 0006).
-	if c.AuthIssuer == "" {
-		missing = append(missing, "AUTH_ISSUER")
-	}
-	if c.AuthAudience == "" {
-		missing = append(missing, "AUTH_AUDIENCE")
+	if c.IsProduction() {
+		if c.AuthIssuer == "" {
+			missing = append(missing, "AUTH_ISSUER")
+		}
+		if c.AuthAudience == "" {
+			missing = append(missing, "AUTH_AUDIENCE")
+		}
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required API config: %s", strings.Join(missing, ", "))
 	}
-	return nil
+	return c.validateCustomerDatabaseCommon()
 }
 
 // ValidateProvisioner enforces worker-only hosting backend configuration.
@@ -151,11 +184,14 @@ func (c *Config) ValidateProvisioner() error {
 		return err
 	}
 
+	var siteErr error
 	switch backend {
 	case provisioner.BackendDocker:
-		return requireConfig(map[string]string{
-			"CADDY_API_URL": c.Provisioner.CaddyAPIURL,
-			"DOCKER_SOCKET": c.Provisioner.DockerSocket,
+		siteErr = requireConfig(map[string]string{
+			"CADDY_API_URL":      c.Provisioner.CaddyAPIURL,
+			"CADDY_SERVER_ID":    c.Provisioner.CaddyServerID,
+			"DOCKER_SOCKET":      c.Provisioner.DockerSocket,
+			"SITE_DEFAULT_IMAGE": c.Provisioner.SiteImage,
 		})
 	case provisioner.BackendHestia:
 		if err := requireConfig(map[string]string{"HESTIA_API_URL": c.Provisioner.Hestia.APIURL}); err != nil {
@@ -168,15 +204,94 @@ func (c *Config) ValidateProvisioner() error {
 		if (c.Provisioner.Hestia.AccessKey == "") != (c.Provisioner.Hestia.SecretKey == "") {
 			return errors.New("HESTIA_ACCESS_KEY and HESTIA_SECRET_KEY must be set together")
 		}
-		return nil
 	case provisioner.BackendFake:
 		if c.IsProduction() {
 			return errors.New("PROVISIONER_BACKEND=fake is not allowed in production")
 		}
-		return nil
 	default:
 		return fmt.Errorf("unsupported provisioner backend %q", backend)
 	}
+	if siteErr != nil {
+		return siteErr
+	}
+	if err := c.validateCustomerDatabaseCommon(); err != nil {
+		return err
+	}
+	if !c.CustomerDatabases.Enabled {
+		return nil
+	}
+	if err := requireCustomerDatabaseConfig(map[string]string{
+		"CUSTOMER_POSTGRES_ADMIN_URL": c.CustomerDatabases.PostgresAdminURL,
+		"CUSTOMER_MARIADB_ADMIN_DSN":  c.CustomerDatabases.MariaDBAdminDSN,
+	}); err != nil {
+		return err
+	}
+	return c.validateCustomerDatabaseAdminTargets()
+}
+
+func (c *Config) validateCustomerDatabaseCommon() error {
+	if !c.CustomerDatabases.Enabled {
+		return nil
+	}
+	if err := requireCustomerDatabaseConfig(map[string]string{
+		"CUSTOMER_DATABASE_CREDENTIAL_KEY": c.CustomerDatabases.CredentialKey,
+		"CUSTOMER_POSTGRES_HOST":           c.CustomerDatabases.PostgresHost,
+		"CUSTOMER_MARIADB_HOST":            c.CustomerDatabases.MariaDBHost,
+	}); err != nil {
+		return err
+	}
+	if c.CustomerDatabases.PostgresPort < 1 || c.CustomerDatabases.PostgresPort > 65535 {
+		return errors.New("CUSTOMER_POSTGRES_PORT must be between 1 and 65535")
+	}
+	if c.CustomerDatabases.MariaDBPort < 1 || c.CustomerDatabases.MariaDBPort > 65535 {
+		return errors.New("CUSTOMER_MARIADB_PORT must be between 1 and 65535")
+	}
+	if _, err := credential.New(c.CustomerDatabases.CredentialKey); err != nil {
+		return fmt.Errorf("invalid CUSTOMER_DATABASE_CREDENTIAL_KEY: %w", err)
+	}
+	if c.IsProduction() && !c.CustomerDatabases.TLSRequired {
+		return errors.New("CUSTOMER_DATABASE_TLS_REQUIRED=false is not allowed in production")
+	}
+	return nil
+}
+
+func (c *Config) validateCustomerDatabaseAdminTargets() error {
+	customerPostgres, err := pgx.ParseConfig(c.CustomerDatabases.PostgresAdminURL)
+	if err != nil {
+		return errors.New("CUSTOMER_POSTGRES_ADMIN_URL is invalid")
+	}
+	customerMariaDB, err := mysql.ParseDSN(c.CustomerDatabases.MariaDBAdminDSN)
+	if err != nil {
+		return errors.New("CUSTOMER_MARIADB_ADMIN_DSN is invalid")
+	}
+
+	if c.DatabaseURL != "" {
+		controlPlane, err := pgx.ParseConfig(c.DatabaseURL)
+		if err != nil {
+			return errors.New("DATABASE_URL is invalid")
+		}
+		if strings.EqualFold(controlPlane.Host, customerPostgres.Host) &&
+			controlPlane.Port == customerPostgres.Port {
+			return errors.New("customer PostgreSQL target must be separate from the control-plane database target")
+		}
+	}
+
+	if !c.IsProduction() {
+		return nil
+	}
+	if customerPostgres.TLSConfig == nil || customerPostgres.TLSConfig.InsecureSkipVerify {
+		return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL must use sslmode=verify-full")
+	}
+	for _, fallback := range customerPostgres.Fallbacks {
+		if fallback.TLSConfig == nil || fallback.TLSConfig.InsecureSkipVerify {
+			return errors.New("production CUSTOMER_POSTGRES_ADMIN_URL fallbacks must use certificate and hostname verification")
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(customerMariaDB.TLSConfig)) {
+	case "", "false", "skip-verify", "preferred":
+		return errors.New("production CUSTOMER_MARIADB_ADMIN_DSN must require certificate-verified TLS")
+	}
+	return nil
 }
 
 func requireConfig(values map[string]string) error {
@@ -189,6 +304,20 @@ func requireConfig(values map[string]string) error {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return fmt.Errorf("missing required provisioner config: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func requireCustomerDatabaseConfig(values map[string]string) error {
+	var missing []string
+	for name, value := range values {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return fmt.Errorf("missing required customer database config: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
