@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -25,8 +26,7 @@ func RateLimit(rdb *redis.Client, keyPrefix string, limit int, window time.Durat
 			c.Next()
 			return
 		}
-		ip := c.ClientIP()
-		key := fmt.Sprintf("ratelimit:%s:%s", keyPrefix, ip)
+		key := fmt.Sprintf("ratelimit:%s:%s", keyPrefix, rateLimitIdentity(c))
 		ctx := c.Request.Context()
 
 		allowed, retryAfter, err := consume(ctx, rdb, key, limit, window)
@@ -48,6 +48,16 @@ func RateLimit(rdb *redis.Client, keyPrefix string, limit int, window time.Durat
 		}
 		c.Next()
 	}
+}
+
+func rateLimitIdentity(c *gin.Context) string {
+	if accountID := AccountID(c); accountID != uuid.Nil {
+		return "account:" + accountID.String()
+	}
+	if userID := UserID(c); userID != "" {
+		return "user:" + userID
+	}
+	return "ip:" + c.ClientIP()
 }
 
 func consume(ctx context.Context, rdb *redis.Client, key string, limit int, window time.Duration) (bool, time.Duration, error) {

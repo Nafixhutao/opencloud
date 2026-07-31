@@ -12,19 +12,23 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	"github.com/nazxf/opencloud/backend/internal/credential"
+	"github.com/nazxf/opencloud/backend/internal/domainverify"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/spf13/viper"
+	"golang.org/x/net/idna"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Config is the typed application configuration. It is loaded once at boot and
 // passed down via dependency injection — never read viper deep in the code.
 type Config struct {
-	Env         string `mapstructure:"ENV"`
-	HTTPAddr    string `mapstructure:"HTTP_ADDR"`
-	MetricsAddr string `mapstructure:"METRICS_ADDR"`
-	LogLevel    string `mapstructure:"LOG_LEVEL"`
-	DatabaseURL string `mapstructure:"DATABASE_URL"`
-	RedisURL    string `mapstructure:"REDIS_URL"`
+	Env                     string `mapstructure:"ENV"`
+	HTTPAddr                string `mapstructure:"HTTP_ADDR"`
+	MetricsAddr             string `mapstructure:"METRICS_ADDR"`
+	LogLevel                string `mapstructure:"LOG_LEVEL"`
+	DatabaseURL             string `mapstructure:"DATABASE_URL"`
+	RedisURL                string `mapstructure:"REDIS_URL"`
+	MigrationMaintenanceAck string `mapstructure:"MIGRATION_MAINTENANCE_ACK"`
 
 	// Wired in later phases; loaded now so config never churns when they land.
 	AuthJWKSURL       string                 `mapstructure:"AUTH_JWKS_URL"` // better-auth JWKS (ADR 0006)
@@ -34,17 +38,19 @@ type Config struct {
 	RateLimitRPS      int                    `mapstructure:"RATE_LIMIT_RPS"`
 	Provisioner       ProvisionerConfig      `mapstructure:",squash"`
 	CustomerDatabases CustomerDatabaseConfig `mapstructure:",squash"`
+	Domains           DomainConfig           `mapstructure:",squash"`
 }
 
 // ProvisionerConfig selects the hosting backend and carries only the connection
 // details the worker needs. Hestia stays available as a documented fallback.
 type ProvisionerConfig struct {
-	Backend       provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
-	DockerSocket  string              `mapstructure:"DOCKER_SOCKET"`
-	CaddyAPIURL   string              `mapstructure:"CADDY_API_URL"`
-	CaddyServerID string              `mapstructure:"CADDY_SERVER_ID"`
-	SiteImage     string              `mapstructure:"SITE_DEFAULT_IMAGE"`
-	Hestia        HestiaConfig        `mapstructure:",squash"`
+	Backend          provisioner.Backend `mapstructure:"PROVISIONER_BACKEND"`
+	DockerSocket     string              `mapstructure:"DOCKER_SOCKET"`
+	CaddyAPIURL      string              `mapstructure:"CADDY_API_URL"`
+	CaddyServerID    string              `mapstructure:"CADDY_SERVER_ID"`
+	SiteImage        string              `mapstructure:"SITE_DEFAULT_IMAGE"`
+	SiteDomainSuffix string              `mapstructure:"SITE_DOMAIN_SUFFIX"`
+	Hestia           HestiaConfig        `mapstructure:",squash"`
 }
 
 // HestiaConfig holds fallback Hestia credentials. Access/secret keys are the
@@ -68,6 +74,17 @@ type CustomerDatabaseConfig struct {
 	MariaDBHost      string `mapstructure:"CUSTOMER_MARIADB_HOST"`
 	MariaDBPort      int    `mapstructure:"CUSTOMER_MARIADB_PORT"`
 	TLSRequired      bool   `mapstructure:"CUSTOMER_DATABASE_TLS_REQUIRED"`
+}
+
+// DomainConfig gates the Phase 3 manual-DNS capability. The HMAC key is an
+// external secret shared only by API/worker. Cloudflare automation remains a
+// fail-closed future flag until a per-tenant authorization path exists.
+type DomainConfig struct {
+	Enabled           bool   `mapstructure:"DOMAINS_ENABLED"`
+	VerificationKey   string `mapstructure:"DOMAIN_VERIFICATION_KEY"`
+	IngressIPv4       string `mapstructure:"DOMAIN_INGRESS_IPV4"`
+	DNSResolver       string `mapstructure:"DOMAIN_DNS_RESOLVER"`
+	CloudflareEnabled bool   `mapstructure:"CLOUDFLARE_API_ENABLED"`
 }
 
 // Load reads API/worker configuration, including both datastores.
@@ -94,6 +111,9 @@ func load(requireRedis bool) (*Config, error) {
 	v.SetDefault("CADDY_SERVER_ID", "srv0")
 	v.SetDefault("SITE_DEFAULT_IMAGE", "opencloud/site-static:phase2")
 	v.SetDefault("CUSTOMER_DATABASES_ENABLED", false)
+	v.SetDefault("DOMAINS_ENABLED", false)
+	v.SetDefault("DOMAIN_DNS_RESOLVER", "1.1.1.1:53")
+	v.SetDefault("CLOUDFLARE_API_ENABLED", false)
 	v.SetDefault("CUSTOMER_POSTGRES_PORT", 5432)
 	v.SetDefault("CUSTOMER_MARIADB_PORT", 3306)
 	v.SetDefault("CUSTOMER_DATABASE_TLS_REQUIRED", true)
@@ -103,14 +123,17 @@ func load(requireRedis bool) (*Config, error) {
 	// config from real env vars (prod, where .env is absent) would be dropped.
 	for _, key := range []string{
 		"ENV", "HTTP_ADDR", "METRICS_ADDR", "LOG_LEVEL", "DATABASE_URL", "REDIS_URL",
+		"MIGRATION_MAINTENANCE_ACK",
 		"AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE", "CORS_ORIGINS", "RATE_LIMIT_RPS",
 		"PROVISIONER_BACKEND", "DOCKER_SOCKET", "CADDY_API_URL", "CADDY_SERVER_ID",
-		"SITE_DEFAULT_IMAGE",
+		"SITE_DEFAULT_IMAGE", "SITE_DOMAIN_SUFFIX",
 		"HESTIA_API_URL", "HESTIA_ACCESS_KEY", "HESTIA_SECRET_KEY", "HESTIA_API_KEY",
 		"CUSTOMER_DATABASES_ENABLED", "CUSTOMER_DATABASE_CREDENTIAL_KEY",
 		"CUSTOMER_POSTGRES_ADMIN_URL", "CUSTOMER_POSTGRES_HOST", "CUSTOMER_POSTGRES_PORT",
 		"CUSTOMER_MARIADB_ADMIN_DSN", "CUSTOMER_MARIADB_HOST", "CUSTOMER_MARIADB_PORT",
 		"CUSTOMER_DATABASE_TLS_REQUIRED",
+		"DOMAINS_ENABLED", "DOMAIN_VERIFICATION_KEY", "DOMAIN_INGRESS_IPV4",
+		"DOMAIN_DNS_RESOLVER", "CLOUDFLARE_API_ENABLED",
 	} {
 		_ = v.BindEnv(key)
 	}
@@ -166,11 +189,20 @@ func (c *Config) ValidateAPI() error {
 		if c.AuthAudience == "" {
 			missing = append(missing, "AUTH_AUDIENCE")
 		}
+		if c.Provisioner.SiteDomainSuffix == "" {
+			missing = append(missing, "SITE_DOMAIN_SUFFIX")
+		}
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required API config: %s", strings.Join(missing, ", "))
 	}
-	return c.validateCustomerDatabaseCommon()
+	if err := c.validateCustomerDatabaseCommon(); err != nil {
+		return err
+	}
+	if err := c.validateSiteDomainSuffix(); err != nil {
+		return err
+	}
+	return c.validateDomains()
 }
 
 // ValidateProvisioner enforces worker-only hosting backend configuration.
@@ -210,7 +242,16 @@ func (c *Config) ValidateProvisioner() error {
 	if siteErr != nil {
 		return siteErr
 	}
+	if c.IsProduction() && c.Provisioner.SiteDomainSuffix == "" {
+		return errors.New("missing required provisioner config: SITE_DOMAIN_SUFFIX")
+	}
+	if err := c.validateSiteDomainSuffix(); err != nil {
+		return err
+	}
 	if err := c.validateCustomerDatabaseCommon(); err != nil {
+		return err
+	}
+	if err := c.validateDomains(); err != nil {
 		return err
 	}
 	if !c.CustomerDatabases.Enabled {
@@ -223,6 +264,71 @@ func (c *Config) ValidateProvisioner() error {
 		return err
 	}
 	return c.validateCustomerDatabaseAdminTargets()
+}
+
+func (c *Config) validateSiteDomainSuffix() error {
+	raw := strings.TrimSpace(c.Provisioner.SiteDomainSuffix)
+	if raw == "" {
+		return nil
+	}
+	if strings.Contains(raw, "://") || strings.ContainsAny(raw, "/\\?#@:") ||
+		strings.HasPrefix(raw, "*.") || strings.HasSuffix(raw, ".") {
+		return errors.New("SITE_DOMAIN_SUFFIX must be a canonical hostname without a URL, wildcard, port, or trailing dot")
+	}
+	hostname, err := idna.Lookup.ToASCII(raw)
+	if err != nil {
+		return errors.New("SITE_DOMAIN_SUFFIX contains an invalid internationalized DNS label")
+	}
+	hostname = strings.ToLower(hostname)
+	if len(hostname) < 3 || len(hostname) > 253 || !strings.Contains(hostname, ".") {
+		return errors.New("SITE_DOMAIN_SUFFIX must be a fully qualified public DNS hostname")
+	}
+	for _, label := range strings.Split(hostname, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return errors.New("SITE_DOMAIN_SUFFIX contains an invalid DNS label")
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') &&
+				(character < '0' || character > '9') && character != '-' {
+				return errors.New("SITE_DOMAIN_SUFFIX contains an invalid DNS character")
+			}
+		}
+	}
+	if registrable, err := publicsuffix.EffectiveTLDPlusOne(hostname); err != nil || registrable == "" {
+		return errors.New("SITE_DOMAIN_SUFFIX must include a registrable name below a public suffix")
+	}
+	suffix, icann := publicsuffix.PublicSuffix(hostname)
+	if !icann && !strings.Contains(suffix, ".") {
+		return errors.New("SITE_DOMAIN_SUFFIX uses an unrecognized public suffix")
+	}
+	c.Provisioner.SiteDomainSuffix = hostname
+	return nil
+}
+
+func (c *Config) validateDomains() error {
+	if c.Domains.CloudflareEnabled {
+		return errors.New("CLOUDFLARE_API_ENABLED=true is unavailable until per-tenant authorization is implemented")
+	}
+	if !c.Domains.Enabled {
+		return nil
+	}
+	if err := requireConfig(map[string]string{
+		"DOMAIN_VERIFICATION_KEY": c.Domains.VerificationKey,
+		"DOMAIN_INGRESS_IPV4":     c.Domains.IngressIPv4,
+		"DOMAIN_DNS_RESOLVER":     c.Domains.DNSResolver,
+	}); err != nil {
+		return err
+	}
+	if _, err := domainverify.New(c.Domains.VerificationKey); err != nil {
+		return fmt.Errorf("invalid DOMAIN_VERIFICATION_KEY: %w", err)
+	}
+	if err := provisioner.ValidatePublicIPv4(c.Domains.IngressIPv4); err != nil {
+		return err
+	}
+	if _, err := provisioner.NewManualDNS(c.Domains.DNSResolver); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Config) validateCustomerDatabaseCommon() error {

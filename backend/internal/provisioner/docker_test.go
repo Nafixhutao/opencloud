@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -205,10 +206,151 @@ func TestDockerDeleteRefusesMismatchedOwnership(t *testing.T) {
 	require.Zero(t, deleteCalls)
 }
 
+func TestDockerSetSiteDomainsPreservesExactHostsAndOwnership(t *testing.T) {
+	ref := SiteRef{SiteID: uuid.New(), AccountID: uuid.New(), NodeID: uuid.New()}
+	labels := ownershipLabels(ref.AccountID, ref.SiteID, ref.NodeID)
+	container := func(labels map[string]string) string {
+		raw, err := json.Marshal(map[string]any{
+			"Config": map[string]any{"Labels": labels},
+			"NetworkSettings": map[string]any{
+				"Ports": map[string]any{
+					"8080/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "32768"}},
+				},
+			},
+		})
+		require.NoError(t, err)
+		return string(raw)
+	}
+
+	t.Run("writes the complete deduplicated matcher", func(t *testing.T) {
+		engine := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return testResponse(http.StatusOK, container(labels), nil), nil
+		})}
+		existing := caddyRoute{
+			ID:    caddyRouteID(ref.SiteID),
+			Match: []map[string][]string{{"host": {"primary.example.test"}}},
+			Handle: []caddyHandler{{
+				Handler:   "reverse_proxy",
+				Upstreams: []caddyUpstream{{Dial: "127.0.0.1:32768"}},
+			}},
+			Terminal: true,
+		}
+		var updated caddyRoute
+		caddy := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.Method {
+			case http.MethodGet:
+				raw, err := json.Marshal(existing)
+				require.NoError(t, err)
+				return testResponse(http.StatusOK, string(raw), map[string]string{"Etag": `"route-v1"`}), nil
+			case http.MethodPatch:
+				require.Equal(t, `"route-v1"`, req.Header.Get("If-Match"))
+				require.NoError(t, json.NewDecoder(req.Body).Decode(&updated))
+				return testResponse(http.StatusOK, `{}`, nil), nil
+			default:
+				t.Fatalf("unexpected Caddy request %s", req.Method)
+				return nil, nil
+			}
+		})}
+		caddyURL, err := url.Parse("http://caddy.test")
+		require.NoError(t, err)
+		adapter := &Docker{engine: engine, caddy: caddy, caddyURL: caddyURL, serverID: "srv0"}
+
+		err = adapter.SetSiteDomains(context.Background(), ref, []string{
+			"www.example.test", "primary.example.test", "api.example.test", "www.example.test",
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{"api.example.test", "primary.example.test", "www.example.test"}, updated.Match[0]["host"])
+		require.Equal(t, caddyRouteID(ref.SiteID), updated.ID)
+		require.Equal(t, "127.0.0.1:32768", updated.Handle[0].Upstreams[0].Dial)
+	})
+
+	t.Run("refuses a container owned by another site", func(t *testing.T) {
+		foreign := cloneLabels(labels)
+		foreign[siteLabelKey] = uuid.NewString()
+		engine := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return testResponse(http.StatusOK, container(foreign), nil), nil
+		})}
+		caddyURL, err := url.Parse("http://caddy.test")
+		require.NoError(t, err)
+		adapter := &Docker{
+			engine: engine,
+			caddy: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("Caddy must not be touched after ownership mismatch")
+				return nil, nil
+			})},
+			caddyURL: caddyURL,
+			serverID: "srv0",
+		}
+
+		err = adapter.SetSiteDomains(context.Background(), ref, []string{"primary.example.test"})
+		require.ErrorContains(t, err, "ownership label")
+	})
+
+	t.Run("an empty matcher removes the owned route", func(t *testing.T) {
+		engine := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return testResponse(http.StatusOK, container(labels), nil), nil
+		})}
+		deleted := false
+		caddy := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.Method {
+			case http.MethodGet:
+				existing := caddyRoute{
+					ID:    caddyRouteID(ref.SiteID),
+					Match: []map[string][]string{{"host": {"primary.example.test"}}},
+					Handle: []caddyHandler{{
+						Handler:   "reverse_proxy",
+						Upstreams: []caddyUpstream{{Dial: "127.0.0.1:32768"}},
+					}},
+				}
+				raw, err := json.Marshal(existing)
+				require.NoError(t, err)
+				return testResponse(http.StatusOK, string(raw), map[string]string{"Etag": `"route-v1"`}), nil
+			case http.MethodDelete:
+				require.Equal(t, `"route-v1"`, req.Header.Get("If-Match"))
+				deleted = true
+				return testResponse(http.StatusOK, `{}`, nil), nil
+			default:
+				t.Fatalf("unexpected Caddy request %s", req.Method)
+				return nil, nil
+			}
+		})}
+		caddyURL, err := url.Parse("http://caddy.test")
+		require.NoError(t, err)
+		adapter := &Docker{engine: engine, caddy: caddy, caddyURL: caddyURL, serverID: "srv0"}
+
+		require.NoError(t, adapter.SetSiteDomains(context.Background(), ref, nil))
+		require.True(t, deleted)
+	})
+}
+
 func TestNewDockerRejectsNonUnixSocketAndInvalidCaddyURL(t *testing.T) {
 	_, err := NewDocker("tcp://127.0.0.1:2375", "http://127.0.0.1:2019", "srv0", "image")
 	require.Error(t, err)
 	_, err = NewDocker("/var/run/docker.sock", "ftp://caddy.invalid", "srv0", "image")
+	require.Error(t, err)
+}
+
+func TestDockerCertificateStatusDialsConfiguredIngressWithHostname(t *testing.T) {
+	wantExpiry := time.Now().UTC().Add(90 * 24 * time.Hour).Truncate(time.Second)
+	var gotHostname, gotIngress string
+	adapter := &Docker{certificateProbe: func(
+		_ context.Context,
+		hostname, ingressIPv4 string,
+	) (CertificateObservation, error) {
+		gotHostname = hostname
+		gotIngress = ingressIPv4
+		return CertificateObservation{ExpiresAt: wantExpiry}, nil
+	}}
+
+	observation, err := adapter.CertificateStatus(
+		context.Background(), "www.example.com", "8.8.8.8",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "www.example.com", gotHostname)
+	require.Equal(t, "8.8.8.8", gotIngress)
+	require.Equal(t, wantExpiry, observation.ExpiresAt)
+
+	_, err = adapter.CertificateStatus(context.Background(), "www.example.com", "10.0.0.1")
 	require.Error(t, err)
 }
 

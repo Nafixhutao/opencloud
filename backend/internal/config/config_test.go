@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 )
 
 // TestViper_MissingConfigFileErrorType records exactly what ReadInConfig returns
@@ -107,6 +108,7 @@ func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {
 			t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 			t.Setenv("AUTH_ISSUER", tt.issuer)
 			t.Setenv("AUTH_AUDIENCE", tt.audience)
+			t.Setenv("SITE_DOMAIN_SUFFIX", "sites.example.com")
 
 			cfg, err := Load()
 			if err != nil {
@@ -119,6 +121,38 @@ func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {
 			if !tt.wantErr && err != nil {
 				t.Fatalf("ValidateAPI() unexpectedly failed: %v", err)
 			}
+		})
+	}
+}
+
+func TestProductionRequiresCanonicalSiteDomainSuffix(t *testing.T) {
+	tests := []struct {
+		name    string
+		suffix  string
+		wantErr bool
+	}{
+		{name: "missing", wantErr: true},
+		{name: "public suffix only", suffix: "com", wantErr: true},
+		{name: "wildcard", suffix: "*.example.com", wantErr: true},
+		{name: "trailing dot", suffix: "sites.example.com.", wantErr: true},
+		{name: "canonical platform suffix", suffix: "sites.example.com"},
+		{name: "IDNA is normalized", suffix: "sites.bÃ¼cher.de"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Config{
+				Env:          "production",
+				AuthIssuer:   "https://auth.example.com",
+				AuthAudience: "https://auth.example.com",
+				Provisioner:  ProvisionerConfig{SiteDomainSuffix: test.suffix},
+			}
+			err := cfg.ValidateAPI()
+			if test.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.NotEmpty(t, cfg.Provisioner.SiteDomainSuffix)
 		})
 	}
 }
@@ -211,6 +245,58 @@ func TestValidateProvisioner(t *testing.T) {
 			if !tt.wantErr && err != nil {
 				t.Fatalf("ValidateProvisioner() error = %v", err)
 			}
+		})
+	}
+}
+
+func TestDomainConfigurationFailsClosed(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	validDomains := DomainConfig{
+		Enabled: true, VerificationKey: key,
+		IngressIPv4: "8.8.8.8", DNSResolver: "1.1.1.1:53",
+	}
+	tests := []struct {
+		name        string
+		domains     DomainConfig
+		worker      bool
+		wantErr     bool
+		errorPhrase string
+	}{
+		{name: "manual DNS disabled needs no secret"},
+		{name: "complete manual API configuration", domains: validDomains},
+		{name: "complete manual worker configuration", domains: validDomains, worker: true},
+		{name: "enabled manual flow requires key and ingress", domains: DomainConfig{Enabled: true}, wantErr: true},
+		{name: "private ingress is rejected", domains: DomainConfig{
+			Enabled: true, VerificationKey: key,
+			IngressIPv4: "10.0.0.1", DNSResolver: "1.1.1.1:53",
+		}, wantErr: true},
+		{
+			name:    "Cloudflare flag fails closed without per-tenant authorization",
+			domains: DomainConfig{CloudflareEnabled: true}, wantErr: true,
+			errorPhrase: "per-tenant authorization",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Config{Domains: test.domains}
+			if test.worker {
+				cfg.Provisioner.Backend = "fake"
+			}
+			var err error
+			if test.worker {
+				err = cfg.ValidateProvisioner()
+			} else {
+				err = cfg.ValidateAPI()
+			}
+			if test.wantErr {
+				require.Error(t, err)
+				if test.errorPhrase != "" {
+					require.ErrorContains(t, err, test.errorPhrase)
+				}
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -319,11 +405,12 @@ func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
 				Env:         "production",
 				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
 				Provisioner: ProvisionerConfig{
-					Backend:       "docker",
-					DockerSocket:  "/var/run/docker.sock",
-					CaddyAPIURL:   "https://caddy.internal:2019",
-					CaddyServerID: "srv0",
-					SiteImage:     "opencloud/site-static:phase2",
+					Backend:          "docker",
+					DockerSocket:     "/var/run/docker.sock",
+					CaddyAPIURL:      "https://caddy.internal:2019",
+					CaddyServerID:    "srv0",
+					SiteImage:        "opencloud/site-static:phase2",
+					SiteDomainSuffix: "sites.example.com",
 				},
 				CustomerDatabases: CustomerDatabaseConfig{
 					Enabled:          true,
@@ -345,11 +432,12 @@ func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
 				Env:         "production",
 				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
 				Provisioner: ProvisionerConfig{
-					Backend:       "docker",
-					DockerSocket:  "/var/run/docker.sock",
-					CaddyAPIURL:   "https://caddy.internal:2019",
-					CaddyServerID: "srv0",
-					SiteImage:     "opencloud/site-static:phase2",
+					Backend:          "docker",
+					DockerSocket:     "/var/run/docker.sock",
+					CaddyAPIURL:      "https://caddy.internal:2019",
+					CaddyServerID:    "srv0",
+					SiteImage:        "opencloud/site-static:phase2",
+					SiteDomainSuffix: "sites.example.com",
 				},
 				CustomerDatabases: CustomerDatabaseConfig{
 					Enabled:          true,
@@ -371,11 +459,12 @@ func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
 				Env:         "production",
 				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
 				Provisioner: ProvisionerConfig{
-					Backend:       "docker",
-					DockerSocket:  "/var/run/docker.sock",
-					CaddyAPIURL:   "https://caddy.internal:2019",
-					CaddyServerID: "srv0",
-					SiteImage:     "opencloud/site-static:phase2",
+					Backend:          "docker",
+					DockerSocket:     "/var/run/docker.sock",
+					CaddyAPIURL:      "https://caddy.internal:2019",
+					CaddyServerID:    "srv0",
+					SiteImage:        "opencloud/site-static:phase2",
+					SiteDomainSuffix: "sites.example.com",
 				},
 				CustomerDatabases: CustomerDatabaseConfig{
 					Enabled:          true,
@@ -396,6 +485,7 @@ func TestCustomerDatabaseConfigurationFailsClosed(t *testing.T) {
 				Env:          "production",
 				AuthIssuer:   "https://auth.example.test",
 				AuthAudience: "https://auth.example.test",
+				Provisioner:  ProvisionerConfig{SiteDomainSuffix: "sites.example.com"},
 				CustomerDatabases: CustomerDatabaseConfig{
 					Enabled:       true,
 					CredentialKey: encodedKey,
@@ -451,11 +541,12 @@ func TestProductionCustomerPostgresRequiresCertificateAndHostnameVerification(
 				Env:         "production",
 				DatabaseURL: "postgres://control:secret@control.internal:5432/opencloud?sslmode=verify-full",
 				Provisioner: ProvisionerConfig{
-					Backend:       "docker",
-					DockerSocket:  "/var/run/docker.sock",
-					CaddyAPIURL:   "https://caddy.internal:2019",
-					CaddyServerID: "srv0",
-					SiteImage:     "opencloud/site-static:phase2",
+					Backend:          "docker",
+					DockerSocket:     "/var/run/docker.sock",
+					CaddyAPIURL:      "https://caddy.internal:2019",
+					CaddyServerID:    "srv0",
+					SiteImage:        "opencloud/site-static:phase2",
+					SiteDomainSuffix: "sites.example.com",
 				},
 				CustomerDatabases: CustomerDatabaseConfig{
 					Enabled:          true,

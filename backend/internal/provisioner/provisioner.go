@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -73,6 +74,12 @@ const (
 	SiteStateSuspended SiteState = "suspended"
 )
 
+// CertificateObservation is the externally served certificate state observed
+// through a hostname-validating TLS handshake.
+type CertificateObservation struct {
+	ExpiresAt time.Time
+}
+
 // SiteProvisioner is implemented by Docker/Caddy now and may be implemented by
 // Hestia later without changing services or public API contracts.
 type SiteProvisioner interface {
@@ -81,6 +88,8 @@ type SiteProvisioner interface {
 	SuspendSite(ctx context.Context, ref SiteRef) error
 	ResumeSite(ctx context.Context, ref SiteRef) error
 	SiteStatus(ctx context.Context, ref SiteRef) (SiteState, error)
+	SetSiteDomains(ctx context.Context, ref SiteRef, hostnames []string) error
+	CertificateStatus(ctx context.Context, hostname, ingressIPv4 string) (CertificateObservation, error)
 }
 
 // ResourceName returns the deterministic backend resource prefix for a site.

@@ -23,6 +23,7 @@ const (
 	defaultPollInterval   = 2 * time.Second
 	defaultLeaseTimeout   = 10 * time.Minute
 	reconcileInterval     = 5 * time.Minute
+	siteReconcileInterval = 6 * time.Hour
 	maxRetryBackoff       = 5 * time.Minute
 	databaseUnlockTimeout = 5 * time.Second
 )
@@ -90,7 +91,9 @@ func (r *Runner) Run(ctx context.Context) {
 }
 
 func (r *Runner) enqueueReconciliation(ctx context.Context) {
-	sites, err := r.processor.sites.ListReconciliationCandidates(ctx, 100)
+	sites, err := r.processor.sites.ListReconciliationCandidates(
+		ctx, 100, time.Now().UTC().Add(-siteReconcileInterval),
+	)
 	if err != nil {
 		r.log.Error("reconciliation scan failed", zap.String("error_class", "reconciliation_scan_failed"))
 		return
@@ -112,6 +115,38 @@ func (r *Runner) enqueueReconciliation(ctx context.Context) {
 	}
 	if queued > 0 {
 		r.log.Info("reconciliation jobs queued", zap.Int("count", queued))
+	}
+	if r.processor.domainProcessor == nil {
+		return
+	}
+	domains, err := r.processor.domainProcessor.domains.ListReconciliationCandidates(
+		ctx,
+		100,
+		time.Now().UTC().Add(-domainReconcileInterval),
+	)
+	if err != nil {
+		r.log.Error("domain reconciliation scan failed", zap.String("error_class", "domain_reconciliation_scan_failed"))
+		return
+	}
+	queued = 0
+	for _, domain := range domains {
+		inserted, err := r.jobs.EnqueueUniqueDomain(
+			ctx, domain.AccountID, model.JobReconcileDomain, domain.ID, 5,
+		)
+		if err != nil {
+			r.log.Error(
+				"domain reconciliation enqueue failed",
+				zap.String("domain_id", domain.ID.String()),
+				zap.String("error_class", "domain_reconciliation_enqueue_failed"),
+			)
+			continue
+		}
+		if inserted {
+			queued++
+		}
+	}
+	if queued > 0 {
+		r.log.Info("domain reconciliation jobs queued", zap.Int("count", queued))
 	}
 }
 
@@ -179,6 +214,7 @@ func retryBackoff(attempt int) time.Duration {
 type Processor struct {
 	db                  *bun.DB
 	sites               *repository.SiteRepo
+	domains             *repository.DomainRepo
 	nodes               *repository.NodeRepo
 	databases           *repository.ManagedDatabaseRepo
 	jobs                *repository.JobRepo
@@ -186,12 +222,20 @@ type Processor struct {
 	provisioner         provisioner.SiteProvisioner
 	databaseProvisioner provisioner.DatabaseProvisioner
 	credentialCipher    *credential.Cipher
+	domainProcessor     *DomainProcessor
+}
+
+// SetDomainProcessor enables customer-domain jobs and domain-aware site route
+// convergence. Workers must configure it whenever live custom domains exist.
+func (p *Processor) SetDomainProcessor(processor *DomainProcessor) {
+	p.domainProcessor = processor
 }
 
 // NewProcessor constructs a Processor.
 func NewProcessor(
 	db *bun.DB,
 	sites *repository.SiteRepo,
+	domains *repository.DomainRepo,
 	nodes *repository.NodeRepo,
 	jobs *repository.JobRepo,
 	audit *repository.AuditRepo,
@@ -203,6 +247,7 @@ func NewProcessor(
 	return &Processor{
 		db:                  db,
 		sites:               sites,
+		domains:             domains,
 		nodes:               nodes,
 		databases:           databases,
 		jobs:                jobs,
@@ -221,6 +266,15 @@ type sitePayload struct {
 // domain state, audit row, and successful job status.
 func (p *Processor) Handle(ctx context.Context, job *model.Job, workerID string) error {
 	switch job.Kind {
+	case model.JobVerifyDomain,
+		model.JobProvisionDomain,
+		model.JobDeprovisionDomain,
+		model.JobReconcileDomain,
+		model.JobObserveDomainCertificate:
+		if p.domainProcessor == nil {
+			return errors.New("domain processor is not configured")
+		}
+		return p.domainProcessor.Handle(ctx, job, workerID)
 	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
 		return p.handleDatabase(ctx, job, workerID)
 	default:
@@ -233,9 +287,52 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 	if err := json.Unmarshal(job.Payload, &payload); err != nil || payload.SiteID == uuid.Nil {
 		return errors.New("invalid job payload")
 	}
-	site, err := p.sites.GetForWorker(ctx, payload.SiteID)
+	return p.withDomainSiteRoutingLock(ctx, payload.SiteID, func(conn bun.Conn) error {
+		return p.handleSiteLocked(ctx, conn, job, workerID, payload.SiteID)
+	})
+}
+
+func (p *Processor) handleSiteLocked(
+	ctx context.Context,
+	conn bun.Conn,
+	job *model.Job,
+	workerID string,
+	siteID uuid.UUID,
+) error {
+	site, err := p.sites.WithDB(conn).GetForWorker(ctx, siteID)
 	if err != nil {
 		return fmt.Errorf("load job site: %w", err)
+	}
+	if err := validateSiteJobOwnership(job, site); err != nil {
+		return err
+	}
+	if job.Kind == model.JobDeleteSite || job.Kind == model.JobCleanupSite {
+		if err := p.prepareSiteDomainCleanup(ctx, conn, job, site); err != nil {
+			return err
+		}
+	}
+	if job.Kind == model.JobReconcileSite {
+		switch site.Status {
+		case model.SiteDeleting, model.SiteDeleted:
+			if err := p.prepareSiteDomainCleanup(ctx, conn, job, site); err != nil {
+				return err
+			}
+		case model.SiteActive:
+			deferred, err := p.deferActiveSiteReconcileWithoutDomainProcessor(
+				ctx, conn, job, workerID, site,
+			)
+			if err != nil {
+				return err
+			}
+			if deferred {
+				return nil
+			}
+		}
+	}
+	if job.Kind == model.JobResumeSite {
+		if err := p.ensureSiteResumeDomainSafety(ctx, conn, site); err != nil {
+			return err
+		}
 	}
 	ref := provisioner.SiteRef{
 		SiteID:    site.ID,
@@ -268,7 +365,17 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 		nextStatus, expectedPending, auditAction = model.SiteDeleted, model.SiteDeleting, model.AuditSiteDeleted
 	case model.JobReconcileSite:
 		err = p.reconcile(ctx, site, ref)
+		if err == nil && p.domainProcessor != nil && site.Status == model.SiteActive {
+			var hostnames []string
+			hostnames, err = p.domainProcessor.domains.WithDB(conn).RouteHostnames(ctx, site.ID)
+			if err == nil {
+				err = p.provisioner.SetSiteDomains(ctx, ref, hostnames)
+			}
+		}
 		nextStatus, auditAction = site.Status, model.AuditSiteReconciled
+		if site.Status == model.SiteDeleting {
+			nextStatus = model.SiteDeleted
+		}
 	default:
 		return fmt.Errorf("unsupported job kind %q", job.Kind)
 	}
@@ -276,7 +383,7 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 		return err
 	}
 
-	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+	return conn.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		sites := p.sites.WithDB(tx)
 		nodes := p.nodes.WithDB(tx)
 		jobs := p.jobs.WithDB(tx)
@@ -286,7 +393,9 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 		if err != nil {
 			return err
 		}
-		if job.Kind == model.JobDeleteSite || job.Kind == model.JobCleanupSite {
+		tearsDownSite := job.Kind == model.JobDeleteSite || job.Kind == model.JobCleanupSite ||
+			(job.Kind == model.JobReconcileSite && current.Status == model.SiteDeleting)
+		if tearsDownSite {
 			nodeID, err := sites.MarkCapacityReleased(ctx, site.ID)
 			if err != nil {
 				return err
@@ -301,6 +410,26 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 			}
 		} else if job.Kind != model.JobReconcileSite && current.Status == expectedPending {
 			if err := sites.SetWorkerStatus(ctx, site.ID, nextStatus, nil); err != nil {
+				return err
+			}
+			if job.Kind == model.JobResumeSite && p.domainProcessor != nil {
+				domainIDs, err := p.domainProcessor.domains.WithDB(tx).ListRoutableIDsBySite(
+					ctx, current.AccountID, current.ID,
+				)
+				if err != nil {
+					return err
+				}
+				for _, domainID := range domainIDs {
+					if _, err := jobs.EnqueueUniqueDomain(
+						ctx, current.AccountID, model.JobProvisionDomain, domainID, 12,
+					); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if job.Kind == model.JobReconcileSite {
+			if err := sites.MarkReconciled(ctx, current.ID, time.Now().UTC()); err != nil {
 				return err
 			}
 		}
@@ -320,6 +449,196 @@ func (p *Processor) handleSite(ctx context.Context, job *model.Job, workerID str
 		}
 		return jobs.Complete(ctx, job.ID, workerID)
 	})
+}
+
+// prepareSiteDomainCleanup commits every dependent domain transition, audit,
+// and deprovision job before the site runtime is removed. A later provider
+// failure can therefore recover by retrying already-durable work.
+func (p *Processor) prepareSiteDomainCleanup(
+	ctx context.Context,
+	conn bun.Conn,
+	job *model.Job,
+	site *model.Site,
+) error {
+	if p.domainProcessor == nil {
+		if p.domains == nil {
+			return errors.New("domain repository is not configured")
+		}
+		hasLiveDomains, err := p.domains.WithDB(conn).SiteHasLiveDomains(
+			ctx, site.AccountID, site.ID,
+		)
+		if err != nil {
+			return fmt.Errorf("check site domains before cleanup: %w", err)
+		}
+		if hasLiveDomains {
+			return errors.New("domain processor is not configured for site cleanup")
+		}
+		return nil
+	}
+	return conn.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		sites := p.sites.WithDB(tx)
+		domains := p.domainProcessor.domains.WithDB(tx)
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+		current, err := sites.GetForWorkerForUpdate(ctx, site.ID)
+		if err != nil {
+			return err
+		}
+		if err := validateSiteJobOwnership(job, current); err != nil {
+			return err
+		}
+		rows, err := domains.ListForSiteDeletion(ctx, current.AccountID, current.ID)
+		if err != nil {
+			return err
+		}
+		for i := range rows {
+			domain := &rows[i]
+			transitioned := domain.Status != model.DomainDeleting
+			if transitioned {
+				if err := domains.SetWorkerStatus(ctx, domain.ID, model.DomainDeleting, nil); err != nil {
+					return err
+				}
+			}
+			if _, err := jobs.EnqueueUniqueDomain(
+				ctx,
+				domain.AccountID,
+				model.JobDeprovisionDomain,
+				domain.ID,
+				domainLifecycleAttempts,
+			); err != nil {
+				return err
+			}
+			if transitioned {
+				if err := p.domainProcessor.appendAudit(
+					ctx,
+					audit,
+					domain,
+					model.AuditDomainDetachQueued,
+					job,
+					map[string]any{"reason": "site_deleted"},
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func (p *Processor) ensureSiteResumeDomainSafety(
+	ctx context.Context,
+	conn bun.Conn,
+	site *model.Site,
+) error {
+	if p.domainProcessor != nil {
+		return nil
+	}
+	if p.domains == nil {
+		return errors.New("domain repository is not configured")
+	}
+	hasRoutableDomains, err := p.domains.WithDB(conn).SiteHasRoutableDomains(
+		ctx, site.AccountID, site.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("check site domains before resume: %w", err)
+	}
+	if hasRoutableDomains {
+		return errors.New("domain processor is not configured for site resume")
+	}
+	return nil
+}
+
+func (p *Processor) deferActiveSiteReconcileWithoutDomainProcessor(
+	ctx context.Context,
+	conn bun.Conn,
+	job *model.Job,
+	workerID string,
+	site *model.Site,
+) (bool, error) {
+	if p.domainProcessor != nil {
+		return false, nil
+	}
+	if p.domains == nil {
+		return false, errors.New("domain repository is not configured")
+	}
+	hasRoutableDomains, err := p.domains.WithDB(conn).SiteHasRoutableDomains(
+		ctx, site.AccountID, site.ID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("check site domains before reconcile: %w", err)
+	}
+	if !hasRoutableDomains {
+		return false, nil
+	}
+	err = conn.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		sites := p.sites.WithDB(tx)
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+		current, err := sites.GetForWorkerForUpdate(ctx, site.ID)
+		if err != nil {
+			return err
+		}
+		if err := validateSiteJobOwnership(job, current); err != nil {
+			return err
+		}
+		if current.Status != model.SiteActive {
+			return errors.New("site changed while deferring reconciliation")
+		}
+		if err := sites.MarkReconciled(ctx, current.ID, time.Now().UTC()); err != nil {
+			return err
+		}
+		aid := current.AccountID
+		if err := audit.Append(ctx, repository.Entry{
+			AccountID: &aid,
+			Action:    model.AuditSiteReconcileDeferred,
+			Target:    stringPointer(current.ID.String()),
+			Metadata: map[string]any{
+				"domain":          current.Domain,
+				"job_id":          job.ID.String(),
+				"job_kind":        job.Kind,
+				"status":          current.Status,
+				"deferred_reason": "domain_processor_unavailable",
+			},
+		}); err != nil {
+			return err
+		}
+		return jobs.Complete(ctx, job.ID, workerID)
+	})
+	return err == nil, err
+}
+
+func (p *Processor) withDomainSiteRoutingLock(
+	ctx context.Context,
+	siteID uuid.UUID,
+	operation func(bun.Conn) error,
+) (err error) {
+	conn, err := p.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	sites := p.sites.WithDB(conn)
+	if err := sites.LockRoutingSession(ctx, siteID); err != nil {
+		return errors.Join(err, conn.Close())
+	}
+	defer func() {
+		unlockContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), domainUnlockTimeout)
+		defer cancel()
+		unlocked, unlockErr := sites.UnlockRoutingSession(unlockContext, siteID)
+		if unlockErr != nil {
+			err = errors.Join(err, fmt.Errorf("unlock site routing: %w", unlockErr))
+		} else if !unlocked {
+			err = errors.Join(err, errors.New("site routing lock was not held"))
+		}
+		err = errors.Join(err, conn.Close())
+	}()
+	return operation(conn)
+}
+
+func validateSiteJobOwnership(job *model.Job, site *model.Site) error {
+	if job.AccountID == nil || *job.AccountID != site.AccountID {
+		return errors.New("site job ownership mismatch")
+	}
+	return nil
 }
 
 type databasePayload struct {
@@ -577,6 +896,15 @@ func (p *Processor) reconcile(ctx context.Context, site *model.Site, ref provisi
 // and enqueues compensating cleanup after failed provisioning.
 func (p *Processor) Exhaust(ctx context.Context, job *model.Job, workerID, safeError string) error {
 	switch job.Kind {
+	case model.JobVerifyDomain,
+		model.JobProvisionDomain,
+		model.JobDeprovisionDomain,
+		model.JobReconcileDomain,
+		model.JobObserveDomainCertificate:
+		if p.domainProcessor == nil {
+			return errors.New("domain processor is not configured")
+		}
+		return p.domainProcessor.Exhaust(ctx, job, workerID, safeError)
 	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
 		return p.exhaustDatabase(ctx, job, workerID, safeError)
 	default:
@@ -599,7 +927,7 @@ func (p *Processor) exhaustSite(ctx context.Context, job *model.Job, workerID, s
 			return err
 		}
 		currentStatus := site.Status
-		if currentStatus != model.SiteDeleting {
+		if currentStatus != model.SiteDeleting && job.Kind != model.JobReconcileSite {
 			if err := sites.SetWorkerStatus(ctx, site.ID, model.SiteFailed, &safeError); err != nil {
 				return err
 			}

@@ -18,13 +18,18 @@ import (
 
 	"github.com/nazxf/opencloud/backend/internal/config"
 	"github.com/nazxf/opencloud/backend/internal/credential"
+	"github.com/nazxf/opencloud/backend/internal/domainverify"
 	"github.com/nazxf/opencloud/backend/internal/handler"
 	"github.com/nazxf/opencloud/backend/internal/metrics"
 	"github.com/nazxf/opencloud/backend/internal/middleware"
 	"github.com/nazxf/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/repository"
 	"github.com/nazxf/opencloud/backend/internal/service"
 )
+
+const apiRateLimitWindow = time.Second
+const minimumEdgeRateLimitRPS = 100
 
 // Server owns the HTTP server and its dependencies.
 type Server struct {
@@ -70,6 +75,7 @@ func New(
 	overviewRepo := repository.NewResourceOverviewRepo(db)
 	nodeRepo := repository.NewNodeRepo(db)
 	jobRepo := repository.NewJobRepo(db)
+	domainRepo := repository.NewDomainRepo(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
 	siteSvc := service.NewSiteService(
 		db,
@@ -79,6 +85,7 @@ func New(
 		auditRepo,
 		string(cfg.Provisioner.Backend),
 		cfg.Provisioner.SiteImage,
+		cfg.Provisioner.SiteDomainSuffix,
 	)
 	nodeSvc := service.NewNodeService(db, nodeRepo, auditRepo)
 	databaseSvc := service.NewManagedDatabaseService(
@@ -90,15 +97,43 @@ func New(
 		databaseCipher,
 	)
 	overviewSvc := service.NewResourceOverviewService(overviewRepo)
+	var domainSigner *domainverify.Signer
+	var domainDNS provisioner.DomainDNSProvisioner
+	if cfg.Domains.Enabled {
+		var err error
+		domainSigner, err = domainverify.New(cfg.Domains.VerificationKey)
+		if err != nil {
+			log.Fatal("initialize domain verification signer", zap.Error(err))
+		}
+		domainDNS, err = provisioner.NewManualDNS(cfg.Domains.DNSResolver)
+		if err != nil {
+			log.Fatal("initialize domain DNS resolver", zap.Error(err))
+		}
+	}
+	domainSvc := service.NewDomainService(
+		db, domainRepo, siteRepo, jobRepo, auditRepo,
+		domainDNS, domainSigner, cfg.Domains.IngressIPv4, cfg.Domains.Enabled,
+	)
+	domainPermissionSvc := service.NewDomainPermissionService(
+		domainRepo,
+		cfg.Provisioner.SiteDomainSuffix,
+	)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
 	databaseH := handler.NewManagedDatabaseHandler(databaseSvc)
 	overviewH := handler.NewResourceOverviewHandler(overviewSvc)
+	domainH := handler.NewDomainHandler(domainSvc)
 
 	v1 := r.Group("/api/v1")
-	// Global API rate limit (cheap abuse guard); auth routes have tighter limits.
-	v1.Use(middleware.RateLimit(rdb, "api", cfg.RateLimitRPS, time.Minute))
+	// The public edge guard limits one source IP at a deliberately coarse
+	// budget. The customer budget is applied after auth and keyed by account,
+	// because BFF requests from different tenants share the Next.js source IP.
+	edgeLimit := cfg.RateLimitRPS * 10
+	if edgeLimit < minimumEdgeRateLimitRPS {
+		edgeLimit = minimumEdgeRateLimitRPS
+	}
+	v1.Use(middleware.RateLimit(rdb, "api-edge", edgeLimit, apiRateLimitWindow))
 
 	// Protected customer routes require a validated JWT with account_id + role.
 	if cfg.AuthJWKSURL != "" {
@@ -110,6 +145,7 @@ func New(
 		authed.Use(
 			middleware.Auth(keyFunc, cfg.AuthIssuer, cfg.AuthAudience),
 			middleware.RequireCurrentMembership(acctRepo),
+			middleware.RateLimit(rdb, "api-account", cfg.RateLimitRPS, apiRateLimitWindow),
 		)
 		{
 			authed.GET("/me", acctH.Me)
@@ -121,6 +157,13 @@ func New(
 			authed.POST("/sites/:id/suspend", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Suspend)
 			authed.POST("/sites/:id/resume", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Resume)
 			authed.DELETE("/sites/:id", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Delete)
+			authed.GET("/sites/:id/domains", domainH.ListBySite)
+			authed.POST("/sites/:id/domains", middleware.RateLimit(rdb, "domain-write", 30, time.Minute), domainH.Attach)
+			authed.GET("/domains/:id", domainH.Get)
+			authed.GET("/domains/:id/instructions", domainH.Instructions)
+			authed.POST("/domains/:id/challenge", middleware.RateLimit(rdb, "domain-write", 10, time.Minute), domainH.RotateChallenge)
+			authed.POST("/domains/:id/verify", middleware.RateLimit(rdb, "domain-write", 30, time.Minute), domainH.Verify)
+			authed.DELETE("/domains/:id", middleware.RateLimit(rdb, "domain-write", 30, time.Minute), domainH.Detach)
 			authed.GET("/databases", databaseH.List)
 			authed.POST(
 				"/databases",
@@ -156,6 +199,7 @@ func New(
 
 	metricsMux := http.NewServeMux()
 	metricsMux.Handle("/metrics", promhttp.HandlerFor(m.Registry(), promhttp.HandlerOpts{}))
+	metricsMux.Handle("/caddy/permission", handler.NewCaddyPermissionHandler(domainPermissionSvc))
 
 	return &Server{
 		cfg: cfg,

@@ -46,6 +46,26 @@ type phase2Fixture struct {
 	svc      *service.SiteService
 }
 
+type blockingSiteStatusProvisioner struct {
+	provisioner.SiteProvisioner
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *blockingSiteStatusProvisioner) SiteStatus(
+	ctx context.Context,
+	ref provisioner.SiteRef,
+) (provisioner.SiteState, error) {
+	p.once.Do(func() { close(p.entered) })
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	return p.SiteProvisioner.SiteStatus(ctx, ref)
+}
+
 func newPhase2Fixture(t *testing.T, capacities ...int) *phase2Fixture {
 	t.Helper()
 	db := openPhase2TestDB(t)
@@ -93,6 +113,7 @@ func newPhase2Fixture(t *testing.T, capacities ...int) *phase2Fixture {
 			audit,
 			string(provisioner.BackendFake),
 			"opencloud/site-static:phase2",
+			"",
 		),
 	}
 	t.Cleanup(func() {
@@ -287,7 +308,10 @@ func TestSiteLifecycleThroughDurableJobsReleasesCapacityExactlyOnce(t *testing.T
 	fx := newPhase2Fixture(t, 1)
 	ctx := context.Background()
 	fake := provisioner.NewFake()
-	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake, nil, nil, nil)
+	processor := queue.NewProcessor(
+		fx.db, fx.sites, repository.NewDomainRepo(fx.db), fx.nodeRepo,
+		fx.jobs, fx.audit, fake, nil, nil, nil,
+	)
 
 	site, err := fx.svc.Create(
 		ctx,
@@ -349,7 +373,10 @@ func TestDeleteIntentWinsAgainstInFlightProvisionCompletion(t *testing.T) {
 	fx := newPhase2Fixture(t, 1)
 	ctx := context.Background()
 	fake := provisioner.NewFake()
-	processor := queue.NewProcessor(fx.db, fx.sites, fx.nodeRepo, fx.jobs, fx.audit, fake, nil, nil, nil)
+	processor := queue.NewProcessor(
+		fx.db, fx.sites, repository.NewDomainRepo(fx.db), fx.nodeRepo,
+		fx.jobs, fx.audit, fake, nil, nil, nil,
+	)
 
 	site, err := fx.svc.Create(
 		ctx,
@@ -371,6 +398,92 @@ func TestDeleteIntentWinsAgainstInFlightProvisionCompletion(t *testing.T) {
 	current, err = fx.sites.GetForWorker(ctx, site.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.SiteDeleted, current.Status)
+}
+
+func TestSiteReconcileSerializesConcurrentDeleteWithSmallPool(t *testing.T) {
+	fx := newPhase2Fixture(t, 1)
+	ctx := context.Background()
+	originalMaxConnections := fx.db.Stats().MaxOpenConnections
+	fx.db.SetMaxOpenConns(2)
+	t.Cleanup(func() { fx.db.SetMaxOpenConns(originalMaxConnections) })
+
+	fake := provisioner.NewFake()
+	baseProcessor := queue.NewProcessor(
+		fx.db, fx.sites, repository.NewDomainRepo(fx.db), fx.nodeRepo,
+		fx.jobs, fx.audit, fake, nil, nil, nil,
+	)
+	site, err := fx.svc.Create(
+		ctx,
+		"phase2-actor",
+		fx.account.ID,
+		uuid.NewString(),
+		service.CreateSiteRequest{Domain: "reconcile-delete-" + uuid.NewString() + ".example.test"},
+	)
+	require.NoError(t, err)
+	processNextJob(ctx, t, fx.jobs, baseProcessor, model.JobProvisionSite)
+
+	blocking := &blockingSiteStatusProvisioner{
+		SiteProvisioner: fake,
+		entered:         make(chan struct{}),
+		release:         make(chan struct{}),
+	}
+	processor := queue.NewProcessor(
+		fx.db, fx.sites, repository.NewDomainRepo(fx.db), fx.nodeRepo,
+		fx.jobs, fx.audit, blocking, nil, nil, nil,
+	)
+	inserted, err := fx.jobs.EnqueueUniqueSite(
+		ctx, fx.account.ID, model.JobReconcileSite, site.ID,
+	)
+	require.NoError(t, err)
+	require.True(t, inserted)
+	workerID := "site-reconcile-race-" + uuid.NewString()
+	job, err := fx.jobs.Claim(ctx, workerID)
+	require.NoError(t, err)
+	require.Equal(t, model.JobReconcileSite, job.Kind)
+
+	reconcileResult := make(chan error, 1)
+	go func() { reconcileResult <- processor.Handle(ctx, job, workerID) }()
+	select {
+	case <-blocking.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconcile did not reach the blocking provider observation")
+	}
+
+	deleteResult := make(chan error, 1)
+	go func() {
+		_, deleteErr := fx.svc.Delete(
+			ctx, "phase2-actor", fx.account.ID, site.ID,
+		)
+		deleteResult <- deleteErr
+	}()
+	select {
+	case deleteErr := <-deleteResult:
+		t.Fatalf("delete bypassed the in-flight routing lock: %v", deleteErr)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(blocking.release)
+	require.NoError(t, <-reconcileResult)
+	select {
+	case deleteErr := <-deleteResult:
+		require.NoError(t, deleteErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("delete did not continue after reconcile released the routing lock")
+	}
+
+	current, err := fx.sites.GetForWorker(ctx, site.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.SiteDeleting, current.Status)
+	processNextJob(ctx, t, fx.jobs, processor, model.JobDeleteSite)
+	current, err = fx.sites.GetForWorker(ctx, site.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.SiteDeleted, current.Status)
+	state, err := fake.SiteStatus(ctx, provisioner.SiteRef{
+		SiteID: site.ID, AccountID: site.AccountID, NodeID: site.NodeID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, provisioner.SiteStateMissing, state,
+		"the delete provider operation must run after the reconciler, not be skipped")
 }
 
 func processNextJob(

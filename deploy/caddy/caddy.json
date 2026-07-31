@@ -1,0 +1,35 @@
+{
+  "admin": {
+    "listen": "127.0.0.1:2019"
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "srv0": {
+          "listen": [
+            ":443"
+          ],
+          "routes": [],
+          "tls_connection_policies": [
+            {}
+          ]
+        }
+      }
+    },
+    "tls": {
+      "automation": {
+        "policies": [
+          {
+            "on_demand": true
+          }
+        ],
+        "on_demand": {
+          "permission": {
+            "endpoint": "http://127.0.0.1:9090/caddy/permission",
+            "module": "http"
+          }
+        }
+      }
+    }
+  }
+}

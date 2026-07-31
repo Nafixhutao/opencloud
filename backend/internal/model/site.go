@@ -46,6 +46,7 @@ type Site struct {
 	Status             string     `bun:"status,notnull" json:"status"`
 	IdempotencyKey     *string    `bun:"idempotency_key" json:"-"`
 	LastError          *string    `bun:"last_error" json:"last_error,omitempty"`
+	LastReconciledAt   *time.Time `bun:"last_reconciled_at" json:"-"`
 	CreatedAt          time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
 	UpdatedAt          time.Time  `bun:"updated_at,notnull,default:now()" json:"updated_at"`
 	DeletedAt          *time.Time `bun:"deleted_at" json:"deleted_at,omitempty"`

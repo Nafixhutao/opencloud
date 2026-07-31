@@ -29,6 +29,17 @@ func (r *JobRepo) WithDB(db bun.IDB) *JobRepo {
 
 // Enqueue inserts work in the caller's resource transaction.
 func (r *JobRepo) Enqueue(ctx context.Context, accountID *uuid.UUID, kind string, payload any) (*model.Job, error) {
+	return r.EnqueueWithMaxAttempts(ctx, accountID, kind, payload, 5)
+}
+
+// EnqueueWithMaxAttempts inserts work with an explicit retry budget.
+func (r *JobRepo) EnqueueWithMaxAttempts(
+	ctx context.Context,
+	accountID *uuid.UUID,
+	kind string,
+	payload any,
+	maxAttempts int,
+) (*model.Job, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -39,7 +50,7 @@ func (r *JobRepo) Enqueue(ctx context.Context, accountID *uuid.UUID, kind string
 		AccountID:   accountID,
 		Kind:        kind,
 		Status:      model.JobQueued,
-		MaxAttempts: 5,
+		MaxAttempts: maxAttempts,
 		RunAt:       now,
 		Payload:     raw,
 		CreatedAt:   now,
@@ -49,6 +60,40 @@ func (r *JobRepo) Enqueue(ctx context.Context, accountID *uuid.UUID, kind string
 		return nil, err
 	}
 	return job, nil
+}
+
+// EnqueueUniqueDomain inserts domain work unless the same kind/domain is
+// already queued or running.
+func (r *JobRepo) EnqueueUniqueDomain(
+	ctx context.Context,
+	accountID uuid.UUID,
+	kind string,
+	domainID uuid.UUID,
+	maxAttempts int,
+) (bool, error) {
+	payload, err := json.Marshal(map[string]uuid.UUID{"domain_id": domainID})
+	if err != nil {
+		return false, err
+	}
+	result, err := r.db.NewRaw(`
+		INSERT INTO jobs (
+			id, account_id, kind, status, attempts, max_attempts,
+			run_at, payload, created_at, updated_at
+		)
+		VALUES (?, ?, ?, ?, 0, ?, now(), ?::jsonb, now(), now())
+		ON CONFLICT DO NOTHING`,
+		uuid.New(),
+		accountID,
+		kind,
+		model.JobQueued,
+		maxAttempts,
+		string(payload),
+	).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
 }
 
 // EnqueueUniqueSite inserts periodic work unless an equivalent site/kind job is
