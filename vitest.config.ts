@@ -16,6 +16,8 @@ export default defineConfig({
       'app/**/*.test.tsx',
       'components/**/*.test.tsx',
       'lib/**/*.ui.test.ts',
+      'lib/api.test.ts',
+      'lib/api-route.test.ts',
     ],
   },
 });

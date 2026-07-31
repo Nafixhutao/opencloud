@@ -14,7 +14,42 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
-- **Phase 2 customer database lifecycle (stacked review branch, not deployed):**
+- **Phase 3 customer domains (not production-deployed):** additive
+  tenant-scoped domains and a global hostname-claim registry; expiring HMAC
+  ownership challenges; staged TXT-then-A instructions; durable verify,
+  provision/deprovision, reconcile, and certificate-observation jobs; exact-host
+  Caddy routing with an internal fail-closed On-Demand TLS permission endpoint;
+  and an accessible Next.js domain dashboard/BFF with lifecycle, certificate,
+  retry, copy, and typed-detach states. Disposable gates cover PostgreSQL
+  migrations/rollback/concurrency, full Go/frontend suites, official Caddy
+  validation, real local-CA TLS handshakes, exact routing, unknown-host denial,
+  and database-outage denial. This does not claim public DNS, ACME, or production
+  HTTPS is active.
+
+### Changed
+- Phase 3 production primary hostnames are restricted to the platform-owned
+  `SITE_DOMAIN_SUFFIX`; verified custom domains remain provider-neutral. DNS
+  instructions disclose TXT proof first and A routing only after ownership is
+  consumed, while active domains may later use an HTTP proxy without being
+  demoted by reconciliation.
+- The Phase 3 migration is explicitly maintenance-window-only: production
+  migration requires a one-shot acknowledgement after backup and API/worker
+  drain, and lock acquisition fails after five seconds. Rollback retains a
+  Phase 3-compatible API permission endpoint and worker while live domains
+  exist.
+
+### Fixed
+- Site lifecycle and reconciliation now share one PostgreSQL advisory lock and
+  one connection through provider completion, durable job state, and audit;
+  concurrent delete cannot be mistaken for completed provider cleanup.
+- Domain pages lazy-load DNS records, preserve backend field issues, retry
+  row-scoped errors, keep pagination in the URL, honor rate-limit/auth polling
+  failures, and avoid a 25-request instruction fan-out.
+- Reconciliation reserves capacity for active/suspended sites even when more
+  than 100 deletes fail. Unchanged certificate probes refresh the operator-facing
+  last-check timestamp without churning the domain configuration timestamp or
+  audit history.
+- **Phase 2 customer database lifecycle (merged in main, not deployed):**
   an additive tenant-scoped `databases`/`database_credentials` schema; durable
   asynchronous PostgreSQL/MariaDB provision, delete, and cleanup jobs; real
   least-privilege provider adapters; AES-256-GCM encrypted pending credentials;
@@ -22,14 +57,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   and a responsive database dashboard with real interaction tests. CI exercises
   both disposable engines, password rotation, privilege isolation, idempotent
   teardown, concurrent create/reveal behavior, and audit rollback paths.
-- **Encrypted Phase 2 control-plane backup/restore (stacked review branch, not
+- **Encrypted Phase 2 control-plane backup/restore (merged in main, not
   deployed):** a non-root opt-in Compose scheduler streams PostgreSQL 18 custom
   dumps through chunked authenticated AES-256-GCM encryption, atomically
   publishes SHA-256 sidecars, applies allowlisted pair-aware retention, and
   requires exact destructive confirmation for restores. CI performs a real
   two-Postgres rehearsal, verifies the encrypted archive catalog, restores a
   sentinel, asserts plaintext is absent, and cleans every disposable resource.
-- **Phase 2 site-provisioning core (review branch, not deployed):** additive
+- **Phase 2 site-provisioning core (merged in main, not deployed):** additive
   `nodes`, `sites`, and durable `jobs` schema; atomically reserved least-loaded
   placement; tenant-scoped asynchronous site create/suspend/resume/delete APIs;
   audited admin node management; retry/backoff, stale-job recovery, cleanup, and
@@ -56,14 +91,17 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   events for login, password reset, profile, and admin role/status changes.
 
 ### Changed
+- ADR 0009 supersedes ADR 0003's default ingress/DNS choice: the implemented
+  baseline is direct Caddy ingress with universal customer-managed DNS. A
+  Cloudflare Tunnel or tenant-authorized DNS adapter remains optional and is not
+  currently available; `CLOUDFLARE_API_ENABLED=true` fails closed.
 - The backend build and CI toolchain now require Go 1.26.5, closing standard
   library vulnerabilities reported against the prior 1.26.2 build.
 - Phase 1 is technically complete and staging-verified; production activation is
-  explicitly deferred. Phase 2 remains incomplete until the stacked site,
-  backup, and database review branches pass review/CI and merge. Dedicated TLS
-  customer-database targets, external credential/backup key custody, off-host
-  backup storage, staging verification, and release approval remain production
-  gates.
+  explicitly deferred. Phase 2 code merged through PR #26 but is not deployed.
+  Dedicated TLS customer-database targets, external credential/backup key
+  custody, off-host backup storage, staging verification, and release approval
+  remain production gates.
 - Bun `up` now assigns one rollback group per migration instead of grouping all
   pending files. Production stays forward-only; a development `down` can only
   target the newest migration. Production mail configuration fails fast unless

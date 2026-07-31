@@ -32,6 +32,7 @@ const (
 	AuditSiteDeleted                 = "site.delete.complete"
 	AuditSiteFailed                  = "site.lifecycle.failed"
 	AuditSiteReconciled              = "site.reconcile"
+	AuditSiteReconcileDeferred       = "site.reconcile.deferred"
 	AuditNodeRegistered              = "admin.node.register"
 	AuditAdminNodesListed            = "admin.nodes.list"
 	AuditNodeStatusChanged           = "admin.node.status_change"

@@ -13,6 +13,7 @@ import (
 
 	"github.com/nazxf/opencloud/backend/internal/app"
 	"github.com/nazxf/opencloud/backend/internal/credential"
+	"github.com/nazxf/opencloud/backend/internal/domainverify"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/queue"
 	"github.com/nazxf/opencloud/backend/internal/repository"
@@ -64,6 +65,7 @@ func main() {
 	}
 
 	sites := repository.NewSiteRepo(deps.DB)
+	domains := repository.NewDomainRepo(deps.DB)
 	databases := repository.NewManagedDatabaseRepo(deps.DB)
 	nodes := repository.NewNodeRepo(deps.DB)
 	jobs := repository.NewJobRepo(deps.DB)
@@ -71,6 +73,7 @@ func main() {
 	processor := queue.NewProcessor(
 		deps.DB,
 		sites,
+		domains,
 		nodes,
 		jobs,
 		audit,
@@ -79,12 +82,34 @@ func main() {
 		databaseProvisioner,
 		databaseCipher,
 	)
+	if deps.Cfg.Domains.Enabled {
+		domainSigner, err := domainverify.New(deps.Cfg.Domains.VerificationKey)
+		if err != nil {
+			deps.Log.Fatal("initialize domain verification signer", zap.Error(err))
+		}
+		domainDNS, err := provisioner.NewManualDNS(deps.Cfg.Domains.DNSResolver)
+		if err != nil {
+			deps.Log.Fatal("initialize domain DNS resolver", zap.Error(err))
+		}
+		processor.SetDomainProcessor(queue.NewDomainProcessor(
+			deps.DB,
+			domains,
+			sites,
+			jobs,
+			audit,
+			domainDNS,
+			siteProvisioner,
+			domainSigner,
+			deps.Cfg.Domains.IngressIPv4,
+		))
+	}
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(
 		"worker started",
 		zap.String("provisioner_backend", string(deps.Cfg.Provisioner.Backend)),
 		zap.Bool("customer_databases_enabled", deps.Cfg.CustomerDatabases.Enabled),
+		zap.Bool("domains_enabled", deps.Cfg.Domains.Enabled),
 	)
 	runner.Run(ctx)
 	deps.Log.Info("worker shutting down")

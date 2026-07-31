@@ -9,6 +9,7 @@ import type { SocialProvider } from '@/lib/social-providers';
 
 type SocialAuthButtonsProps = {
   providers: readonly SocialProvider[];
+  callbackURL: string;
   errorCallbackURL: string;
   onError: (message: string | null) => void;
 };
@@ -39,6 +40,7 @@ function GithubMark() {
 
 export function SocialAuthButtons({
   providers,
+  callbackURL,
   errorCallbackURL,
   onError,
 }: SocialAuthButtonsProps) {
@@ -55,8 +57,8 @@ export function SocialAuthButtons({
     try {
       const { error } = await authClient.signIn.social({
         provider,
-        callbackURL: '/dashboard',
-        newUserCallbackURL: '/dashboard',
+        callbackURL,
+        newUserCallbackURL: callbackURL,
         errorCallbackURL,
       });
 

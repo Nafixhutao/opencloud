@@ -3,6 +3,7 @@ package provisioner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,11 +32,12 @@ const (
 // Docker provisions hardened site containers and isolated resources through a
 // permissioned Unix socket, then maintains one owned Caddy route per site.
 type Docker struct {
-	engine       *http.Client
-	caddy        *http.Client
-	caddyURL     *url.URL
-	serverID     string
-	allowedImage string
+	engine           *http.Client
+	caddy            *http.Client
+	caddyURL         *url.URL
+	serverID         string
+	allowedImage     string
+	certificateProbe func(context.Context, string, string) (CertificateObservation, error)
 }
 
 // NewDocker validates local worker configuration and constructs the adapter.
@@ -66,10 +69,11 @@ func NewDocker(socketPath, caddyAPIURL, caddyServerID, allowedImage string) (*Do
 			Transport: transport,
 			Timeout:   30 * time.Second,
 		},
-		caddy:        &http.Client{Timeout: 15 * time.Second},
-		caddyURL:     caddyURL,
-		serverID:     caddyServerID,
-		allowedImage: allowedImage,
+		caddy:            &http.Client{Timeout: 15 * time.Second},
+		caddyURL:         caddyURL,
+		serverID:         caddyServerID,
+		allowedImage:     allowedImage,
+		certificateProbe: probeCertificate,
 	}, nil
 }
 
@@ -223,6 +227,73 @@ func (d *Docker) SiteStatus(ctx context.Context, ref SiteRef) (SiteState, error)
 		return SiteStateRunning, nil
 	}
 	return SiteStateSuspended, nil
+}
+
+// SetSiteDomains replaces the hostname matcher on one owned site route. The
+// complete set is written atomically with Caddy's ETag guard, so concurrent
+// domain jobs retry instead of dropping another hostname.
+func (d *Docker) SetSiteDomains(ctx context.Context, ref SiteRef, hostnames []string) error {
+	container, found, err := d.inspectContainer(ctx, ResourceName(ref.SiteID))
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("site container is missing")
+	}
+	if err := requireOwnership(container.Config.Labels, ownershipLabels(ref.AccountID, ref.SiteID, ref.NodeID)); err != nil {
+		return err
+	}
+	if len(hostnames) == 0 {
+		return d.deleteCaddyRoute(ctx, ref.SiteID, "")
+	}
+	hostnames, err = normalizeHostnames(hostnames)
+	if err != nil {
+		return err
+	}
+	hostPort, err := firstPublishedPort(container)
+	if err != nil {
+		return err
+	}
+	return d.upsertCaddyRouteHosts(ctx, ref.SiteID, hostnames, hostPort, false)
+}
+
+// CertificateStatus performs a hostname-validating TLS handshake against the
+// public endpoint. With On-Demand TLS this also triggers allowlisted issuance.
+func (d *Docker) CertificateStatus(
+	ctx context.Context,
+	hostname, ingressIPv4 string,
+) (CertificateObservation, error) {
+	if _, err := normalizeHostnames([]string{hostname}); err != nil {
+		return CertificateObservation{}, err
+	}
+	if err := ValidatePublicIPv4(ingressIPv4); err != nil {
+		return CertificateObservation{}, err
+	}
+	return d.certificateProbe(ctx, hostname, ingressIPv4)
+}
+
+func probeCertificate(ctx context.Context, hostname, ingressIPv4 string) (CertificateObservation, error) {
+	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	conn, err := (&tls.Dialer{
+		NetDialer: dialer,
+		Config: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: hostname,
+		},
+	}).DialContext(ctx, "tcp", net.JoinHostPort(ingressIPv4, "443"))
+	if err != nil {
+		return CertificateObservation{}, fmt.Errorf("TLS certificate not ready: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok || len(tlsConn.ConnectionState().PeerCertificates) == 0 {
+		return CertificateObservation{}, errors.New("TLS peer returned no certificate")
+	}
+	certificate := tlsConn.ConnectionState().PeerCertificates[0]
+	if err := certificate.VerifyHostname(hostname); err != nil {
+		return CertificateObservation{}, fmt.Errorf("TLS certificate hostname mismatch: %w", err)
+	}
+	return CertificateObservation{ExpiresAt: certificate.NotAfter.UTC()}, nil
 }
 
 func (d *Docker) validateSpec(spec SiteSpec) error {
@@ -525,9 +596,23 @@ type caddyUpstream struct {
 }
 
 func (d *Docker) upsertCaddyRoute(ctx context.Context, spec SiteSpec, hostPort string) error {
+	return d.upsertCaddyRouteHosts(ctx, spec.SiteID, []string{spec.Domain}, hostPort, true)
+}
+
+func (d *Docker) upsertCaddyRouteHosts(
+	ctx context.Context,
+	siteID uuid.UUID,
+	hostnames []string,
+	hostPort string,
+	preserveExisting bool,
+) error {
+	hostnames, err := normalizeHostnames(hostnames)
+	if err != nil {
+		return err
+	}
 	route := caddyRoute{
-		ID:    caddyRouteID(spec.SiteID),
-		Match: []map[string][]string{{"host": {spec.Domain}}},
+		ID:    caddyRouteID(siteID),
+		Match: []map[string][]string{{"host": hostnames}},
 		Handle: []caddyHandler{{
 			Handler:   "reverse_proxy",
 			Upstreams: []caddyUpstream{{Dial: "127.0.0.1:" + hostPort}},
@@ -541,8 +626,17 @@ func (d *Docker) upsertCaddyRoute(ctx context.Context, spec SiteSpec, hostPort s
 			return err
 		}
 		if status == http.StatusOK {
-			if !routeOwned(existing, route.ID, spec.Domain) {
+			if !routeOwned(existing, route.ID, "") {
 				return errors.New("refusing to replace mismatched Caddy route")
+			}
+			if preserveExisting {
+				route.Match[0]["host"], err = normalizeHostnames(append(
+					append([]string(nil), route.Match[0]["host"]...),
+					existing.Match[0]["host"]...,
+				))
+				if err != nil {
+					return err
+				}
 			}
 			status, _, err = d.caddyRequest(ctx, http.MethodPatch, "/id/"+url.PathEscape(route.ID), route, etag, nil)
 			if err != nil {
@@ -656,18 +750,54 @@ func (d *Docker) caddyRequest(
 }
 
 func routeOwned(route caddyRoute, id, domain string) bool {
-	domainMatches := domain == "" ||
-		(len(route.Match) == 1 &&
-			len(route.Match[0]["host"]) == 1 &&
-			route.Match[0]["host"][0] == domain)
+	domainMatches := domain == ""
+	if !domainMatches && len(route.Match) == 1 {
+		for _, hostname := range route.Match[0]["host"] {
+			if hostname == domain {
+				domainMatches = true
+				break
+			}
+		}
+	}
 	return route.ID == id &&
 		domainMatches &&
 		len(route.Match) == 1 &&
-		len(route.Match[0]["host"]) == 1 &&
+		len(route.Match[0]["host"]) > 0 &&
 		len(route.Handle) == 1 &&
 		route.Handle[0].Handler == "reverse_proxy" &&
 		len(route.Handle[0].Upstreams) == 1 &&
 		strings.HasPrefix(route.Handle[0].Upstreams[0].Dial, "127.0.0.1:")
+}
+
+func normalizeHostnames(values []string) ([]string, error) {
+	unique := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		hostname := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(value), "."))
+		if len(hostname) < 3 || len(hostname) > 253 || !strings.Contains(hostname, ".") {
+			return nil, errors.New("invalid route hostname")
+		}
+		for _, label := range strings.Split(hostname, ".") {
+			if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+				return nil, errors.New("invalid route hostname")
+			}
+			for _, character := range label {
+				if (character < 'a' || character > 'z') &&
+					(character < '0' || character > '9') && character != '-' {
+					return nil, errors.New("invalid route hostname")
+				}
+			}
+		}
+		unique[hostname] = struct{}{}
+	}
+	if len(unique) == 0 {
+		return nil, errors.New("at least one route hostname is required")
+	}
+	hostnames := make([]string, 0, len(unique))
+	for hostname := range unique {
+		hostnames = append(hostnames, hostname)
+	}
+	sort.Strings(hostnames)
+	return hostnames, nil
 }
 
 func caddyRouteID(siteID uuid.UUID) string {

@@ -16,11 +16,12 @@ files. Decisions are recorded as ADRs in [`docs/adr/`](docs/adr/).
 6. **Horizontal scale** — add hosting nodes without rearchitecting the control plane.
 7. **Self-hosted first** — prefer open components on our own hardware; third-party
    services only where physics or licensing force it, each recorded in an ADR
-   ([0003](docs/adr/0003-cloudflare-dns-and-ingress.md), [0004](docs/adr/0004-external-services-at-launch.md)).
+   ([0004](docs/adr/0004-external-services-at-launch.md), [0009](docs/adr/0009-direct-caddy-customer-domains.md)).
 
 **Non-goals:** building our own web server, DNS server, or mail stack. We
-orchestrate Docker Engine, Caddy, and Cloudflare behind a provider-neutral
-provisioner; Hestia remains a fallback (ADR 0008).
+orchestrate Docker Engine and Caddy behind a provider-neutral provisioner;
+customer-managed DNS is the universal domain path, while Cloudflare and Hestia
+remain optional future/fallback adapters (ADRs 0008 and 0009).
 
 ## 2. Control plane vs. data plane
 
@@ -35,9 +36,11 @@ OpenCloud separates **what it owns** from **what it orchestrates**:
 
 The control plane drives the data plane exclusively through the **provisioner**
 (Docker/Caddy for the MVP). Nothing else touches a hosting backend. See
-[ADR 0008](docs/adr/0008-docker-caddy-provisioning-backend.md).
-The provisioner is likewise the sole caller of the **Cloudflare API**, which
-provides customer DNS and the ingress tunnel ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)).
+[ADR 0008](docs/adr/0008-docker-caddy-provisioning-backend.md). The implemented
+domain path gives customers provider-neutral manual DNS instructions and lets
+the worker manage exact-host Caddy routes. Cloudflare DNS/Tunnel is optional and
+unavailable until a future per-tenant authorization contract is implemented
+([ADR 0009](docs/adr/0009-direct-caddy-customer-domains.md)).
 
 ## 3. System diagram
 
@@ -47,9 +50,9 @@ provides customer DNS and the ingress tunnel ([ADR 0003](docs/adr/0003-cloudflar
                        └───────────────┬───────────────┘
                                        │ HTTPS
                        ┌───────────────▼───────────────┐
-                       │ Cloudflare (DNS · WAF · edge)  │   ← edge (ADR 0003)
+                       │ Caddy :443 · public ACME       │   ← direct ingress (ADR 0009)
                        └───────────────┬───────────────┘
-                                       │ Cloudflare Tunnel (cloudflared, outbound-only)
+                                       │ exact-host route
                        ┌───────────────▼───────────────┐
                        │   Next.js Dashboard (SSR/BFF)  │   ← control plane
                        └───────────────┬───────────────┘
@@ -74,8 +77,15 @@ provides customer DNS and the ingress tunnel ([ADR 0003](docs/adr/0003-cloudflar
 
       Monitoring: Prometheus scrapes API + nodes → Grafana dashboards
       Host hardening: Fail2ban + UFW on every node
-      DNS: provisioner manages customer zones via the Cloudflare API (ADR 0003)
+      DNS: customer proves TXT ownership, then adds A at any provider; API observes DNS
+      TLS: Caddy asks an internal indexed permission endpoint before issuance
 ```
+
+The diagram shows the production target, not current deployment state. The
+Phase 3 implementation has only been validated with disposable containers and a
+local CA. Production requires public ports 80/443, a stable public IPv4, public
+DNS/ACME reachability, an external verification key, and certificate monitoring.
+The Caddy admin and permission listeners stay on loopback/private transport.
 
 ## 4. Backend layering
 
@@ -196,7 +206,7 @@ Isolation is the platform's #1 invariant, enforced at three layers:
 | **Next.js** | SSR dashboard + BFF; hosts **better-auth** (identity provider — ADR 0006), holds the JWT in an httpOnly cookie. |
 | **shadcn/ui + Tailwind** | Own the components; no heavyweight UI dependency. |
 | **Docker + Caddy** | Reuse the deployed host for isolated HTTP workloads, provider-neutral lifecycle, ingress, and automatic HTTPS (ADR 0008). |
-| **Cloudflare** | Free authoritative DNS (zones via API) + Tunnel ingress — self-hosted nodes reachable behind CGNAT, DDoS/WAF at the edge ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)). |
+| **Customer DNS + direct Caddy** | Provider-neutral TXT/A records, exact-host routes, and allowlisted On-Demand TLS; Cloudflare remains an optional future adapter (ADR 0009). |
 | **Prometheus/Grafana** | De-facto standard metrics + dashboards. |
 
 Each significant choice should also have an ADR in [`docs/adr/`](docs/adr/).

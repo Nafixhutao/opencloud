@@ -6,12 +6,14 @@ import {
   CircleAlert,
   CircleCheck,
   Clock3,
+  Globe2,
   Pause,
   Play,
   Plus,
   Server,
   Trash2,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
@@ -256,7 +258,7 @@ export function SiteDashboard({ initialData }: SiteDashboardProps) {
                     <SiteIdentity site={site} />
                     <SiteStatusBadge site={site} />
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-muted-foreground">
                       Created {formatDate(site.created_at)}
                     </p>
@@ -335,7 +337,16 @@ function SiteActions({
   onAction: (action: LifecycleAction) => Promise<unknown>;
 }) {
   return (
-    <div className="flex justify-end gap-2">
+    <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:justify-end">
+      <Button
+        render={<Link href={`/sites/${site.id}`} />}
+        nativeButton={false}
+        size="sm"
+        variant="ghost"
+      >
+        <Globe2 data-icon="inline-start" />
+        Domains
+      </Button>
       {site.status === 'active' ? (
         <Button
           type="button"

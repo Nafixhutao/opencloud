@@ -24,13 +24,14 @@ const (
 
 // SiteService owns tenant-scoped site lifecycle transitions.
 type SiteService struct {
-	db      *bun.DB
-	sites   *repository.SiteRepo
-	nodes   *repository.NodeRepo
-	jobs    *repository.JobRepo
-	audit   *repository.AuditRepo
-	backend string
-	image   string
+	db               *bun.DB
+	sites            *repository.SiteRepo
+	nodes            *repository.NodeRepo
+	jobs             *repository.JobRepo
+	audit            *repository.AuditRepo
+	backend          string
+	image            string
+	siteDomainSuffix string
 }
 
 // NewSiteService constructs a SiteService.
@@ -42,15 +43,17 @@ func NewSiteService(
 	audit *repository.AuditRepo,
 	backend string,
 	image string,
+	siteDomainSuffix string,
 ) *SiteService {
 	return &SiteService{
-		db:      db,
-		sites:   sites,
-		nodes:   nodes,
-		jobs:    jobs,
-		audit:   audit,
-		backend: backend,
-		image:   image,
+		db:               db,
+		sites:            sites,
+		nodes:            nodes,
+		jobs:             jobs,
+		audit:            audit,
+		backend:          backend,
+		image:            image,
+		siteDomainSuffix: strings.ToLower(strings.TrimSpace(siteDomainSuffix)),
 	}
 }
 
@@ -76,6 +79,9 @@ func (s *SiteService) Create(
 ) (*model.Site, error) {
 	domain, err := normalizeDomain(req.Domain)
 	if err != nil {
+		return nil, err
+	}
+	if err := validatePrimarySiteDomain(domain, s.siteDomainSuffix); err != nil {
 		return nil, err
 	}
 	template := strings.ToLower(strings.TrimSpace(req.Template))
@@ -272,6 +278,9 @@ func (s *SiteService) queueTransition(
 		jobs := s.jobs.WithDB(tx)
 		audit := s.audit.WithDB(tx)
 
+		if err := sites.LockRoutingTransition(ctx, siteID); err != nil {
+			return err
+		}
 		var site *model.Site
 		var err error
 		if tr.includeDeleted {
@@ -351,6 +360,22 @@ func normalizeDomain(value string) (string, error) {
 		}
 	}
 	return domain, nil
+}
+
+func validatePrimarySiteDomain(domain, suffix string) error {
+	if suffix == "" {
+		return nil
+	}
+	if domain == suffix || !strings.HasSuffix(domain, "."+suffix) {
+		return apperr.Validation(
+			"invalid platform site domain",
+			apperr.FieldIssue{
+				Field: "domain",
+				Issue: "must be a hostname below " + suffix,
+			},
+		)
+	}
+	return nil
 }
 
 func uniqueViolation(err error) bool {

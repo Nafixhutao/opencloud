@@ -77,6 +77,7 @@ func newManagedDatabaseFixture(t *testing.T) *managedDatabaseFixture {
 	processor := queue.NewProcessor(
 		db,
 		repository.NewSiteRepo(db),
+		repository.NewDomainRepo(db),
 		repository.NewNodeRepo(db),
 		jobs,
 		audit,
@@ -497,6 +498,7 @@ func (f *managedDatabaseFixture) processorWith(
 	return queue.NewProcessor(
 		f.db,
 		repository.NewSiteRepo(f.db),
+		repository.NewDomainRepo(f.db),
 		repository.NewNodeRepo(f.db),
 		f.jobs,
 		f.audit,

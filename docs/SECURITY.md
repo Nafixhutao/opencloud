@@ -104,6 +104,17 @@ error codes before they can reach logs.
   `database_credentials` is empty; changing the key while rows remain makes
   those envelopes unreadable. Exposure requires target credential replacement,
   not merely changing the envelope key.
+- `DOMAIN_VERIFICATION_KEY` is a separate external HMAC key. The database stores
+  only ownership-token digests; the raw token is returned only through the
+  authenticated `private, no-store` instruction route. Rotation requires expiring/reissuing pending
+  challenges because existing digests cannot be verified with a new key.
+- `CLOUDFLARE_API_ENABLED` must remain false. A platform-wide credential is not
+  accepted as tenant authorization, and startup fails closed if automation is
+  requested before that boundary exists.
+- Production primary hostnames are restricted to strict children of the
+  platform-owned `SITE_DOMAIN_SUFFIX`. Customer-owned hostnames never obtain
+  routes or TLS authorization through site creation; they must win the
+  verified custom-domain claim.
 
 ## 7. Transport security
 
@@ -117,6 +128,11 @@ error codes before they can reach logs.
   MariaDB `false`/`preferred`/`skip-verify` TLS modes.
 - Internal-only services (metrics, datastores) bound to the private network, never
   the public internet.
+- Direct customer ingress requires public Caddy ports 80/443 for public ACME.
+  Caddy's admin API and `/caddy/permission` ask endpoint remain loopback/private;
+  they are never routed through the public site server. The ask endpoint returns
+  success only for an indexed active hostname and denies unknown/inactive names
+  and database failures.
 
 ## 8. HTTP headers & CORS
 
@@ -126,8 +142,9 @@ error codes before they can reach logs.
 
 ## 9. Rate limiting & abuse prevention
 
-- Redis-backed rate limits on auth and expensive endpoints; stricter budgets on
-  login/refresh.
+- Redis-backed rate limits on auth and expensive endpoints; authenticated API
+  budgets are keyed by account so tenants sharing the BFF IP cannot consume one
+  another's budget. A separate coarse pre-auth edge limit remains IP-keyed.
 - **Fail2ban** bans IPs after repeated auth failures (SSH and app).
 - **UFW** on every host: default-deny inbound, only required ports open.
 - Per-account resource quotas on nodes prevent one tenant exhausting a host.
@@ -142,6 +159,11 @@ error codes before they can reach logs.
 - The Docker daemon and Caddy admin endpoint are worker-only. Neither is mounted
   into the dashboard or public API; arbitrary Dockerfiles remain disabled until
   isolated builds and image policy exist.
+- On-Demand TLS does not authorize itself: each eligible site is configured for
+  on-demand issuance and Caddy must receive `2xx` from the internal permission
+  endpoint. Exact-host routes prevent an authorized certificate name from
+  becoming a catch-all route. Monitor issuance/renewal failures, expiry windows,
+  permission denials, and ACME rate limits without hostname-valued metrics.
 - SSH: key-only, no root login, bastion-restricted. Automatic security updates.
 - Hestia fallback nodes follow [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md) and run
   on separate clean hosts.
@@ -169,6 +191,11 @@ error codes before they can reach logs.
   one control-plane transaction. A provider result is retried when that
   completion transaction fails, so external success is never reported without
   durable status and audit.
+- Domain attach/challenge/verify/provision/deprovision and certificate state
+  changes are audited with their durable state. A successful unchanged
+  certificate probe refreshes only its observation timestamp. Ownership
+  mismatches are rejected before provider calls; detach/site-delete retain the
+  hostname claim until cleanup.
 
 ## 13. Data protection & privacy
 

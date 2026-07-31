@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/uptrace/bun/migrate"
 	"go.uber.org/zap"
@@ -13,6 +15,11 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/app"
 	"github.com/nazxf/opencloud/backend/internal/database"
 	"github.com/nazxf/opencloud/backend/migrations"
+)
+
+const (
+	phase3DomainsMigration = "20260730010000_create_domains"
+	phase3MaintenanceAck   = "phase3-sites-lock-approved"
 )
 
 func main() {
@@ -51,12 +58,26 @@ func main() {
 		deps.Log.Fatal("migrator init", zap.Error(err))
 	}
 
-	if err := run(ctx, deps.Log, migrator, cmd); err != nil {
+	if err := run(
+		ctx,
+		deps.Log,
+		migrator,
+		cmd,
+		deps.Cfg.IsProduction(),
+		deps.Cfg.MigrationMaintenanceAck,
+	); err != nil {
 		deps.Log.Fatal("migrate", zap.String("cmd", cmd), zap.Error(err))
 	}
 }
 
-func run(ctx context.Context, log *zap.Logger, m *migrate.Migrator, cmd string) error {
+func run(
+	ctx context.Context,
+	log *zap.Logger,
+	m *migrate.Migrator,
+	cmd string,
+	production bool,
+	maintenanceAck string,
+) error {
 	switch cmd {
 	case "up":
 		ms, err := m.MigrationsWithStatus(ctx)
@@ -74,6 +95,17 @@ func run(ctx context.Context, log *zap.Logger, m *migrate.Migrator, cmd string) 
 		// each pending migration as its own group so rollback is always limited
 		// to the newest migration and shipped history remains immutable.
 		for i := range unapplied {
+			if missingPhase3MaintenanceAck(
+				unapplied[i].Name,
+				production,
+				maintenanceAck,
+			) {
+				return fmt.Errorf(
+					"%s requires a drained Phase 3 maintenance window, backup, and MIGRATION_MAINTENANCE_ACK=%s",
+					phase3DomainsMigration,
+					phase3MaintenanceAck,
+				)
+			}
 			if err := m.RunMigration(ctx, unapplied[i].Name); err != nil {
 				return err
 			}
@@ -83,6 +115,9 @@ func run(ctx context.Context, log *zap.Logger, m *migrate.Migrator, cmd string) 
 		return nil
 
 	case "down":
+		if production {
+			return errors.New("migrate down is disabled in production; roll forward with a corrective migration")
+		}
 		group, err := m.Rollback(ctx)
 		if err != nil {
 			return err
@@ -109,4 +144,14 @@ func run(ctx context.Context, log *zap.Logger, m *migrate.Migrator, cmd string) 
 	default:
 		return fmt.Errorf("unknown command %q (want up|down|status)", cmd)
 	}
+}
+
+func missingPhase3MaintenanceAck(
+	migrationName string,
+	production bool,
+	maintenanceAck string,
+) bool {
+	return production &&
+		strings.HasPrefix(migrationName, phase3DomainsMigration) &&
+		maintenanceAck != phase3MaintenanceAck
 }

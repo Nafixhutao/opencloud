@@ -58,6 +58,10 @@ func TestHTTPTimeoutsAreConfigured(t *testing.T) {
 	require.Equal(t, 1<<20, s.http.MaxHeaderBytes)
 }
 
+func TestGlobalAPIRateLimitUsesPerSecondWindow(t *testing.T) {
+	require.Equal(t, time.Second, apiRateLimitWindow)
+}
+
 func TestMetricsUsesSeparateListener(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

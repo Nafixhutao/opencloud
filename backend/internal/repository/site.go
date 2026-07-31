@@ -28,6 +28,41 @@ func (r *SiteRepo) WithDB(db bun.IDB) *SiteRepo {
 	return &SiteRepo{db: db}
 }
 
+func siteRoutingLockScope(siteID uuid.UUID) string {
+	return "domain-routing:" + siteID.String()
+}
+
+// LockRoutingTransition serializes a customer lifecycle transition with all
+// provider and route work for the same site. It must run inside the lifecycle
+// transaction so PostgreSQL releases it automatically on commit or rollback.
+func (r *SiteRepo) LockRoutingTransition(ctx context.Context, siteID uuid.UUID) error {
+	_, err := r.db.NewRaw(
+		`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`,
+		siteRoutingLockScope(siteID),
+	).Exec(ctx)
+	return err
+}
+
+// LockRoutingSession holds the same lock across provider work and the worker's
+// final persistence transaction. The caller owns the dedicated connection.
+func (r *SiteRepo) LockRoutingSession(ctx context.Context, siteID uuid.UUID) error {
+	_, err := r.db.NewRaw(
+		`SELECT pg_advisory_lock(hashtextextended(?, 0))`,
+		siteRoutingLockScope(siteID),
+	).Exec(ctx)
+	return err
+}
+
+// UnlockRoutingSession releases a session lock obtained by LockRoutingSession.
+func (r *SiteRepo) UnlockRoutingSession(ctx context.Context, siteID uuid.UUID) (bool, error) {
+	var unlocked bool
+	err := r.db.NewRaw(
+		`SELECT pg_advisory_unlock(hashtextextended(?, 0))`,
+		siteRoutingLockScope(siteID),
+	).Scan(ctx, &unlocked)
+	return unlocked, err
+}
+
 // LockCreateRequest serializes idempotent retries for one account/key. The
 // second transaction re-reads and returns the winner instead of surfacing a
 // unique-constraint race.
@@ -172,22 +207,73 @@ func (r *SiteRepo) GetForWorkerForUpdate(ctx context.Context, siteID uuid.UUID) 
 
 // ListReconciliationCandidates is the explicit worker-only scan for resources
 // whose desired state should be compared with the data plane.
-func (r *SiteRepo) ListReconciliationCandidates(ctx context.Context, limit int) ([]model.Site, error) {
-	if limit <= 0 {
+func (r *SiteRepo) ListReconciliationCandidates(
+	ctx context.Context,
+	limit int,
+	steadyBefore time.Time,
+) ([]model.Site, error) {
+	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	var sites []model.Site
-	err := r.db.NewSelect().
-		Model(&sites).
-		Where("status IN (?)", bun.List([]string{
-			model.SiteActive,
-			model.SiteSuspended,
-			model.SiteDeleting,
-		})).
-		Order("updated_at ASC").
-		Limit(limit).
-		Scan(ctx)
-	return sites, err
+	base := func(rows *[]model.Site) *bun.SelectQuery {
+		return r.db.NewSelect().
+			Model(rows).
+			Where("deleted_at IS NULL").
+			Where(`NOT EXISTS (
+				SELECT 1 FROM jobs AS j
+				WHERE j.status IN ('queued', 'running')
+				  AND j.payload ->> 'site_id' = s.id::text
+			)`).
+			OrderExpr("COALESCE(last_reconciled_at, created_at) ASC").
+			Order("id ASC")
+	}
+	if limit == 1 {
+		var sites []model.Site
+		err := base(&sites).
+			Where(`(
+				status = ? OR
+				(status IN (?) AND (last_reconciled_at IS NULL OR last_reconciled_at <= ?))
+			)`, model.SiteDeleting, bun.List([]string{
+				model.SiteActive, model.SiteSuspended,
+			}), steadyBefore).
+			Limit(1).
+			Scan(ctx)
+		return sites, err
+	}
+
+	// Reserve half of every normal worker batch for steady-state drift. A large
+	// set of repeatedly failing deletes therefore cannot starve active or
+	// suspended sites forever.
+	deleteLimit := limit / 2
+	var deleting []model.Site
+	if err := base(&deleting).
+		Where("status = ?", model.SiteDeleting).
+		Limit(deleteLimit).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	var steady []model.Site
+	if err := base(&steady).
+		Where("status IN (?)", bun.List([]string{model.SiteActive, model.SiteSuspended})).
+		Where("(last_reconciled_at IS NULL OR last_reconciled_at <= ?)", steadyBefore).
+		Limit(limit - len(deleting)).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	return append(deleting, steady...), nil
+}
+
+// MarkReconciled advances the fair steady-state scan cursor. The worker calls
+// it in the same transaction as the reconciliation audit and job completion.
+func (r *SiteRepo) MarkReconciled(ctx context.Context, siteID uuid.UUID, at time.Time) error {
+	result, err := r.db.NewUpdate().Model((*model.Site)(nil)).
+		Set("last_reconciled_at = ?", at).
+		Where("id = ?", siteID).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(result)
 }
 
 // SetStatus updates a site state. accountID keeps customer-triggered transitions

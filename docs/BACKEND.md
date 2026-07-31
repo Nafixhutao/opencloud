@@ -45,7 +45,7 @@ One-directional dependencies. See the diagram in [`../ARCHITECTURE.md`](../ARCHI
 | handler | service | touch Bun, hold business logic |
 | service | repository, provisioner, queue | import Gin, build SQL |
 | repository | Bun / PostgreSQL | call services, ignore `account_id` |
-| provisioner | Docker/Caddy, Cloudflare, fallback Hestia | be called by anything but a service/worker job |
+| provisioner | Docker/Caddy, DNS observation, optional provider adapters, fallback Hestia | be called by anything but a service/worker job |
 
 A handler that needs data calls a service; a service that needs persistence calls
 a repository. No shortcuts.
@@ -169,7 +169,8 @@ size is 100.
 
 ## 8. Provisioner
 
-- The **single gateway** to Docker, Caddy, Cloudflare, or fallback Hestia. The
+- The **single gateway** to Docker, Caddy, an optional future Cloudflare adapter,
+  or fallback Hestia. The
   dashboard and API never receive Docker daemon or Caddy admin access.
 - **Idempotent:** re-running a step on an existing resource succeeds, not errors —
   this makes job retries and reconciliation safe.
@@ -266,6 +267,7 @@ anything else needs the justification + confirmation required by `CLAUDE.md` §5
 | `go-redis/redis_rate` | Rate limiting middleware | Queueing (ADR 0002) |
 | `stretchr/testify` | `require`/`assert` in tests | Mock generation frameworks |
 | `go-sql-driver/mysql` | Worker-only MariaDB customer provisioning through `database/sql` | Control-plane PostgreSQL access or accepting unvalidated DDL identifiers |
+| `golang.org/x/net` | IDNA lookup profiles and the maintained public-suffix list for canonical public hostname validation; pinned to a vulnerability-scanned release | General HTTP/network helpers already covered by the standard library |
 
 Deliberately **not** used: a validation lib (Gin bundles `validator/v10`), a
 migration tool (Bun has `bun/migrate`), an HTTP client lib (stdlib `net/http`),
@@ -309,8 +311,45 @@ retries from decrementing node usage twice. A delete intent wins over an older
 in-flight provision/suspend/resume result.
 
 The site slice supports only the curated static-site template. Customer site
-volume/database backup, Hestia, DNS ownership automation, and a production
+volume/database backup, Hestia, automated DNS-provider writes, and a production
 Docker authorization boundary are deliberately not claimed.
+
+## Phase 3 domain lifecycle
+
+- `internal/model`: Domain plus domain/certificate lifecycle and job kinds
+- `internal/repository`: tenant-scoped reads/mutations, global hostname claims,
+  indexed Caddy authorization, and transaction-scoped audit/job operations
+- `internal/service`: hostname normalization, HMAC challenge creation/rotation,
+  instructions, verification intent, detach, and fail-closed permission checks
+- `internal/queue`: DNS verification, route provision/deprovision, reconciliation,
+  and actual TLS observation; provider calls remain outside SQL transactions
+- `internal/provisioner`: exact multi-host Caddy route updates that retain primary
+  and alias hosts and refuse adoption of unowned routes
+
+Attach persists only an HMAC digest of the ownership token. Pending instructions
+expose only the public TXT proof; after it is consumed, instructions expose the
+A record. Activation requires that A record to equal the validated public
+`DOMAIN_INGRESS_IPV4`. Direct routing is an activation gate, not a permanent
+requirement: an active customer may enable an HTTP proxy later. Reconciliation
+restores exact routes and observes certificates without demoting that domain or
+replaying unchanged certificate audits. The worker reloads
+the resource with its account scope before any provider call, and completion,
+job state, and audit state commit atomically. Detach/site deletion records intent
+and enqueues durable deprovision before runtime deletion; the global claim is
+retained until cleanup so another tenant cannot race into a stale route.
+Pending challenges are tenant-local intent and do not reserve the global
+hostname. The verified claim is acquired atomically only after DNS proof, so
+two accounts may attempt proof without ownership disclosure while exactly one
+verification transaction can win. Site and domain reconciliation use persisted
+timestamps, bounded scans, active-job suppression, and reserved steady-state
+batch capacity so failing deletes cannot starve active/suspended repairs.
+
+The API metrics listener also serves `GET /caddy/permission`. This is an
+internal machine endpoint, not a public API: an indexed active-domain lookup
+returns an empty `200`; missing/inactive input returns `403`; database errors
+return empty `503` with `Retry-After`. Unknown/error states therefore fail TLS
+issuance closed. Cloudflare automation is configuration-gated and deliberately
+refuses startup until tenant-scoped credentials and authorization are designed.
 
 ## Phase 2 customer database lifecycle
 

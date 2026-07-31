@@ -18,12 +18,14 @@ type LoginFormProps = {
   enabledSocialProviders: readonly SocialProvider[];
   initialError?: string | null;
   initialNotice?: string | null;
+  callbackURL?: string;
 };
 
 export function LoginForm({
   enabledSocialProviders,
   initialError = null,
   initialNotice = null,
+  callbackURL = '/dashboard',
 }: LoginFormProps) {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(initialError);
@@ -39,6 +41,7 @@ export function LoginForm({
       const { error } = await authClient.signIn.email({
         email: values.email,
         password: values.password,
+        callbackURL,
       });
 
       if (error) {
@@ -50,7 +53,7 @@ export function LoginForm({
         return;
       }
 
-      router.push('/dashboard');
+      router.push(callbackURL);
       router.refresh();
     } catch {
       setFormError('Cevra could not be reached. Check your connection and try again.');
@@ -71,7 +74,8 @@ export function LoginForm({
 
       <SocialAuthButtons
         providers={enabledSocialProviders}
-        errorCallbackURL="/login?error=social"
+        callbackURL={callbackURL}
+        errorCallbackURL={`/login?error=social&next=${encodeURIComponent(callbackURL)}`}
         onError={setFormError}
       />
 

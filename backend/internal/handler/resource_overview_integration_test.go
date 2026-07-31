@@ -143,6 +143,7 @@ func TestListHandlersReturnCanonicalPaginationMetadata(t *testing.T) {
 		repository.NewAuditRepo(db),
 		"fake",
 		"opencloud/site-static:test",
+		"",
 	)
 	databaseService := service.NewManagedDatabaseService(
 		db,

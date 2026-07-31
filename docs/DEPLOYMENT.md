@@ -69,6 +69,15 @@ Config differs only by environment variables ([`INFRASTRUCTURE.md`](INFRASTRUCTU
   2. *Migrate:* backfill data.
   3. *Contract:* deploy app that uses only new; later migration drops the old.
 - A failed migration aborts the deploy; the previous version keeps serving.
+- **Phase 3 exception:** `20260730010000_create_domains` must briefly hold
+  `ACCESS EXCLUSIVE` on `sites` while it installs the composite ownership
+  contract and backfills primary claims. This is not a zero-downtime migration.
+  In production, `cmd/migrate up` refuses to apply it unless
+  `MIGRATION_MAINTENANCE_ACK=phase3-sites-lock-approved`. Set that non-secret
+  acknowledgement only after a fresh backup, maintenance mode, API/worker drain,
+  and confirmation that no long site transaction is running. The SQL
+  `lock_timeout=5s` fails instead of waiting indefinitely; clear the
+  acknowledgement immediately after the migration. Never set it permanently.
 
 ## 5. Deploy procedure (Compose)
 
@@ -94,7 +103,8 @@ curl -fsS localhost:8080/readyz       # readiness gate
 - **Graceful shutdown:** on `SIGTERM` the API drains in-flight HTTP and the worker
   finishes its current job before exiting ([`BACKEND.md`](BACKEND.md#3-entry-points)).
 - **Backward-compatible migrations** (above) keep old and new app versions working
-  against the same schema during a rollout.
+  against the same schema during a rollout. The documented Phase 3 sites-lock
+  exception uses a maintenance window and is not claimed as zero-downtime.
 
 ## 7. Rollback
 
@@ -104,6 +114,20 @@ curl -fsS localhost:8080/readyz       # readiness gate
   is known-safe for current data; destructive `down`s are avoided in production.
 - **Data:** restore from PostgreSQL backups only as a last resort, following the
   rehearsed restore runbook ([`DATABASE.md`](DATABASE.md#9-backups)).
+- **Customer domains:** first set `DOMAINS_ENABLED=false` on a retained,
+  Phase 3-compatible API to disable mutations while keeping its internal
+  `/caddy/permission` endpoint online. Keep a Phase 3-aware worker running and
+  drain domain jobs. Only the dashboard/BFF and other compatible app surfaces
+  may roll back to the previous image while live custom domains exist; a
+  pre-Phase-3 API would remove Caddy's permission service and deny new
+  certificates. Do not run the Phase 3 down migration in production. If the
+  new Caddy configuration is faulty, restore the reviewed prior config through
+  its private admin path; route removals remain durable deprovision jobs so
+  claims are not released before cleanup.
+  `DOMAINS_ENABLED=false` on both API and worker is not a drain mode: while the
+  domain processor is disabled, site delete/cleanup fails closed for every live
+  custom domain and site resume fails closed for routable custom domains.
+  Restore the domain-aware worker or drain/detach those domains before retrying.
 
 ## 8. Hosting backend rollout
 
@@ -120,22 +144,53 @@ curl -fsS localhost:8080/readyz       # readiness gate
   admin reachability. A raw socket grants host-equivalent control and is only
   used by the disposable integration harness, never by the public API/frontend.
 
-## Phase 2 review-branch validation
+## Phase 2 merged-code validation
 
-The site-provisioning slice is validated with isolated PostgreSQL, Caddy, and
+The merged site-provisioning slice is validated with isolated PostgreSQL, Caddy, and
 site resources on a disposable target. `deploy/validation/caddy-phase2.json`
 binds only validation loopback ports and must not replace the host's active Caddy
 configuration. The tagged Docker/Caddy integration test uses fixed deterministic
 resource names so cleanup can target exactly those objects. Passing this
 validation does not authorize staging promotion or production deployment.
 
-The customer-database slice is validated on a separate disposable Docker
+The merged customer-database slice is validated on a separate disposable Docker
 network with one control-plane PostgreSQL, one dedicated customer PostgreSQL,
 and one dedicated MariaDB. The rehearsal covers create/retry/password rotation,
 least-privilege isolation, one-time credential consumption, delete/cleanup, and
 migration `up`/idempotent `up`/`down`/`up`. Its script must remove only the
 uniquely named containers, volumes, and network it created; active OpenCloud
 services are never joined or changed.
+
+## Phase 3 direct-Caddy rollout
+
+Phase 3 is implemented and disposable-tested but not deployed. The base Compose
+stack intentionally does not pretend to be the production ingress topology: the
+existing Docker adapter targets host-bound site ports, so production runs Caddy
+with equivalent host/loopback reachability to the worker and API permission
+listener. [`../deploy/caddy/caddy.json`](../deploy/caddy/caddy.json) is a
+validated public-ACME baseline for a co-located topology; if components are
+separated, replace loopback with authenticated private transport and firewall it.
+
+Before enabling domains:
+
+1. provision a stable public IPv4 and confirm inbound 80/443, outbound DNS, and
+   public ACME reachability;
+2. inject a fresh `DOMAIN_VERIFICATION_KEY`, set the validated public
+   `DOMAIN_INGRESS_IPV4`, `SITE_DOMAIN_SUFFIX`, and resolver, keep
+   `CLOUDFLARE_API_ENABLED=false`, then take a fresh backup, enter maintenance
+   mode, drain API/worker, set the one-shot maintenance acknowledgement, and
+   apply the checksum-pinned migration forward;
+3. keep Caddy admin on loopback/private transport and expose the API metrics
+   listener only to internal peers; `/caddy/permission` must never be public;
+4. validate config, stage one controlled domain, observe TXT/A verification,
+   routing, issuance, certificate observation, renewal scheduling, and alerts;
+5. only then set `DOMAINS_ENABLED=true` and expand traffic under explicit release
+   approval.
+
+Caddy treats only `2xx` ask responses as authorization. Unknown/inactive names
+return `403`; database errors return `503` with `Retry-After`, so an outage fails
+new issuance closed. Production uses public ACME. The validation harness uses a
+local CA and cannot prove public DNS, public issuance, or production HTTPS.
 
 ## 9. Secrets & config at deploy time
 
@@ -162,6 +217,8 @@ After every production deploy:
 2. Error rate and latency steady in Grafana ([`INFRASTRUCTURE.md`](INFRASTRUCTURE.md#5-monitoring-prometheus--grafana)).
 3. A smoke test of a critical flow (login → list sites).
 4. Queue depth draining normally; no failed-job spike.
+5. Domain permission denial/error rate, DNS verification backlog, certificate
+   issuance/renewal errors, and approaching expiries remain within alert bounds.
 
 If any check fails, roll back (§7) and investigate before re-attempting.
 

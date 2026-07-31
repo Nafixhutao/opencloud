@@ -11,7 +11,7 @@ export async function proxyAPI(
     const response = await apiFetch(path, init);
     const body = await response.json().catch(() => null);
     const proxied = NextResponse.json(body, { status: response.status });
-    for (const name of ['cache-control', 'pragma']) {
+    for (const name of ['cache-control', 'pragma', 'retry-after', 'x-ratelimit-limit']) {
       const value = response.headers.get(name);
       if (value) {
         proxied.headers.set(name, value);

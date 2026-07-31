@@ -14,7 +14,7 @@ release process in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 |---|---|---|
 | **Control plane** | Go API, worker, Next.js frontend, PostgreSQL, Redis, Prometheus, Grafana | Docker containers |
 | **Data plane** | Docker site containers + Caddy ingress; optional Hestia fallback node | Current Linux host for MVP; scale-out nodes later |
-| **Edge** | Cloudflare DNS + Tunnel ([ADR 0003](adr/0003-cloudflare-dns-and-ingress.md)) | Cloudflare network; `cloudflared` runs on our hardware |
+| **Edge** | Customer-managed DNS + direct public Caddy (ADR 0009); optional future Cloudflare tunnel/adapter | Caddy on the hosting host; any customer DNS provider |
 
 The MVP co-locates labeled site containers with the control plane while Caddy
 remains the only public listener. Scale-out nodes use the same provider contract;
@@ -47,6 +47,10 @@ docker-compose.yml
   read-only root filesystem, all capabilities dropped, `no-new-privileges`, a
   bounded tmpfs for restore verification, and a dedicated mode-`0700` volume.
 - API, metrics, and dashboard ports bind to host loopback for local development.
+- The base Compose file does not add a fake production Caddy service. The Docker
+  provisioner uses host-bound upstreams, so reviewed production ingress needs
+  host/loopback-equivalent reachability. `deploy/caddy/caddy.json` documents the
+  co-located public-ACME baseline; it is not activated by `docker compose up`.
 - Prometheus and Grafana services land in later roadmap phases.
 
 ### Dockerfile conventions
@@ -66,6 +70,7 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `HTTP_ADDR` | api | listen address, e.g. `:8080` |
 | `METRICS_ADDR` | api | separate internal metrics listener, e.g. `:9090` |
 | `DATABASE_URL` | api, worker, migrate, frontend | PostgreSQL DSN (BFF reuses it for better-auth's `auth.*` tables — ADR 0006) |
+| `MIGRATION_MAINTENANCE_ACK` | migrate | normally empty; exact one-shot Phase 3 acknowledgement only after backup, maintenance mode, and API/worker drain |
 | `REDIS_URL` | api, worker | Redis connection |
 | `AUTH_JWKS_URL` | api | better-auth JWKS endpoint the API validates JWTs against; issues none (ADR 0006) |
 | `AUTH_ISSUER` | api | expected JWT issuer; required in production |
@@ -84,6 +89,12 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `CADDY_API_URL` | worker | private/loopback Caddy admin endpoint |
 | `CADDY_SERVER_ID` | worker | Caddy HTTP server ID whose owned site routes may be changed |
 | `SITE_DEFAULT_IMAGE` | worker | exact curated site image allowlist entry |
+| `SITE_DOMAIN_SUFFIX` | api, worker | platform-owned primary-site namespace; required in production, where primary hostnames must be strict children |
+| `DOMAINS_ENABLED` | api, worker | explicit Phase 3 domain lifecycle opt-in; default `false` |
+| `DOMAIN_VERIFICATION_KEY` | api, worker | external HMAC key for expiring ownership challenges |
+| `DOMAIN_INGRESS_IPV4` | api, worker | validated public IPv4 used in instructions and TLS observation |
+| `DOMAIN_DNS_RESOLVER` | api, worker | public recursive DNS resolver for TXT/A observation |
+| `CLOUDFLARE_API_ENABLED` | api, worker | must remain `false`; `true` fails closed until per-tenant authorization exists |
 | `HESTIA_API_URL` | worker | optional fallback node API base |
 | `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
 | `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
@@ -100,7 +111,7 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `LOG_LEVEL` | all | `debug`/`info`/`warn`/`error` |
 | `API_URL` | frontend | backend base URL (server-side) |
 | `CORS_ORIGINS` | api | allowlist (no `*` in production) |
-| `RATE_LIMIT_RPS` | api | per-client request budget |
+| `RATE_LIMIT_RPS` | api | authenticated per-account requests-per-second budget; a separate coarse pre-auth edge guard remains IP-keyed |
 
 Secrets in production come from a secret manager / orchestrator secrets, not a
 checked-in file. Rotate on exposure.
@@ -122,6 +133,13 @@ TLS profile. Customer endpoints use TLS and private worker-to-admin networking.
 Rotate the envelope key only after pending credential rows are revealed or
 revoked.
 
+Domain activation likewise fails closed unless its feature flag, external
+verification key, public ingress IPv4, and resolver are valid. Production also
+requires inbound 80/443, public DNS and ACME reachability, a private Caddy admin
+path, internal-only API permission listener, certificate renewal/error alerts,
+and an explicit release. The Phase 3 implementation and disposable local-CA
+proof do not mean those operational prerequisites are active.
+
 ## 4. Environments
 
 | Environment | Purpose | Notes |
@@ -140,6 +158,8 @@ off-host copy.
 
 - The API process exposes Prometheus metrics on the separate internal listener
   configured by `METRICS_ADDR` (`:9090/metrics` locally), not on the public API.
+- The same listener exposes `/caddy/permission` only to Caddy over loopback or a
+  private network. Firewall and reverse-proxy configuration must never publish it.
 - Prometheus scrapes the API, the worker, and node exporters on hosting nodes.
 - Grafana dashboards visualize:
   - **Control plane:** request rate/latency/errors (RED), queue depth + job
@@ -152,7 +172,7 @@ off-host copy.
 ### What to instrument
 - HTTP: request count, duration histogram, status classes — labeled by route.
 - Jobs: enqueued/started/succeeded/failed counters, processing duration.
-- External calls: DB, Redis, Docker/Caddy, Cloudflare, and fallback-provider latency + error counters.
+- External calls: DB, Redis, Docker/Caddy, DNS resolver, and optional provider latency + error counters.
 - Keep label cardinality low (no per-user labels). Trends are metrics; detail is logs.
 
 ## 6. Logging & observability
@@ -171,7 +191,9 @@ off-host copy.
 ## 8. Networking & host security
 
 - Caddy terminates TLS and routes dashboard/API/customer traffic. Its admin API
-  remains private and configuration changes are validated before reload.
+  and On-Demand TLS permission endpoint remain private and configuration changes
+  are validated before reload. Production direct ingress opens only public
+  HTTP/HTTPS, not admin, metrics, database, or worker ports.
 - **UFW** on every host allows only required ports (HTTP/HTTPS, SSH from bastion,
   internal scrape ports on the private network).
 - **Fail2ban** bans abusive IPs (SSH, auth endpoints). Hardening details:

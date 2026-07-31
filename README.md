@@ -28,8 +28,8 @@ backend and Hestia is preserved as a fallback (ADR 0008).
 ## Features
 
 - **Website management** — create, suspend, and delete sites across hosting nodes.
-- **Domains & DNS** — connect your own domain; zones and records managed via
-  Cloudflare ([ADR 0003](docs/adr/0003-cloudflare-dns-and-ingress.md)).
+- **Domains & DNS** — connect your own domain with staged provider-neutral TXT/A
+  instructions and direct Caddy ingress ([ADR 0009](docs/adr/0009-direct-caddy-customer-domains.md)).
 - **Databases** — provision and manage scoped PostgreSQL/MariaDB databases and users.
 - **SSL** — automatic certificate issuance and renewal through Caddy.
 - **Deployments** — curated static, Node.js, PHP, Python, Go, and CMS containers;
@@ -44,7 +44,7 @@ backend and Hestia is preserved as a fallback (ADR 0008).
 |---|---|
 | **Backend** | Go · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap |
 | **Frontend** | Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Lucide React · GSAP |
-| **Hosting** | Docker Engine · Caddy · PostgreSQL/MariaDB · Cloudflare DNS; Hestia fallback |
+| **Hosting** | Docker Engine · direct Caddy ingress · customer-managed DNS · PostgreSQL/MariaDB; optional Cloudflare/Hestia adapters |
 | **Platform** | Docker · Docker Compose |
 | **Monitoring** | Prometheus · Grafana |
 | **Security** | Fail2ban · UFW |
@@ -72,11 +72,15 @@ opencloud/
 
 > **Status:** Phase 1 auth/accounts is implemented, security-hardened, and
 > verified in staging; its production release is deliberately deferred. The
-> Phase 2 site-provisioning core is merged into `main` but is not deployed.
-> PR #26 is the active review branch for encrypted scheduled control-plane
-> backup/restore plus the opt-in PostgreSQL/MariaDB customer database lifecycle,
-> one-time credential delivery, and a paginated database dashboard. Review,
-> green CI on the hardened head, and explicit release approval remain required.
+> complete Phase 2 provisioning, encrypted control-plane backup/restore, and
+> opt-in PostgreSQL/MariaDB customer database lifecycle shipped to `main` in
+> PR #26. Phase 2 is not production-deployed; dedicated verified-TLS database
+> targets, external key custody, off-host backup storage, staging verification,
+> and explicit release approval remain operational gates.
+> Phase 3 customer-domain code is complete and fully exercised on disposable
+> infrastructure, but it is not production-activated or deployed.
+> Public ingress IP/ports, DNS, ACME reachability, secrets, monitoring, and an
+> explicit production release remain operational gates.
 > See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick Start
@@ -140,6 +144,9 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Real verification/reset delivery; production fails fast when incomplete |
 | `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
 | `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
+| `DOMAINS_ENABLED` / `DOMAIN_VERIFICATION_KEY` | Phase 3 feature gate and external HMAC key |
+| `DOMAIN_INGRESS_IPV4` / `DOMAIN_DNS_RESOLVER` | Public A-record target and recursive resolver used for observations |
+| `CLOUDFLARE_API_ENABLED` | Must remain `false`; per-tenant Cloudflare authorization is not implemented |
 | `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
 | `CONTROL_PLANE_BACKUP_KEY` | External base64 AES-256 key for the opt-in encrypted backup profile |
 | `CONTROL_PLANE_BACKUP_RETENTION_DAYS` / `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | Backup retention and schedule |
