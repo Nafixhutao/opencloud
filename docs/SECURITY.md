@@ -191,9 +191,11 @@ error codes before they can reach logs.
   one control-plane transaction. A provider result is retried when that
   completion transaction fails, so external success is never reported without
   durable status and audit.
-- Domain attach/challenge/verify/provision/deprovision/certificate observations
-  are audited with their durable state. Ownership mismatches are rejected before
-  provider calls; detach/site-delete retain the hostname claim until cleanup.
+- Domain attach/challenge/verify/provision/deprovision and certificate state
+  changes are audited with their durable state. A successful unchanged
+  certificate probe refreshes only its observation timestamp. Ownership
+  mismatches are rejected before provider calls; detach/site-delete retain the
+  hostname claim until cleanup.
 
 ## 13. Data protection & privacy
 

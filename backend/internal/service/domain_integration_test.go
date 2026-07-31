@@ -994,7 +994,7 @@ func TestPhase3ReconciliationIsBoundedAndSkipsActiveDomainWork(t *testing.T) {
 	require.Empty(t, candidates, "recent active reconciliation must be throttled")
 }
 
-func TestPhase3UnchangedCertificateObservationDoesNotChurnStateOrAudit(t *testing.T) {
+func TestPhase3UnchangedCertificateObservationRefreshesCheckTimeWithoutStateOrAuditChurn(t *testing.T) {
 	fx := newPhase3Fixture(t, model.SiteActive, model.DomainActive)
 	ctx := context.Background()
 	expiresAt := time.Now().UTC().Add(90 * 24 * time.Hour).Truncate(time.Microsecond)
@@ -1029,12 +1029,14 @@ func TestPhase3UnchangedCertificateObservationDoesNotChurnStateOrAudit(t *testin
 		fx.account.ID,
 		model.JobObserveDomainCertificate,
 	)
+	probeStartedAt := time.Now().UTC()
 	require.NoError(t, processor.Handle(ctx, job, workerID))
 
 	reloaded, err := fx.domainRepo.GetForWorker(ctx, fx.domain.ID)
 	require.NoError(t, err)
 	require.WithinDuration(t, updatedAt, reloaded.UpdatedAt, time.Microsecond)
-	require.WithinDuration(t, observedAt, *reloaded.CertObservedAt, time.Microsecond)
+	require.False(t, reloaded.CertObservedAt.Before(probeStartedAt))
+	require.WithinDuration(t, time.Now().UTC(), *reloaded.CertObservedAt, 5*time.Second)
 	var audits int
 	require.NoError(t, fx.db.NewRaw(`
 		SELECT count(*) FROM audit_logs

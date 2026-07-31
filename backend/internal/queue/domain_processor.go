@@ -472,13 +472,16 @@ func (p *DomainProcessor) observeCertificate(
 			return err
 		}
 		expiresAt := observation.ExpiresAt.UTC()
+		observedAt := time.Now().UTC()
 		if current.CertStatus == status &&
 			current.CertExpiresAt != nil &&
 			current.CertExpiresAt.Equal(expiresAt) &&
 			current.LastError == nil {
+			if err := domains.TouchCertificateObservation(ctx, domainID, observedAt); err != nil {
+				return err
+			}
 			return jobs.Complete(ctx, job.ID, workerID)
 		}
-		observedAt := time.Now().UTC()
 		if err := domains.SetCertificate(ctx, domainID, status, &expiresAt, nil, &observedAt); err != nil {
 			return err
 		}

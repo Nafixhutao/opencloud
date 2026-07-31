@@ -46,8 +46,9 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   row-scoped errors, keep pagination in the URL, honor rate-limit/auth polling
   failures, and avoid a 25-request instruction fan-out.
 - Reconciliation reserves capacity for active/suspended sites even when more
-  than 100 deletes fail, and unchanged certificate observations no longer churn
-  control-plane rows or audit history.
+  than 100 deletes fail. Unchanged certificate probes refresh the operator-facing
+  last-check timestamp without churning the domain configuration timestamp or
+  audit history.
 - **Phase 2 customer database lifecycle (merged in main, not deployed):**
   an additive tenant-scoped `databases`/`database_credentials` schema; durable
   asynchronous PostgreSQL/MariaDB provision, delete, and cleanup jobs; real

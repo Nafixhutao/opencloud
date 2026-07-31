@@ -513,6 +513,24 @@ func (r *DomainRepo) SetCertificate(
 	return requireOneRow(result)
 }
 
+// TouchCertificateObservation records a successful probe that did not change
+// certificate state. It intentionally leaves updated_at unchanged so normal
+// reconciliation does not masquerade as a domain configuration mutation.
+func (r *DomainRepo) TouchCertificateObservation(
+	ctx context.Context,
+	domainID uuid.UUID,
+	observedAt time.Time,
+) error {
+	result, err := r.db.NewUpdate().Model((*model.Domain)(nil)).
+		Set("cert_observed_at = ?", observedAt.UTC()).
+		Where("id = ?", domainID).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(result)
+}
+
 // MarkReconciled records a bounded reconciliation scan. The caller appends the
 // corresponding audit and completes the reconciliation job in the same tx.
 func (r *DomainRepo) MarkReconciled(ctx context.Context, domainID uuid.UUID, at time.Time) error {
