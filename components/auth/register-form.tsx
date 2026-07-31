@@ -69,6 +69,7 @@ export function RegisterForm({
 
       <SocialAuthButtons
         providers={enabledSocialProviders}
+        callbackURL="/dashboard"
         errorCallbackURL="/register?error=social"
         onError={setFormError}
       />
