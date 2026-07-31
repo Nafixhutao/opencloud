@@ -1,0 +1,21 @@
+{
+	admin 0.0.0.0:2019
+	on_demand_tls {
+		ask http://opencloud-phase3-api:9090/caddy/permission
+	}
+}
+
+https:// {
+	tls internal {
+		on_demand
+	}
+
+	@opencloud_site host allowed.example.com
+	handle @opencloud_site {
+		respond "opencloud-phase3-exact-route" 200
+	}
+
+	handle {
+		respond "hostname-not-routed" 421
+	}
+}

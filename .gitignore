@@ -43,3 +43,5 @@ verify*.png
 
 # Vercel
 .vercel
+# Local AI handoff notes are coordination artifacts, never release source.
+/AI_HANDOFF_PHASE3.md

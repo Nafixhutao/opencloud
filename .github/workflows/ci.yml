@@ -108,6 +108,13 @@ jobs:
           test -x deploy/spikes/docker-caddy/run.sh
           test -x deploy/spikes/docker-caddy/run_test.sh
           bash deploy/spikes/docker-caddy/run_test.sh
+      - name: production Caddy JSON validation
+        working-directory: .
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/caddy/caddy.json:/config/caddy.json:ro" \
+            caddy:2.10.2-alpine \
+            caddy validate --config /config/caddy.json
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.5"
@@ -211,6 +218,11 @@ jobs:
         env:
           DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
         run: go test ./internal/service/ ./internal/middleware/ ./internal/handler/ -count=1
+      - name: Phase 3 domain migration and PostgreSQL integration
+        working-directory: .
+        env:
+          OPENCLOUD_VALIDATION_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash deploy/validation/run-postgres-phase3.sh
       - name: real PostgreSQL and MariaDB customer database lifecycle
         env:
           DATABASE_PROVISIONER_INTEGRATION: "1"
