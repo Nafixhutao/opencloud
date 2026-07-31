@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { routerPushMock, routerReplaceMock, searchParamsMock } = vi.hoisted(() => ({
@@ -51,10 +51,10 @@ function pageEnvelope(
   return { data: domains, meta: { page, per_page: 25, total } };
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 }
 
@@ -82,14 +82,24 @@ function renderDashboard(initialData: DomainsEnvelope, siteOverride: Site = site
       mutations: { retry: false },
     },
   });
-  return render(
+  const rendered = render(
     <QueryClientProvider client={client}>
       <DomainDashboard site={siteOverride} initialData={initialData} />
     </QueryClientProvider>,
   );
+  return { ...rendered, client };
+}
+
+async function advancePollingTimers(milliseconds: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+  });
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.restoreAllMocks();
   routerPushMock.mockReset();
@@ -328,6 +338,220 @@ describe('DomainDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry DNS records' }));
     expect(await screen.findByText('ownership-token')).toBeInTheDocument();
     expect(attempts).toBe(2);
+  });
+
+  it('backs off and resumes polling after a transient status refresh failure', async () => {
+    vi.useFakeTimers();
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      if (attempts === 1) {
+        return jsonResponse(
+          {
+            error: {
+              code: 'UNAVAILABLE',
+              message: 'Domain status is temporarily unavailable.',
+            },
+          },
+          503,
+        );
+      }
+      return jsonResponse(envelope([verifyingDomain]));
+    });
+    renderDashboard(envelope([verifyingDomain]));
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(1);
+
+    await advancePollingTimers(10_000);
+    expect(attempts).toBe(2);
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(3);
+  });
+
+  it('stops automatic polling for a permanent list error', async () => {
+    vi.useFakeTimers();
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      if (attempts === 1) {
+        return jsonResponse(
+          { error: { code: 'FORBIDDEN', message: 'Domain access is no longer allowed.' } },
+          403,
+        );
+      }
+      return jsonResponse(envelope([verifyingDomain]));
+    });
+    renderDashboard(envelope([verifyingDomain]));
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(1);
+
+    await advancePollingTimers(20_000);
+    expect(attempts).toBe(1);
+  });
+
+  it.each([
+    {
+      failure: () => Promise.resolve(jsonResponse(
+        { error: { code: 'TIMEOUT', message: 'The control plane timed out.' } },
+        408,
+      )),
+      label: 'an HTTP request timeout',
+    },
+    {
+      failure: () => Promise.reject(new TypeError('network unavailable')),
+      label: 'a network failure',
+    },
+  ])('backs off after $label while stale pending data remains', async ({ failure }) => {
+    vi.useFakeTimers();
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      if (attempts === 1) {
+        return failure();
+      }
+      return jsonResponse(envelope([verifyingDomain]));
+    });
+    renderDashboard(envelope([verifyingDomain]));
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(1);
+    await advancePollingTimers(9_999);
+    expect(attempts).toBe(1);
+    await advancePollingTimers(1);
+    expect(attempts).toBe(2);
+  });
+
+  it('honors Retry-After when list polling is rate limited', async () => {
+    vi.useFakeTimers();
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      if (attempts === 1) {
+        return jsonResponse(
+          { error: { code: 'RATE_LIMITED', message: 'Slow down.' } },
+          429,
+          { 'Retry-After': '7' },
+        );
+      }
+      return jsonResponse(envelope([verifyingDomain]));
+    });
+    renderDashboard(envelope([verifyingDomain]));
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(1);
+
+    await advancePollingTimers(6_999);
+    expect(attempts).toBe(1);
+    await advancePollingTimers(1);
+    expect(attempts).toBe(2);
+  });
+
+  it('stops list polling when the session expires', async () => {
+    vi.useFakeTimers();
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      return jsonResponse(
+        { error: { code: 'UNAUTHENTICATED', message: 'Sign in required.' } },
+        401,
+      );
+    });
+    renderDashboard(envelope([verifyingDomain]));
+
+    await advancePollingTimers(2_000);
+    expect(attempts).toBe(1);
+
+    await advancePollingTimers(20_000);
+    expect(attempts).toBe(1);
+  });
+
+  it('shows one accessible stale-data error and lets the user retry a permanent failure', async () => {
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    let attempts = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+      if (path !== `/api/sites/${site.id}/domains`) {
+        throw new Error(`Unexpected request: ${path}`);
+      }
+      attempts++;
+      if (attempts === 1) {
+        return jsonResponse(
+          { error: { code: 'FORBIDDEN', message: 'Domain access is no longer allowed.' } },
+          403,
+        );
+      }
+      return jsonResponse(envelope([verifyingDomain]));
+    });
+    const rendered = renderDashboard(envelope([verifyingDomain]));
+
+    await act(async () => {
+      await rendered.client.refetchQueries({
+        queryKey: ['domains', site.id, 1, 25],
+        exact: true,
+      });
+    });
+    expect(await screen.findByText('Domain access is no longer allowed.')).toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry status' }));
+
+    await waitFor(() => expect(attempts).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByText('Domain access is no longer allowed.')).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText('Refreshing DNS, routing, and certificate status…'),
+    ).toBeInTheDocument();
+  });
+
+  it('redirects a list refresh 401 with the safe current path', async () => {
+    const verifyingDomain: Domain = { ...pendingDomain, status: 'verifying' };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse(
+        { error: { code: 'UNAUTHENTICATED', message: 'Sign in required.' } },
+        401,
+      ),
+    );
+    const rendered = renderDashboard(envelope([verifyingDomain]));
+
+    await act(async () => {
+      await rendered.client.refetchQueries({
+        queryKey: ['domains', site.id, 1, 25],
+        exact: true,
+      });
+    });
+    await waitFor(() =>
+      expect(routerReplaceMock).toHaveBeenCalledWith(
+        `/login?notice=session-expired&next=${encodeURIComponent(`/sites/${site.id}`)}`,
+      ),
+    );
   });
 
   it('redirects mutation and instruction 401 responses with a safe return path', async () => {

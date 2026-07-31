@@ -110,6 +110,8 @@ const statusContent: Record<Domain['status'], { label: string; detail: string }>
   },
 };
 
+const transientPollBackoffMs = 10_000;
+
 export function DomainDashboard({ site, initialData }: DomainDashboardProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -138,9 +140,14 @@ export function DomainDashboard({ site, initialData }: DomainDashboardProps) {
         if (error.status === 429) {
           return Math.max(2_000, (error.retryAfterSeconds ?? 2) * 1_000);
         }
+        if (error.status !== 408 && error.status < 500) {
+          return false;
+        }
       }
       if (error) {
-        return false;
+        return query.state.data && hasPendingDomains(query.state.data.data)
+          ? transientPollBackoffMs
+          : false;
       }
       return query.state.data && hasPendingDomains(query.state.data.data) ? 2_000 : false;
     },
@@ -380,11 +387,21 @@ export function DomainDashboard({ site, initialData }: DomainDashboardProps) {
           </div>
         )}
 
-        {domainPage && hasPendingDomains(domainPage.data) ? (
+        {domainPage && hasPendingDomains(domainPage.data) && !domainsQuery.error ? (
           <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner />
             Refreshing DNS, routing, and certificate status…
           </p>
+        ) : null}
+        {domainPage &&
+        domainsQuery.error &&
+        !(domainsQuery.error instanceof DomainAPIError && [401, 429].includes(domainsQuery.error.status)) ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-4">
+            <FieldError>{domainErrorMessage(domainsQuery.error)}</FieldError>
+            <Button type="button" variant="outline" onClick={() => void domainsQuery.refetch()}>
+              Retry status
+            </Button>
+          </div>
         ) : null}
         {domainsQuery.error instanceof DomainAPIError && domainsQuery.error.status === 429 ? (
           <p role="status" className="text-sm text-muted-foreground">
