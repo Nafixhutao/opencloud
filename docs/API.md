@@ -179,10 +179,32 @@ control-plane placement, image, port, and resource-limit fields.
 ### Domains / DNS
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/sites/{id}/domains` | planned: domains on a site |
-| `POST` | `/sites/{id}/domains` | planned: attach a domain |
-| `GET`  | `/dns/zones/{id}/records` | planned: list DNS records |
-| `POST` | `/dns/zones/{id}/records` | planned: create a record |
+| `GET` | `/sites/{id}/domains?page=&per_page=` | list the caller's domains on a site |
+| `POST` | `/sites/{id}/domains` | attach a hostname (`201`; accepts `Idempotency-Key`) |
+| `GET` | `/domains/{id}` | caller-owned domain detail |
+| `GET` | `/domains/{id}/instructions` | current staged DNS instruction (TXT before proof, A after proof) |
+| `POST` | `/domains/{id}/challenge` | rotate and re-expire the ownership challenge |
+| `POST` | `/domains/{id}/verify` | queue DNS verification (`202`) |
+| `DELETE` | `/domains/{id}` | queue route removal and detach (`202`) |
+
+Attach body: `{ "hostname": "www.example.com" }`.
+Hostnames are normalized with IDNA, must be registrable public names, and are
+claimed globally across sites and tenants. The only implemented provider is
+`manual`; Cloudflare automation is unavailable until per-tenant authorization
+exists. Before verification, instructions contain only TXT name
+`_opencloud-verification.<hostname>` and its ownership token. After the proof is
+consumed, the response contains only the A record to `DOMAIN_INGRESS_IPV4`; this
+prevents customer traffic from reaching an unauthorized route. The token appears only in this
+authenticated instruction response; storage, logs, jobs, and normal domain
+responses contain its HMAC digest, never the raw value. Both the Go response and
+BFF response are `private, no-store` with `Pragma: no-cache`.
+
+Domain status is `pending`, `verifying`, `dns_pending`, `provisioning`, `active`,
+`failed`, `deleting`, or `deleted`. Certificate status is `none`, `issuing`,
+`active`, `expiring`, or `error`; certificate fields report the most recently
+observed TLS state, not an issuance promise. All paths are tenant-scoped and
+return `404` for another tenant's UUID. Mutations return `503 UNAVAILABLE` when
+`DOMAINS_ENABLED=false`.
 
 ### Databases
 | Method | Path | Purpose |
@@ -248,6 +270,12 @@ contain only the server-generated `database_id`, never credentials.
 | `GET` | `/healthz` | liveness |
 | `GET` | `/readyz` | readiness (DB + Redis reachable) |
 | `GET` | `:9090/metrics` | Prometheus metrics (separate internal listener) |
+| `GET` | `:9090/caddy/permission?domain=…` | internal-only Caddy On-Demand TLS decision; `200` allow, `403` deny, DB error `503` + `Retry-After` |
+
+The Caddy permission route is intentionally outside `/api/v1` and customer
+authentication. It must be reachable only over loopback/private transport. It
+returns an empty body, treats every non-`2xx` result as denial, and exposes no
+domain metadata.
 
 ## 12. Phase 1 endpoints
 

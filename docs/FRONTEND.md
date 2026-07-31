@@ -157,7 +157,7 @@ first authenticated screen; primitives are added as each need lands
 |---|---|---|
 | **1 Auth** | `button input label card field dialog sonner dropdown-menu avatar badge skeleton` | login/register/profile, app shell, toasts |
 | **2 Provisioning** | `table alert-dialog select tooltip progress sheet` | site/DB lists, async status, destructive delete |
-| **3 Domains/DNS/SSL** | `alert accordion switch` | cert/DNS status, DNS records |
+| **3 Domains/DNS/SSL** | `alert-dialog badge button card empty field input separator skeleton spinner table` | domain lifecycle, manual DNS, certificate state, typed detach |
 | **4 Email/FTP/cron** | `checkbox tabs` | account toggles |
 | **5 Billing** | `chart` | usage charts, invoices |
 
@@ -239,3 +239,31 @@ npm run test:ui # Vitest + Testing Library dashboard behavior tests
   customer must delete and recreate the database if it is lost.
 - The launch site template is intentionally limited to `static`; DNS automation,
   uploads/builds, database backups, and production rollout remain later work.
+
+## Phase 3 domain UI
+
+- `/sites/[id]` presents one restrained domain workspace instead of repeating
+  card grids: attach control, paginated status table/list with accessible
+  URL-backed previous/next controls, lazy per-row DNS instructions (TXT first,
+  A only after proof), certificate evidence, and
+  next actions share one visual hierarchy.
+- Thin browser-facing BFF routes under `/api/sites/[id]/domains` and
+  `/api/domains/[id]/*` validate identifiers/payloads, attach the server-side JWT,
+  preserve idempotency, and proxy only the documented Go API contract.
+- The attach form uses `FieldGroup`/`Field`, associated labels/descriptions, and
+  `aria-invalid`. Mutations disable their control and show a spinner; initial
+  loading uses skeletons; API errors remain visible with an explicit retry or
+  corrective next action.
+- Polling runs only for transitional domain states (`verifying`, `dns_pending`,
+  `provisioning`, `deleting`) or certificate `issuing`; terminal state and
+  unmount cancel it, `401` redirects to login with a validated same-origin
+  return path, and `429` honors `Retry-After` without the global retry.
+  Only the visible page polls. Status copy distinguishes
+  requested work from observed DNS and TLS evidence, so the UI never invents
+  success.
+- Copy controls announce success through `aria-live` and change their accessible
+  label. Detach uses `AlertDialog`, requires the exact hostname, preserves focus,
+  and cannot be submitted until it matches.
+- Customer types intentionally omit `account_id`, verification digests,
+  provider zone/record identifiers, and credentials. The raw ownership token is
+  displayed only in the authenticated manual instruction response.

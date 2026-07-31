@@ -109,6 +109,9 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
   up/idempotent-up/down/up round trip and applies Better Auth migrations twice
   against disposable PostgreSQL services.
   Repository integration suites are added when repositories land.
+- Phase 3 CI also runs `deploy/validation/run-postgres-phase3.sh`, including the
+  checksum-pinned migration round trip, trigger/FK/index/constraint assertions,
+  sentinel preservation, and concurrent global-hostname claim race.
 - Pipeline details: [`DEPLOYMENT.md`](DEPLOYMENT.md#2-ci-pipeline).
 
 ## 10. Conventions
@@ -240,3 +243,48 @@ plaintext sentinel is absent from it, restores into the second database, and
 checks the sentinel/schema. A trap deletes the exact containers, network,
 volume, and image on success or failure. The script never targets an active
 OpenCloud database.
+
+## Phase 3 domain and TLS tests
+
+The PostgreSQL harness proves pending cross-tenant intent does not reserve a
+global hostname, concurrent verification produces exactly one durable
+claim/provision winner, and a primary-site claim cannot be replaced. Service
+integration covers bounded fair site/domain reconciliation cursors,
+active-job suppression, reserved steady-state progress despite more than 100
+failing deletes, and serialized reconcile-vs-delete transitions on a small
+connection pool.
+
+Backend packages cover validation/IDNA/public-suffix rules, tenant isolation,
+challenge expiry/rotation/single use, account/job ownership checks before
+provider calls, fail-closed permission responses including `Retry-After`, exact
+route ownership, lifecycle retries/compensation/reconciliation, audit rollback,
+site deletion, proxy-safe active-route restoration without re-requiring direct
+A records, and unchanged certificate observation without audit/status churn.
+
+Frontend route and interaction tests cover BFF validation/proxying,
+attach/instruction/rotate/verify/detach flows, async status and API errors,
+certificate states, lazy instruction fan-out, field-detail delivery, retry and
+copy announcements, typed confirmation/focus, URL-backed pagination, and
+polling that stops on terminal state/unmount or honors auth/rate-limit errors.
+The full gate runs locked install,
+Better Auth migration twice, auth/UI tests, lint, type-check, production build,
+and high-severity audit:
+
+```bash
+bash deploy/validation/run-frontend-phase3.sh
+```
+
+The real ingress proof is:
+
+```bash
+bash deploy/validation/run-caddy-phase3.sh
+```
+
+It creates uniquely named disposable PostgreSQL, Redis, API, Caddy, and probe
+resources; validates the pinned official Caddy image; proves permission `200`
+for active custom and primary hostnames and `403` for unknown names; performs
+real local-CA TLS handshakes; proves exact routing and unknown-host rejection;
+then stops PostgreSQL and proves permission `503` plus denial of a previously
+unissued hostname. Its trap refuses name collisions and removes only its exact
+containers/network/volumes. It never uses public DNS, public ACME, live Caddy,
+or production ports, so passing it is not a production-deployment claim.

@@ -13,12 +13,17 @@ on the last. Status legend: ✅ done · 🚧 in progress · ⏳ planned.
 Phase 1 (Auth & accounts) is technically implemented, hardened, and verified in
 staging. Production activation is deliberately deferred; external mail/OAuth
 credentials and a production release approval remain operational gates, not
-missing Phase 1 code. Phase 2 is **in progress**: the site-provisioning core is
-merged into `main`, while PR #26 is the active review branch for encrypted
-control-plane backup/restore and the opt-in PostgreSQL/MariaDB customer database
-lifecycle. Nothing in Phase 2 is deployed. Review and green CI on the hardened
-PR head, dedicated verified-TLS database targets, external encryption-key
-custody, and off-host production backup storage remain release gates.
+missing Phase 1 code. Phase 2 code is **complete and merged** into `main` through
+PR #26: site provisioning, encrypted control-plane backup/restore, and the
+opt-in PostgreSQL/MariaDB customer database lifecycle are present. Nothing in
+Phase 2 is production-deployed. Dedicated verified-TLS database targets,
+external encryption-key custody, off-host production backup storage, staging
+verification, and release approval remain operational gates.
+Phase 3 code is complete and has passed disposable PostgreSQL, browser/build,
+and real Caddy On-Demand TLS validation. It is not production-deployed. A public
+ingress IPv4, inbound ports 80/443,
+public DNS and ACME reachability, external verification-key custody, monitoring,
+and explicit release approval remain blockers to production activation.
 
 ---
 
@@ -92,52 +97,62 @@ repeatable idempotency spike.
 verification. Production release remains a separate, deferred approval gate; no
 credential or production deployment is claimed by this roadmap.
 
-## Phase 2 — Provisioning core 🚧
+## Phase 2 — Provisioning core ✅
 
 The heart of the platform: drive Docker/Caddy through a provider-neutral boundary.
 
-- 🚧 `provisioner` package: idempotent, ownership-checked Docker/Caddy adapter +
-  concurrency-safe fake for tests. The current review slice still requires CI
-  approval; Hestia remains an unimplemented optional adapter.
-- 🚧 `nodes` registry + transactionally reserved least-loaded placement
-- 🚧 Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
+- ✅ `provisioner` package: idempotent, ownership-checked Docker/Caddy adapter +
+  concurrency-safe fake for tests. Hestia remains an unimplemented optional adapter.
+- ✅ `nodes` registry + transactionally reserved least-loaded placement
+- ✅ Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
   retries/backoff, stale-job recovery, and compensating cleanup
-- 🚧 Site lifecycle: create → active → suspend/resume → delete, exposed through
+- ✅ Site lifecycle: create → active → suspend/resume → delete, exposed through
   tenant-scoped APIs and a status-polled dashboard. The workspace overview uses
   one tenant-scoped aggregate query, so counts do not truncate at collection
   page boundaries.
-- 🚧 Database lifecycle: additive tenant-scoped schema, idempotent asynchronous
+- ✅ Database lifecycle: additive tenant-scoped schema, idempotent asynchronous
   PostgreSQL/MariaDB database + least-privilege user provisioning, encrypted
   one-time credential reveal, per-database serialized provider operations,
   delete/cleanup compensation, canonical bounded pagination metadata, and
-  paginated dashboard flows. The PR #26 review branch defaults the feature off
-  and still requires review, green CI on the hardened head, and disposable
-  real-engine validation before merge.
-- 🚧 Reconciliation job: detect/repair managed site state without adopting or
+  paginated dashboard flows. The merged implementation defaults the feature off;
+  production still requires dedicated verified-TLS targets and key custody.
+- ✅ Reconciliation job: detect/repair managed site state without adopting or
   deleting unrelated Docker/Caddy resources
-- 🚧 Basic control-plane backups: an opt-in non-root Compose scheduler now streams
+- ✅ Basic control-plane backups: an opt-in non-root Compose scheduler now streams
   `pg_dump` into authenticated AES-256-GCM chunk encryption, publishes atomic
   checksummed artifacts, prunes only generated archive pairs, and has a real
-  disposable restore rehearsal. It remains a review-branch feature; production
-  still needs external key custody and an off-host encrypted destination.
+  disposable restore rehearsal. Production still needs external key custody and
+  an off-host encrypted destination.
 
 **Exit criteria:** a customer can create and delete a working website and a
 scoped PostgreSQL/MariaDB database from the dashboard, backed by isolated real
 providers, and the control-plane DB is backed up on a schedule with a tested
-restore. This remains in progress until the stacked branches are reviewed,
-green in CI, and merged. Production activation has separate secret, TLS,
-off-host storage, staging verification, and approval gates.
+restore. These code and merge criteria are met. Production activation remains
+separate and blocked on secret custody, TLS targets, off-host storage, staging
+verification, and release approval.
 
-## Phase 3 — Domains, DNS & SSL ⏳
+## Phase 3 — Domains, DNS & SSL 🚧
 
-- Domain management + linking to sites (bring-your-own-domain — ADR 0004)
-- Cloudflare DNS zone + record management through the provisioner (ADR 0003)
-- Cloudflare Tunnel ingress (`cloudflared`) for dashboard, API, and customer sites
-- Automatic certificate issuance/renewal through Caddy with an allowlisted
-  On-Demand TLS permission endpoint
-- DNS propagation + certificate status surfaced in the UI
+- ✅ Tenant-safe domain attachment, global hostname claims, ownership challenge
+  rotation/expiry, verification, detach, audit, and durable lifecycle jobs
+- ✅ Universal staged manual DNS instructions: TXT ownership proof first, then
+  an A record to the configured direct-Caddy ingress address only after proof
+  is consumed (ADR 0009)
+- ✅ Exact-host Caddy routes and a metrics-listener-only On-Demand TLS permission
+  endpoint; unknown/inactive hostnames and database failures deny issuance
+- ✅ DNS, lifecycle, certificate, renewal, error, retry, copy, and typed-detach
+  states surfaced through the Next.js BFF and accessible site domain dashboard
+- ✅ Disposable real-PostgreSQL migration/race/rollback proof, full Go and
+  frontend gates, official Caddy validation, local-CA handshakes, routing checks,
+  and database-outage fail-closed proof
+- ⏳ Merge/release approval and production prerequisites: public IPv4, ports
+  80/443, public DNS and ACME reachability, secret custody, renewal/error
+  monitoring, backups, and rollback rehearsal
+- ⏳ Cloudflare Tunnel/DNS automation is an optional future adapter. Its feature
+  flag refuses to start until real per-tenant authorization exists.
 
-**Exit criteria:** a customer can point a domain, get DNS + HTTPS, with renewals automated.
+**Exit criteria:** met in code and disposable validation; not yet met for
+production because no public DNS, certificate, or deployment has been activated.
 
 ## Phase 4 — Email, FTP/SSH & cron ⏳
 

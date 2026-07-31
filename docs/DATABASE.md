@@ -148,6 +148,33 @@ Database checks independently enforce the customer-label and physical-name
 allowlists, idempotency-key bound, deleted-status timestamp invariant, and
 minimum authenticated-envelope size.
 
+Phase 3 implements `domains` plus `hostname_claims`. `domains` is tenant/site
+scoped and stores normalized hostnames, lifecycle/certificate observation state,
+an HMAC challenge digest and expiry, timestamps, and safe operational errors.
+It never stores the raw challenge token. `hostname_claims` is the global
+registry shared by site primary hostnames and **verified** custom domains; an
+exactly-one-owner check plus deferrable cascading foreign keys allows
+transactional ownership changes while preventing cross-tenant duplicate
+verified hostnames. Pending challenges do not reserve a global name, so an
+authenticated tenant cannot squat a hostname it does not control. The
+verification transaction atomically inserts the claim, and exactly one
+concurrent proof wins. Triggers retain and release verified claims across
+verification/update/soft-delete/hard-delete paths.
+
+The migration takes an explicit transaction and an `ACCESS EXCLUSIVE` lock on
+`sites` before backfilling primary claims, so a site-vs-domain hostname race has
+one winner. This blocks site reads and writes for the transaction and therefore
+requires the production maintenance path in `DEPLOYMENT.md`; the migration
+runner requires a one-shot acknowledgement, and SQL fails lock acquisition
+after five seconds rather than waiting indefinitely. Composite
+domain/site/account foreign keys prevent cross-tenant
+attachment. A tenant-local partial unique index prevents duplicate live intent
+inside one account; the global registry arbitrates verified claims across
+accounts and primary sites. Indexed Caddy permission lookups plus fair
+site/domain reconciliation cursors bound steady-state scans and certificate
+observation. Domain job kinds extend the existing queue without placing
+ownership tokens or provider credentials in payloads.
+
 Database jobs extend the existing queue with `provision_database`,
 `delete_database`, and compensating `cleanup_database`. Their JSON payload is
 exactly a server-generated `database_id`. Provider work occurs outside a
@@ -198,6 +225,16 @@ npm run auth:migrate                # auth tables; run from repo root
 go run ./cmd/migrate status         # show Bun-managed state
 go run ./cmd/migrate down           # roll back one Bun migration (dev)
 ```
+
+`20260730010000_create_domains` is additive and checksum-pinned. Its down file
+is for disposable development/rehearsal only; production remains forward-only
+and rolls forward with a corrective migration. It is explicitly a
+maintenance-window migration, not part of the general zero-downtime contract.
+The Phase 3 validation proves
+up/idempotent-up/latest-down/up, schema equality, pre-existing sentinel
+preservation, constraints/triggers/FKs/indexes (including the non-partial
+`(site_id, account_id)` cascade-support index), soft- and hard-delete behavior,
+and simultaneous site-vs-domain claim contention on real disposable PostgreSQL.
 
 ## 6. Indexing & performance
 
@@ -299,3 +336,13 @@ concurrent callers have at most one winner. The control-plane backup
 implementation does not add schema or alter any shipped migration. No migration
 was added or rewritten for provider-operation serialization or dashboard
 pagination.
+
+## 12. Phase 3 domain tables
+
+Migration `20260730010000_create_domains` adds the domain lifecycle, global
+verified-hostname registry, fair site reconciliation cursor, and domain job
+kinds without editing any shipped migration.
+The committed checksum manifest pins both directions. Site deletion first marks
+related domains deleting and transactionally records audit/jobs; claims are
+released only by completed cleanup. This preserves tenant ownership through
+retries, compensation, and worker crashes.

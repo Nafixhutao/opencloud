@@ -13,7 +13,8 @@ installed on the live control-plane host.
 | **Caddy** | Public ingress, reverse proxy, automatic HTTPS, certificate renewal |
 | **OpenCloud worker** | Sole caller of hosting backends; executes retryable jobs |
 | **PostgreSQL** | System of record for sites, domains, desired state, and jobs |
-| **Cloudflare** | Authoritative DNS and optional tunnel/edge path (ADR 0003) |
+| **Customer DNS provider** | Manual TXT ownership proof and A record to direct ingress (ADR 0009) |
+| **Cloudflare** | Optional future tenant-authorized DNS/tunnel adapter; unavailable today |
 
 The Phase 0 spike is disposable and proves the host can create one constrained
 container, route a real hostname through Caddy, repeat the operation without
@@ -24,10 +25,12 @@ scheduled control-plane PostgreSQL backup plus a disposable restore rehearsal.
 Neither branch is a production deployment. A further stacked branch implements
 customer PostgreSQL/MariaDB lifecycle; site volume/customer-database backups
 remain outstanding.
+The Phase 3 customer-domain lifecycle is code-complete and exercised in
+disposable infrastructure, but it is not production-deployed.
 
 ## 2. Provisioner boundary
 
-Only the provisioner talks to Docker, Caddy, Cloudflare, or a fallback Hestia
+Only the provisioner talks to Docker, Caddy, a future Cloudflare adapter, or a fallback Hestia
 node. Handlers and services depend on capabilities, never provider payloads.
 
 ```go
@@ -97,15 +100,36 @@ the deterministic object and converges instead of creating a duplicate.
 Caddy remains the only public listener on ports 80/443. Site containers publish
 no public ports; Caddy reaches an internal/loopback upstream.
 
-For customer-controlled domains, Caddy's On-Demand TLS permission endpoint must
-query an indexed OpenCloud domain record and return success only for an active,
-verified domain. This prevents arbitrary certificate issuance. Caddy config
-updates are serialized; each update is validated before reload and must preserve
-unrelated platform routes.
+Customers can use any authoritative DNS provider. OpenCloud returns a TXT record
+at `_opencloud-verification.<hostname>` containing an expiring ownership token;
+after verification it returns an A record to `DOMAIN_INGRESS_IPV4`. The API
+observes both through `DOMAIN_DNS_RESOLVER`. Automated zone writes and Cloudflare
+Tunnel are optional future adapters, not the implemented default (ADR 0009).
+Primary site hostnames are separate: production accepts only strict children of
+the platform-owned `SITE_DOMAIN_SUFFIX`. A customer-owned hostname can never be
+created as an unverified primary route; it must pass the custom-domain proof.
 
-Cloudflare remains authoritative DNS under ADR 0003. Customers bring a domain,
-complete ownership/DNS verification, and then OpenCloud authorizes Caddy to serve
-it.
+Caddy's On-Demand TLS permission endpoint queries an indexed OpenCloud record
+and returns empty `200` only for an active primary/custom hostname. Missing or
+inactive names return `403`; database errors return `503` with `Retry-After`.
+Because every non-`2xx` denies authorization, outages fail new issuance closed.
+The ask endpoint is served beside metrics on an internal-only listener and is
+never publicly routed. On-demand issuance is also enabled explicitly on the
+eligible TLS policy; configuring the ask endpoint alone is not enough.
+
+The worker serializes validated Caddy changes, uses exact-host routes, preserves
+primary plus alias hosts, and refuses unowned route IDs. Production Caddy uses
+public ACME. [`../deploy/caddy/caddy.json`](../deploy/caddy/caddy.json) assumes a
+co-located host where Caddy admin and the API permission listener use loopback;
+a separated topology must provide equivalent private authenticated transport.
+The disposable proof uses a local CA and does not claim public issuance.
+
+Certificate observation dials the configured ingress IPv4 with the customer
+hostname as SNI, so it measures the actual served endpoint rather than trusting
+customer DNS alone. The worker records observed/expiry state, schedules renewal
+observation, and avoids audit/status churn when nothing changed. Operations must
+alert on certificate errors, approaching expiry, permission failures, and ACME
+rate limits.
 
 ## 6. Databases and persistent files
 
@@ -153,6 +177,8 @@ migration runbook are in [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md).
 - Unknown/unmanaged resources are reported, never adopted or deleted silently.
 - Metrics cover provisioning latency, retries, failures, container health, and
   Caddy route/certificate errors without per-user high-cardinality labels.
+- Domain reconciliation repairs desired exact routes; deprovision and site
+  deletion retain global hostname ownership until durable cleanup succeeds.
 
 The Docker adapter uses one deterministic Caddy route ID per site and conditional
 `If-Match` writes against Caddy's config API so concurrent changes retry instead
