@@ -241,9 +241,7 @@ func TestEnsureMembershipConcurrentCallersConvergeWithoutOrphanAccount(t *testin
 	repo := repository.NewAccountRepo(db)
 	ctx := context.Background()
 	userID := "membership_race_" + uuid.NewString()
-
-	var accountsBefore int
-	require.NoError(t, db.NewRaw(`SELECT count(*) FROM public.accounts`).Scan(ctx, &accountsBefore))
+	accountName := "Race Workspace " + uuid.NewString()
 
 	const callers = 12
 	results := make(chan *model.AccountMembership, callers)
@@ -253,7 +251,7 @@ func TestEnsureMembershipConcurrentCallersConvergeWithoutOrphanAccount(t *testin
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			membership, _, ensureErr := repo.EnsureMembership(ctx, userID, "Race Workspace")
+			membership, _, ensureErr := repo.EnsureMembership(ctx, userID, accountName)
 			if ensureErr != nil {
 				errs <- ensureErr
 				return
@@ -281,9 +279,29 @@ func TestEnsureMembershipConcurrentCallersConvergeWithoutOrphanAccount(t *testin
 	}
 	require.Equal(t, callers, count)
 
-	var accountsAfter int
-	require.NoError(t, db.NewRaw(`SELECT count(*) FROM public.accounts`).Scan(ctx, &accountsAfter))
-	require.Equal(t, accountsBefore+1, accountsAfter)
+	var matchingAccounts int
+	require.NoError(t, db.NewRaw(
+		`SELECT count(*) FROM public.accounts WHERE name = ?`,
+		accountName,
+	).Scan(ctx, &matchingAccounts))
+	require.Equal(t, 1, matchingAccounts)
+
+	var winnerAccountRows int
+	require.NoError(t, db.NewRaw(
+		`SELECT count(*) FROM public.accounts WHERE id = ? AND name = ?`,
+		winnerAccountID,
+		accountName,
+	).Scan(ctx, &winnerAccountRows))
+	require.Equal(t, 1, winnerAccountRows)
+
+	var orphanAccounts int
+	require.NoError(t, db.NewRaw(`
+		SELECT count(*)
+		FROM public.accounts AS a
+		LEFT JOIN public.account_memberships AS m ON m.account_id = a.id
+		WHERE a.name = ? AND m.id IS NULL
+	`, accountName).Scan(ctx, &orphanAccounts))
+	require.Zero(t, orphanAccounts)
 }
 
 func TestProfileMutationRollsBackWhenAuditInsertFails(t *testing.T) {
