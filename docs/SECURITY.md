@@ -96,6 +96,18 @@ error codes before they can reach logs.
   (permissioned Docker boundary, loopback/private Caddy admin API, scoped fallback
   Hestia access key, and a DB user that can't `DROP`).
 - Redact secrets at the logging boundary ([`BACKEND.md`](BACKEND.md#11-logging-zap)).
+- The customer Logs API applies a second fixed redaction pass and strips request
+  query strings before delivery. This is defense in depth: applications and
+  collectors still must never emit credentials. Arbitrary structured fields and
+  Loki labels are not reflected to the browser.
+- Log tenancy is server-selected. The API ignores browser `account_id`, verifies
+  the project/service/deployment through account-scoped repositories, then
+  creates the mandatory Loki account/project label matchers itself. Missing
+  ownership metadata fails closed; customer log lines are never stored in the
+  control-plane PostgreSQL database.
+- Browser live-tail uses the Next.js BFF because EventSource cannot attach the
+  bearer header safely. JWTs remain in the server-side fetch and never enter a
+  URL, JavaScript storage, or SSE event.
 - `CUSTOMER_DATABASE_CREDENTIAL_KEY` is a separate external base64 32-byte key
   shared only by API/worker. It is not the backup key, Better Auth secret,
   target admin credential, or control-plane database password.

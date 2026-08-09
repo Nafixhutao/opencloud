@@ -83,6 +83,31 @@ func TestLoad_RequiresRedis(t *testing.T) {
 	}
 }
 
+func TestLogsConfigurationFailsClosed(t *testing.T) {
+	tests := []struct {
+		name    string
+		logs    LogsConfig
+		wantErr bool
+	}{
+		{name: "disabled needs no endpoint"},
+		{name: "enabled requires endpoint", logs: LogsConfig{Enabled: true, QueryTimeoutSeconds: 10, PollIntervalSeconds: 2}, wantErr: true},
+		{name: "credentials are rejected", logs: LogsConfig{Enabled: true, LokiURL: "https://user:pass@loki.example.com", QueryTimeoutSeconds: 10, PollIntervalSeconds: 2}, wantErr: true},
+		{name: "invalid poll interval is rejected", logs: LogsConfig{Enabled: true, LokiURL: "https://loki.example.com", QueryTimeoutSeconds: 10, PollIntervalSeconds: 0}, wantErr: true},
+		{name: "complete Loki configuration", logs: LogsConfig{Enabled: true, LokiURL: "http://loki:3100/", QueryTimeoutSeconds: 10, PollIntervalSeconds: 2}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := Config{Logs: test.logs}
+			err := cfg.validateLogs()
+			if test.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 // TestValidateAPI_ProductionRequiresIssuerAudience guards the security fix:
 // only the production API requires iss/aud, while development stays lenient.
 func TestValidateAPI_ProductionRequiresIssuerAudience(t *testing.T) {

@@ -14,6 +14,14 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 4 customer logs foundation (not production-deployed):** tenant-safe
+  build/runtime/request/platform log contracts; a bounded Loki HTTP adapter;
+  ownership checks and API-boundary redaction; historical and SSE Go endpoints;
+  an authenticated streaming BFF; and an accessible project Logs Viewer with
+  live/pause, autoscroll, wrapping, timestamps, search, service, source, level,
+  and environment filters. Compose adds Loki plus Alloy behind a GET-only Docker
+  socket proxy. Existing disabled build/runtime adapters do not yet emit live
+  production customer logs.
 - **Phase 4 registry/deployment foundation (not production-deployed):** a
   provider-neutral private OCI registry contract with strict digest-only,
   tenant/service-scoped repository identities; database-enforced deployment
