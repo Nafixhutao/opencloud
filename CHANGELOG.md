@@ -502,3 +502,13 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 - `POST /api/v1/projects/:projectId/services/:serviceId/environment/:id/reveal` — reveal secret (rate-limited, audited)
 - `GET /api/v1/projects/:projectId/services/:serviceId/environment/audit?limit={n}` — list audit trail
 
+
+## [Unreleased]
+### Added - SLICE 7 Database Manager (Phase 1 & 2)
+- **Session Management**: `database_console_sessions` table with short-lived authenticated sessions (15-60 min TTL)
+- **Session API**: POST `/api/v1/databases/:id/console/session`, POST `/databases/:id/console/session/:session_id/revoke`
+- **Query Audit Logging**: `console_query_audit` table with hashed queries (never stores plaintext)
+- **SQL Console Backend**: READ-ONLY query execution with safety limits (30s timeout, 1000 rows max)
+- **Frontend SQL Console**: Connected to real API with session management
+- **Security**: Account-scoped queries, no credential storage in sessions, audit logging on all events
+

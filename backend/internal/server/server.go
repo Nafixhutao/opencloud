@@ -122,6 +122,19 @@ func New(
 		cfg.Provisioner.SiteDomainSuffix,
 	)
 	projectSvc := service.NewProjectService(db, projectRepo, auditRepo)
+	consoleSessionRepo := repository.NewDatabaseConsoleSessionRepository(db)
+	consoleQueryAuditRepo := repository.NewConsoleQueryAuditRepository(db)
+	consoleSessionSvc := service.NewDatabaseConsoleService(
+		databaseRepo,
+		consoleSessionRepo,
+		auditRepo,
+	)
+	consoleQuerySvc := service.NewConsoleQueryService(
+		consoleSessionRepo,
+		databaseRepo,
+		consoleQueryAuditRepo,
+		log,
+	)
 	var customerLogs logstore.Store = logstore.UnavailableStore{}
 	if cfg.Logs.Enabled {
 		var err error
@@ -143,6 +156,8 @@ func New(
 	overviewH := handler.NewResourceOverviewHandler(overviewSvc)
 	domainH := handler.NewDomainHandler(domainSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
+	consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
+	consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)
 	logH := handler.NewLogHandler(logSvc)
 	envH := handler.NewEnvironmentVariableHandler(log, envSvc)
 
@@ -218,6 +233,17 @@ func New(
 				"/databases/:id/credentials/reveal",
 				middleware.RateLimit(rdb, "database-credential", 10, time.Minute),
 				databaseH.RevealCredential,
+			)
+			authed.POST(
+				"/databases/:id/console/session",
+				consoleSessionH.CreateSession,
+			)
+			authed.POST(
+				"/databases/:id/console/session/:session_id/revoke",
+				consoleSessionH.RevokeSession,
+			)
+			authed.POST(
+				"/databases/:id/console/query", consoleQueryH.ExecuteQuery,
 			)
 
 			admin := authed.Group("/admin")
