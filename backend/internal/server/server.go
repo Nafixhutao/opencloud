@@ -78,6 +78,7 @@ func New(
 	jobRepo := repository.NewJobRepo(db)
 	domainRepo := repository.NewDomainRepo(db)
 	projectRepo := repository.NewProjectRepo(db)
+	envRepo := repository.NewEnvironmentVariableRepository(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
 	siteSvc := service.NewSiteService(
 		db,
@@ -134,6 +135,7 @@ func New(
 		}
 	}
 	logSvc := service.NewLogService(projectRepo, customerLogs)
+	envSvc := service.NewEnvironmentVariableService(log, envRepo, projectRepo, databaseCipher)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
@@ -142,6 +144,7 @@ func New(
 	domainH := handler.NewDomainHandler(domainSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
 	logH := handler.NewLogHandler(logSvc)
+	envH := handler.NewEnvironmentVariableHandler(log, envSvc)
 
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
@@ -180,6 +183,12 @@ func New(
 			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID/events", projectH.ListDeploymentEvents)
 			authed.GET("/projects/:projectID/logs", logH.List)
 			authed.GET("/projects/:projectID/logs/stream", logH.Stream)
+			authed.GET("/projects/:projectId/services/:serviceId/environment", envH.List)
+			authed.POST("/projects/:projectId/services/:serviceId/environment", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Create)
+			authed.PUT("/projects/:projectId/services/:serviceId/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Update)
+			authed.DELETE("/projects/:projectId/services/:serviceId/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Delete)
+			authed.POST("/projects/:projectId/services/:serviceId/environment/:id/reveal", middleware.RateLimit(rdb, "env-reveal", 10, time.Minute), envH.Reveal)
+			authed.GET("/projects/:projectId/services/:serviceId/environment/audit", envH.ListAudit)
 			authed.GET("/sites", siteH.List)
 			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
 			authed.GET("/sites/:id", siteH.Get)

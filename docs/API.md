@@ -336,3 +336,145 @@ platform admin. Mutation and audit append commit together.
 
 Identity (register/login/session/password reset) is under `/api/auth/*` on the
 Next.js BFF (better-auth), not the Go API.
+
+## Environment Variables and Secrets (Phase 4H)
+
+### List Environment Variables
+
+```
+GET /api/v1/projects/:projectId/services/:serviceId/environment?environment={env}
+```
+
+Lists all environment variables for a service and environment. Secrets are
+redacted; use the reveal endpoint to access secret values with audit trail.
+
+**Query Parameters:**
+- `environment` (optional): `production` | `preview` | `development` (default: `production`)
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "key": "DATABASE_URL",
+      "value": "postgres://...",
+      "is_secret": false,
+      "environment": "production",
+      "created_at": "2026-08-09T10:00:00Z",
+      "updated_at": "2026-08-09T10:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "key": "API_KEY",
+      "is_secret": true,
+      "environment": "production",
+      "created_at": "2026-08-09T10:00:00Z",
+      "updated_at": "2026-08-09T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Create Environment Variable
+
+```
+POST /api/v1/projects/:projectId/services/:serviceId/environment
+```
+
+Creates a new environment variable or secret.
+
+**Request Body:**
+```json
+{
+  "key": "MY_VARIABLE",
+  "value": "my-value",
+  "is_secret": false,
+  "environment": "production"
+}
+```
+
+**Validation:**
+- Key must be uppercase, alphanumeric plus underscore, max 128 chars
+- Reserved prefixes (`DATABASE_`, `REDIS_`, `OPENCLOUD_`, `INTERNAL_`) are blocked
+- Value is required
+
+**Response:** `201 Created` with the created variable (secret value redacted)
+
+### Update Environment Variable
+
+```
+PUT /api/v1/projects/:projectId/services/:serviceId/environment/:id
+```
+
+Updates an environment variable value. For secrets, this rotates the encrypted value.
+
+**Request Body:**
+```json
+{
+  "value": "new-value"
+}
+```
+
+**Response:** `200 OK` with the updated variable (secret value redacted)
+
+### Delete Environment Variable
+
+```
+DELETE /api/v1/projects/:projectId/services/:serviceId/environment/:id
+```
+
+Deletes an environment variable. Audit trail is retained.
+
+**Response:** `204 No Content`
+
+### Reveal Secret
+
+```
+POST /api/v1/projects/:projectId/services/:serviceId/environment/:id/reveal
+```
+
+Decrypts and returns a secret value. This action is audited and rate-limited (10 req/min).
+
+**Response Headers:**
+- `Cache-Control: no-store, no-cache, must-revalidate`
+
+**Response:**
+```json
+{
+  "data": {
+    "value": "decrypted-secret-value"
+  }
+}
+```
+
+### List Audit Trail
+
+```
+GET /api/v1/projects/:projectId/services/:serviceId/environment/audit?limit={n}
+```
+
+Lists audit trail for environment variable operations.
+
+**Query Parameters:**
+- `limit` (optional): 1-100 (default: 50)
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "action": "revealed",
+      "key": "API_KEY",
+      "is_secret": true,
+      "environment": "production",
+      "actor_id": "uuid",
+      "metadata": {},
+      "created_at": "2026-08-09T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Actions:** `created` | `updated` | `deleted` | `revealed` | `rotated`

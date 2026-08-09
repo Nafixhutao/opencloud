@@ -280,3 +280,28 @@ real SMTP host, sender, username/password, TLS 1.2+, and valid certificates;
 startup fails fast when incomplete. Production email is not claimed active
 until those external credentials are configured and a staging delivery test
 passes.
+
+## Phase 4H environment variables and secrets
+
+- Environment variables are tenant-scoped, service-scoped, and
+  environment-scoped (production/preview/development). Secrets are encrypted at
+  rest with AES-256-GCM bound to the service UUID.
+- Secret values are never logged, never returned in list responses, and only
+  revealed through an explicit audited API call with `Cache-Control: no-store`.
+- Key validation blocks reserved prefixes (`DATABASE_`, `REDIS_`, `OPENCLOUD_`,
+  `INTERNAL_`) to prevent accidental exposure of platform credentials. User
+  cannot create `NEXT_PUBLIC_*` style environment variables with reserved
+  prefixes, ensuring no unintentional client-side leakage.
+- Reveal endpoint is rate-limited (10 requests per minute per account) and
+  every reveal is recorded in the append-only audit trail with actor identity.
+- Rotation (update of a secret value) generates a fresh encrypted envelope and
+  records a `rotated` audit event. Old ciphertext is never retained.
+- Deletion removes the variable but preserves its audit trail for compliance.
+- The credential cipher uses the same encryption key as customer database
+  credentials (`CREDENTIAL_ENCRYPTION_KEY`). Key compromise requires immediate
+  rotation and re-encryption of all secrets. Losing the key makes secrets
+  unrecoverable.
+- Runtime injection of environment variables into deployment containers is a
+  future integration point. The deployment worker must decrypt variables in
+  memory and inject them into the container environment without logging or
+  persisting plaintext.
