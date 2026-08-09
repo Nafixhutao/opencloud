@@ -15,7 +15,7 @@ CREATE TABLE environment_variables (
                     CHECK (environment IN ('production', 'preview', 'development')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by      UUID NOT NULL,
+    created_by      TEXT NOT NULL,
     CONSTRAINT environment_variables_service_project_account_fk
         FOREIGN KEY (service_id, project_id, account_id)
         REFERENCES services (id, project_id, account_id) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE environment_variable_audit (
     key          TEXT NOT NULL,
     is_secret    BOOLEAN NOT NULL,
     environment  TEXT NOT NULL,
-    actor_id     UUID NOT NULL,
+    actor_id     TEXT NOT NULL,
     metadata     JSONB NOT NULL DEFAULT '{}'::jsonb
                  CHECK (jsonb_typeof(metadata) = 'object'),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -58,10 +58,27 @@ CREATE INDEX idx_environment_variable_audit_variable
     ON environment_variable_audit (variable_id, created_at DESC)
     WHERE variable_id IS NOT NULL;
 
--- Audit records are append-only to preserve the complete access trail.
+-- Audit records are append-only to preserve the complete access trail. The
+-- single allowed mutation is the variable_id SET NULL fired by the FK cascade
+-- when an environment variable is deleted; every other column is immutable.
 CREATE FUNCTION prevent_opencloud_env_audit_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    IF TG_OP = 'UPDATE'
+       AND NEW.variable_id IS NULL
+       AND OLD.variable_id IS NOT NULL
+       AND NEW.account_id = OLD.account_id
+       AND NEW.project_id = OLD.project_id
+       AND NEW.service_id = OLD.service_id
+       AND NEW.action = OLD.action
+       AND NEW.key = OLD.key
+       AND NEW.is_secret = OLD.is_secret
+       AND NEW.environment = OLD.environment
+       AND NEW.actor_id = OLD.actor_id
+       AND NEW.metadata = OLD.metadata
+       AND NEW.created_at = OLD.created_at THEN
+        RETURN NEW;
+    END IF;
     RAISE EXCEPTION 'environment variable audit records are append-only';
 END;
 $$;

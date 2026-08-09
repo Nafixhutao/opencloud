@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/apperr"
-	"github.com/Nafixhutao/opencloud/backend/internal/credential"
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
-	"github.com/Nafixhutao/opencloud/backend/internal/repository"
+	"github.com/nazxf/opencloud/backend/internal/apperr"
+	"github.com/nazxf/opencloud/backend/internal/credential"
+	"github.com/nazxf/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/repository"
 )
 
 var (
@@ -24,31 +24,31 @@ var (
 
 // EnvironmentVariableService manages tenant-scoped environment variables and secrets.
 type EnvironmentVariableService struct {
-	log        *zap.Logger
-	envRepo    *repository.EnvironmentVariableRepository
-	projectRepo *repository.ProjectRepository
-	cipher     *credential.Cipher
+	log         *zap.Logger
+	envRepo     *repository.EnvironmentVariableRepository
+	projectRepo *repository.ProjectRepo
+	cipher      *credential.Cipher
 }
 
 // NewEnvironmentVariableService creates a service for environment variables.
 func NewEnvironmentVariableService(
 	log *zap.Logger,
 	envRepo *repository.EnvironmentVariableRepository,
-	projectRepo *repository.ProjectRepository,
+	projectRepo *repository.ProjectRepo,
 	cipher *credential.Cipher,
 ) *EnvironmentVariableService {
 	return &EnvironmentVariableService{
-		log:        log,
-		envRepo:    envRepo,
+		log:         log,
+		envRepo:     envRepo,
 		projectRepo: projectRepo,
-		cipher:     cipher,
+		cipher:      cipher,
 	}
 }
 
 // CreateVariable creates a new environment variable or secret.
 func (s *EnvironmentVariableService) CreateVariable(
 	ctx context.Context,
-	accountID, userID, projectID, serviceID uuid.UUID,
+	accountID, projectID, serviceID uuid.UUID, userID string,
 	key, value, environment string,
 	isSecret bool,
 ) (*model.EnvironmentVariable, error) {
@@ -64,7 +64,7 @@ func (s *EnvironmentVariableService) CreateVariable(
 	}
 
 	// Verify service ownership
-	service, err := s.projectRepo.GetServiceByID(ctx, accountID, serviceID)
+	service, err := s.projectRepo.GetServiceByAccount(ctx, accountID, projectID, serviceID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, apperr.NotFound("service")
@@ -114,7 +114,7 @@ func (s *EnvironmentVariableService) CreateVariable(
 // UpdateVariable updates an existing environment variable or secret.
 func (s *EnvironmentVariableService) UpdateVariable(
 	ctx context.Context,
-	accountID, userID, id uuid.UUID,
+	accountID uuid.UUID, userID string, id uuid.UUID,
 	value string,
 ) (*model.EnvironmentVariable, error) {
 	if value == "" {
@@ -160,7 +160,7 @@ func (s *EnvironmentVariableService) UpdateVariable(
 // DeleteVariable removes an environment variable.
 func (s *EnvironmentVariableService) DeleteVariable(
 	ctx context.Context,
-	accountID, userID, id uuid.UUID,
+	accountID uuid.UUID, userID string, id uuid.UUID,
 ) error {
 	if err := s.envRepo.Delete(ctx, accountID, id, userID); err != nil {
 		if err == sql.ErrNoRows {
@@ -183,7 +183,7 @@ func (s *EnvironmentVariableService) ListVariables(
 	environment string,
 ) ([]model.EnvironmentVariable, error) {
 	// Verify service ownership
-	service, err := s.projectRepo.GetServiceByID(ctx, accountID, serviceID)
+	service, err := s.projectRepo.GetServiceByAccount(ctx, accountID, projectID, serviceID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, apperr.NotFound("service")
@@ -214,7 +214,7 @@ func (s *EnvironmentVariableService) ListVariables(
 // RevealSecret decrypts and returns a secret value with audit trail.
 func (s *EnvironmentVariableService) RevealSecret(
 	ctx context.Context,
-	accountID, userID, id uuid.UUID,
+	accountID uuid.UUID, userID string, id uuid.UUID,
 ) (string, error) {
 	variable, err := s.envRepo.GetByID(ctx, accountID, id)
 	if err != nil {
@@ -245,7 +245,7 @@ func (s *EnvironmentVariableService) RevealSecret(
 		zap.String("account_id", accountID.String()),
 		zap.String("variable_id", id.String()),
 		zap.String("key", variable.Key),
-		zap.String("user_id", userID.String()))
+		zap.String("user_id", userID))
 
 	return string(plaintext), nil
 }
@@ -257,7 +257,7 @@ func (s *EnvironmentVariableService) ListAudit(
 	limit int,
 ) ([]model.EnvironmentVariableAudit, error) {
 	// Verify service ownership
-	service, err := s.projectRepo.GetServiceByID(ctx, accountID, serviceID)
+	service, err := s.projectRepo.GetServiceByAccount(ctx, accountID, projectID, serviceID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, apperr.NotFound("service")

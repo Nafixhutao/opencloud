@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/model"
 )
 
 // EnvironmentVariableRepository manages tenant-scoped environment variables and secrets.
@@ -23,7 +23,7 @@ func NewEnvironmentVariableRepository(db *bun.DB) *EnvironmentVariableRepository
 }
 
 // Create inserts a new environment variable with audit trail.
-func (r *EnvironmentVariableRepository) Create(ctx context.Context, variable *model.EnvironmentVariable, actorID uuid.UUID) error {
+func (r *EnvironmentVariableRepository) Create(ctx context.Context, variable *model.EnvironmentVariable, actorID string) error {
 	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewInsert().Model(variable).Exec(ctx); err != nil {
 			return fmt.Errorf("insert environment variable: %w", err)
@@ -50,7 +50,7 @@ func (r *EnvironmentVariableRepository) Create(ctx context.Context, variable *mo
 }
 
 // Update modifies an existing environment variable with audit trail.
-func (r *EnvironmentVariableRepository) Update(ctx context.Context, variable *model.EnvironmentVariable, actorID uuid.UUID) error {
+func (r *EnvironmentVariableRepository) Update(ctx context.Context, variable *model.EnvironmentVariable, actorID string) error {
 	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		result, err := tx.NewUpdate().
 			Model(variable).
@@ -90,7 +90,7 @@ func (r *EnvironmentVariableRepository) Update(ctx context.Context, variable *mo
 }
 
 // Delete removes an environment variable with audit trail.
-func (r *EnvironmentVariableRepository) Delete(ctx context.Context, accountID, id uuid.UUID, actorID uuid.UUID) error {
+func (r *EnvironmentVariableRepository) Delete(ctx context.Context, accountID, id uuid.UUID, actorID string) error {
 	return r.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var variable model.EnvironmentVariable
 		if err := tx.NewSelect().
@@ -98,6 +98,23 @@ func (r *EnvironmentVariableRepository) Delete(ctx context.Context, accountID, i
 			Where("id = ? AND account_id = ?", id, accountID).
 			Scan(ctx); err != nil {
 			return fmt.Errorf("select environment variable for delete: %w", err)
+		}
+
+		// Append the audit row before the delete so the append-only trigger is
+		// not tripped by the variable_id SET NULL cascading from the FK.
+		audit := &model.EnvironmentVariableAudit{
+			AccountID:   variable.AccountID,
+			ProjectID:   variable.ProjectID,
+			ServiceID:   variable.ServiceID,
+			Action:      model.EnvAuditDeleted,
+			Key:         variable.Key,
+			IsSecret:    variable.IsSecret,
+			Environment: variable.Environment,
+			ActorID:     actorID,
+			Metadata:    json.RawMessage(`{}`),
+		}
+		if _, err := tx.NewInsert().Model(audit).Exec(ctx); err != nil {
+			return fmt.Errorf("append environment variable audit: %w", err)
 		}
 
 		result, err := tx.NewDelete().
@@ -109,22 +126,6 @@ func (r *EnvironmentVariableRepository) Delete(ctx context.Context, accountID, i
 		}
 		if rows, _ := result.RowsAffected(); rows == 0 {
 			return sql.ErrNoRows
-		}
-
-		audit := &model.EnvironmentVariableAudit{
-			AccountID:   variable.AccountID,
-			ProjectID:   variable.ProjectID,
-			ServiceID:   variable.ServiceID,
-			VariableID:  &variable.ID,
-			Action:      model.EnvAuditDeleted,
-			Key:         variable.Key,
-			IsSecret:    variable.IsSecret,
-			Environment: variable.Environment,
-			ActorID:     actorID,
-			Metadata:    json.RawMessage(`{}`),
-		}
-		if _, err := tx.NewInsert().Model(audit).Exec(ctx); err != nil {
-			return fmt.Errorf("append environment variable audit: %w", err)
 		}
 
 		return nil
@@ -160,7 +161,7 @@ func (r *EnvironmentVariableRepository) ListByService(ctx context.Context, accou
 }
 
 // AuditReveal records secret value access with audit trail.
-func (r *EnvironmentVariableRepository) AuditReveal(ctx context.Context, variable *model.EnvironmentVariable, actorID uuid.UUID) error {
+func (r *EnvironmentVariableRepository) AuditReveal(ctx context.Context, variable *model.EnvironmentVariable, actorID string) error {
 	audit := &model.EnvironmentVariableAudit{
 		AccountID:   variable.AccountID,
 		ProjectID:   variable.ProjectID,

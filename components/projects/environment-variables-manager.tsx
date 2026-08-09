@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,11 +33,7 @@ export function EnvironmentVariablesManager({
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadVariables();
-  }, [projectId, serviceId, environment]);
-
-  const loadVariables = async () => {
+  const loadVariables = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listEnvironmentVariables(projectId, serviceId, environment);
@@ -47,7 +43,11 @@ export function EnvironmentVariablesManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, serviceId, environment]);
+
+  useEffect(() => {
+    loadVariables();
+  }, [projectId, serviceId, environment, loadVariables]);
 
   const handleRevealSecret = async (id: string) => {
     try {

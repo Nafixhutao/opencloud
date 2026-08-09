@@ -1,27 +1,27 @@
-import { apiClient } from './api-client';
+export type EnvironmentVariableEnvironment = 'production' | 'preview' | 'development';
 
-export interface EnvironmentVariable {
+export type EnvironmentVariable = {
   id: string;
   key: string;
   value?: string;
   is_secret: boolean;
-  environment: 'production' | 'preview' | 'development';
+  environment: EnvironmentVariableEnvironment;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface CreateEnvironmentVariableInput {
+export type CreateEnvironmentVariableInput = {
   key: string;
   value: string;
   is_secret: boolean;
   environment: string;
-}
+};
 
-export interface UpdateEnvironmentVariableInput {
+export type UpdateEnvironmentVariableInput = {
   value: string;
-}
+};
 
-export interface EnvironmentVariableAudit {
+export type EnvironmentVariableAudit = {
   id: string;
   action: 'created' | 'updated' | 'deleted' | 'revealed' | 'rotated';
   key: string;
@@ -29,112 +29,114 @@ export interface EnvironmentVariableAudit {
   environment: string;
   actor_id: string;
   created_at: string;
-}
+};
 
-export async function listEnvironmentVariables(
-  projectId: string,
-  serviceId: string,
-  environment: string
-): Promise<EnvironmentVariable[]> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment?environment=${environment}`
-  );
-  if (!response.ok) {
-    throw new Error('Failed to fetch environment variables');
+type EnvironmentVariableEnvelope = { data: EnvironmentVariable };
+type EnvironmentVariableListEnvelope = { data: EnvironmentVariable[] };
+type EnvironmentVariableAuditEnvelope = { data: EnvironmentVariableAudit[] };
+type SecretEnvelope = { data: { value: string } };
+type ErrorEnvelope = { error?: { code?: string; message?: string } };
+
+export class EnvironmentVariableAPIError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly status: number,
+  ) {
+    super(message);
   }
-  const data = await response.json();
-  return data.data || [];
 }
 
-export async function createEnvironmentVariable(
+async function environmentVariableRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  });
+  const body = (await response.json().catch(() => null)) as T | ErrorEnvelope | null;
+  if (!response.ok) {
+    const error = body as ErrorEnvelope | null;
+    throw new EnvironmentVariableAPIError(
+      error?.error?.message ?? 'The control plane could not complete this request.',
+      error?.error?.code ?? 'INTERNAL',
+      response.status,
+    );
+  }
+  return body as T;
+}
+
+export function listEnvironmentVariables(
   projectId: string,
   serviceId: string,
-  input: CreateEnvironmentVariableInput
+  environment: EnvironmentVariableEnvironment,
+): Promise<EnvironmentVariable[]> {
+  const query = new URLSearchParams({ environment });
+  return environmentVariableRequest<EnvironmentVariableListEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment?${query}`,
+  ).then((body) => body.data ?? []);
+}
+
+export function createEnvironmentVariable(
+  projectId: string,
+  serviceId: string,
+  input: CreateEnvironmentVariableInput,
 ): Promise<EnvironmentVariable> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment`,
+  return environmentVariableRequest<EnvironmentVariableEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to create environment variable');
-  }
-  const data = await response.json();
-  return data.data;
+    },
+  ).then((body) => body.data);
 }
 
-export async function updateEnvironmentVariable(
+export function updateEnvironmentVariable(
   projectId: string,
   serviceId: string,
   id: string,
-  input: UpdateEnvironmentVariableInput
+  input: UpdateEnvironmentVariableInput,
 ): Promise<EnvironmentVariable> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment/${id}`,
+  return environmentVariableRequest<EnvironmentVariableEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment/${id}`,
     {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to update environment variable');
-  }
-  const data = await response.json();
-  return data.data;
+    },
+  ).then((body) => body.data);
 }
 
-export async function deleteEnvironmentVariable(
+export function deleteEnvironmentVariable(
   projectId: string,
   serviceId: string,
-  id: string
-): Promise<void> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment/${id}`,
-    {
-      method: 'DELETE',
-    }
-  );
-  if (!response.ok) {
-    throw new Error('Failed to delete environment variable');
-  }
+  id: string,
+): Promise<EnvironmentVariable> {
+  return environmentVariableRequest<EnvironmentVariableEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment/${id}`,
+    { method: 'DELETE' },
+  ).then((body) => body.data);
 }
 
-export async function revealSecret(
+export function revealSecret(
   projectId: string,
   serviceId: string,
-  id: string
+  id: string,
 ): Promise<string> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment/${id}/reveal`,
-    {
-      method: 'POST',
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to reveal secret');
-  }
-  const data = await response.json();
-  return data.data.value;
+  return environmentVariableRequest<SecretEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment/${id}/reveal`,
+    { method: 'POST' },
+  ).then((body) => body.data.value);
 }
 
-export async function listEnvironmentVariableAudit(
+export function listEnvironmentVariableAudit(
   projectId: string,
   serviceId: string,
-  limit = 50
+  limit = 50,
 ): Promise<EnvironmentVariableAudit[]> {
-  const response = await apiClient(
-    `/projects/${projectId}/services/${serviceId}/environment/audit?limit=${limit}`
-  );
-  if (!response.ok) {
-    throw new Error('Failed to fetch audit trail');
-  }
-  const data = await response.json();
-  return data.data || [];
+  const query = new URLSearchParams({ limit: String(limit) });
+  return environmentVariableRequest<EnvironmentVariableAuditEnvelope>(
+    `/api/projects/${projectId}/services/${serviceId}/environment/audit?${query}`,
+  ).then((body) => body.data ?? []);
 }

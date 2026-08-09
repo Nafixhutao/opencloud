@@ -42,11 +42,6 @@ Implemented Phase 4H environment variables and secrets management with tenant-sc
 **Components:**
 - `components/projects/environment-variables-manager.tsx` — full CRUD UI with reveal/hide
 
-**UI Components (stub files to clean up):**
-- `components/ui/checkbox.tsx` (empty, remove)
-- `components/ui/dialog.tsx` (empty, remove)
-- `components/ui/select.tsx` (empty, remove)
-
 ### Documentation
 
 - `CHANGELOG.md` — Phase 4H entry
@@ -91,9 +86,9 @@ Implemented Phase 4H environment variables and secrets management with tenant-sc
 - [x] Frontend UI components
 - [x] Unit tests for repository
 - [x] Documentation updated
-- [ ] Backend tests run (requires Go toolchain)
-- [ ] Frontend build verification (requires npm)
-- [ ] Migration up/down tested (requires running DB)
+- [x] Backend tests run (gofmt, go vet, golangci-lint, go test ./... — all pass)
+- [x] Frontend build verification (lint, tsc, vitest, next build — all pass)
+- [x] Migration up/down round-trip verified
 
 ## Known Limitations
 

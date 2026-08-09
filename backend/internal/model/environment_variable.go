@@ -33,18 +33,18 @@ const (
 type EnvironmentVariable struct {
 	bun.BaseModel `bun:"table:environment_variables,alias:env"`
 
-	ID             uuid.UUID  `bun:"id,pk,type:uuid,default:gen_random_uuid()" json:"id"`
-	AccountID      uuid.UUID  `bun:"account_id,notnull,type:uuid" json:"account_id"`
-	ProjectID      uuid.UUID  `bun:"project_id,notnull,type:uuid" json:"project_id"`
-	ServiceID      uuid.UUID  `bun:"service_id,notnull,type:uuid" json:"service_id"`
-	Key            string     `bun:"key,notnull" json:"key"`
-	Value          *string    `bun:"value" json:"value,omitempty"`
-	IsSecret       bool       `bun:"is_secret,notnull" json:"is_secret"`
-	EncryptedValue []byte     `bun:"encrypted_value" json:"-"`
-	Environment    string     `bun:"environment,notnull" json:"environment"`
-	CreatedAt      time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
-	UpdatedAt      time.Time  `bun:"updated_at,notnull,default:now()" json:"updated_at"`
-	CreatedBy      uuid.UUID  `bun:"created_by,notnull,type:uuid" json:"created_by"`
+	ID             uuid.UUID `bun:"id,pk,type:uuid,default:gen_random_uuid()" json:"id"`
+	AccountID      uuid.UUID `bun:"account_id,notnull,type:uuid" json:"account_id"`
+	ProjectID      uuid.UUID `bun:"project_id,notnull,type:uuid" json:"project_id"`
+	ServiceID      uuid.UUID `bun:"service_id,notnull,type:uuid" json:"service_id"`
+	Key            string    `bun:"key,notnull" json:"key"`
+	Value          *string   `bun:"value" json:"value,omitempty"`
+	IsSecret       bool      `bun:"is_secret,notnull" json:"is_secret"`
+	EncryptedValue []byte    `bun:"encrypted_value" json:"-"`
+	Environment    string    `bun:"environment,notnull" json:"environment"`
+	CreatedAt      time.Time `bun:"created_at,notnull,default:now()" json:"created_at"`
+	UpdatedAt      time.Time `bun:"updated_at,notnull,default:now()" json:"updated_at"`
+	CreatedBy      string    `bun:"created_by,notnull" json:"created_by"`
 }
 
 // EnvironmentVariableAudit is an append-only access and rotation trail.
@@ -60,7 +60,7 @@ type EnvironmentVariableAudit struct {
 	Key         string          `bun:"key,notnull" json:"key"`
 	IsSecret    bool            `bun:"is_secret,notnull" json:"is_secret"`
 	Environment string          `bun:"environment,notnull" json:"environment"`
-	ActorID     uuid.UUID       `bun:"actor_id,notnull,type:uuid" json:"actor_id"`
+	ActorID     string          `bun:"actor_id,notnull" json:"actor_id"`
 	Metadata    json.RawMessage `bun:"metadata,type:jsonb,notnull" json:"metadata"`
 	CreatedAt   time.Time       `bun:"created_at,notnull,default:now()" json:"created_at"`
 }

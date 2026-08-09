@@ -1,3 +1,4 @@
+// Package dto holds API request and response payloads.
 package dto
 
 import (

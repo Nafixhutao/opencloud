@@ -2,28 +2,82 @@ package repository
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
-	"github.com/Nafixhutao/opencloud/backend/internal/testutil"
+	"github.com/nazxf/opencloud/backend/internal/database"
+	"github.com/nazxf/opencloud/backend/internal/model"
 )
 
+func openEnvVarTestDB(t *testing.T) *bun.DB {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set; skipping integration tests")
+	}
+	db, err := database.Connect(context.Background(), dsn)
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var n int
+	err = db.NewRaw(`SELECT count(*) FROM information_schema.tables WHERE table_name = 'environment_variables'`).Scan(context.Background(), &n)
+	if err != nil || n == 0 {
+		t.Skip("environment_variables missing; run migrations first")
+	}
+	return db
+}
+
+func seedEnvVarFixture(t *testing.T, db *bun.DB) (accountID, projectID, serviceID uuid.UUID) {
+	t.Helper()
+	accountID = uuid.New()
+	projectID = uuid.New()
+	serviceID = uuid.New()
+
+	account := &model.Account{
+		ID:     accountID,
+		Name:   "env var test",
+		Status: model.AccountActive,
+	}
+	_, err := db.NewInsert().Model(account).Exec(context.Background())
+	require.NoError(t, err)
+
+	project := &model.Project{
+		ID:        projectID,
+		AccountID: accountID,
+		Name:      "env var test project",
+		Status:    model.ProjectActive,
+	}
+	_, err = db.NewInsert().Model(project).Exec(context.Background())
+	require.NoError(t, err)
+
+	service := &model.Service{
+		ID:          serviceID,
+		AccountID:   accountID,
+		ProjectID:   projectID,
+		Name:        "env-var-test-service",
+		ServiceType: model.ServiceTypeWeb,
+		SourceRoot:  ".",
+		Status:      model.ServiceActive,
+	}
+	_, err = db.NewInsert().Model(service).Exec(context.Background())
+	require.NoError(t, err)
+
+	return accountID, projectID, serviceID
+}
+
 func TestEnvironmentVariableRepository_Create(t *testing.T) {
-	db := testutil.TestDB(t)
+	db := openEnvVarTestDB(t)
 	repo := NewEnvironmentVariableRepository(db)
 
-	accountID := uuid.New()
-	projectID := uuid.New()
-	serviceID := uuid.New()
-	actorID := uuid.New()
-
-	testutil.SeedAccount(t, db, accountID)
-	testutil.SeedProject(t, db, accountID, projectID)
-	testutil.SeedService(t, db, accountID, projectID, serviceID)
+	accountID, projectID, serviceID := seedEnvVarFixture(t, db)
+	actorID := "test-user-id-1"
 
 	variable := &model.EnvironmentVariable{
 		AccountID:   accountID,
@@ -42,17 +96,11 @@ func TestEnvironmentVariableRepository_Create(t *testing.T) {
 }
 
 func TestEnvironmentVariableRepository_CreateSecret(t *testing.T) {
-	db := testutil.TestDB(t)
+	db := openEnvVarTestDB(t)
 	repo := NewEnvironmentVariableRepository(db)
 
-	accountID := uuid.New()
-	projectID := uuid.New()
-	serviceID := uuid.New()
-	actorID := uuid.New()
-
-	testutil.SeedAccount(t, db, accountID)
-	testutil.SeedProject(t, db, accountID, projectID)
-	testutil.SeedService(t, db, accountID, projectID, serviceID)
+	accountID, projectID, serviceID := seedEnvVarFixture(t, db)
+	actorID := "test-user-id-1"
 
 	variable := &model.EnvironmentVariable{
 		AccountID:      accountID,
@@ -78,17 +126,11 @@ func TestEnvironmentVariableRepository_CreateSecret(t *testing.T) {
 }
 
 func TestEnvironmentVariableRepository_ListByService(t *testing.T) {
-	db := testutil.TestDB(t)
+	db := openEnvVarTestDB(t)
 	repo := NewEnvironmentVariableRepository(db)
 
-	accountID := uuid.New()
-	projectID := uuid.New()
-	serviceID := uuid.New()
-	actorID := uuid.New()
-
-	testutil.SeedAccount(t, db, accountID)
-	testutil.SeedProject(t, db, accountID, projectID)
-	testutil.SeedService(t, db, accountID, projectID, serviceID)
+	accountID, projectID, serviceID := seedEnvVarFixture(t, db)
+	actorID := "test-user-id-1"
 
 	// Create variables for different environments
 	for _, env := range []string{model.EnvProduction, model.EnvPreview} {
@@ -113,17 +155,11 @@ func TestEnvironmentVariableRepository_ListByService(t *testing.T) {
 }
 
 func TestEnvironmentVariableRepository_Update(t *testing.T) {
-	db := testutil.TestDB(t)
+	db := openEnvVarTestDB(t)
 	repo := NewEnvironmentVariableRepository(db)
 
-	accountID := uuid.New()
-	projectID := uuid.New()
-	serviceID := uuid.New()
-	actorID := uuid.New()
-
-	testutil.SeedAccount(t, db, accountID)
-	testutil.SeedProject(t, db, accountID, projectID)
-	testutil.SeedService(t, db, accountID, projectID, serviceID)
+	accountID, projectID, serviceID := seedEnvVarFixture(t, db)
+	actorID := "test-user-id-1"
 
 	variable := &model.EnvironmentVariable{
 		AccountID:   accountID,
@@ -149,17 +185,11 @@ func TestEnvironmentVariableRepository_Update(t *testing.T) {
 }
 
 func TestEnvironmentVariableRepository_Delete(t *testing.T) {
-	db := testutil.TestDB(t)
+	db := openEnvVarTestDB(t)
 	repo := NewEnvironmentVariableRepository(db)
 
-	accountID := uuid.New()
-	projectID := uuid.New()
-	serviceID := uuid.New()
-	actorID := uuid.New()
-
-	testutil.SeedAccount(t, db, accountID)
-	testutil.SeedProject(t, db, accountID, projectID)
-	testutil.SeedService(t, db, accountID, projectID, serviceID)
+	accountID, projectID, serviceID := seedEnvVarFixture(t, db)
+	actorID := "test-user-id-1"
 
 	variable := &model.EnvironmentVariable{
 		AccountID:   accountID,

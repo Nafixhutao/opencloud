@@ -9,11 +9,11 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/apperr"
-	"github.com/Nafixhutao/opencloud/backend/internal/dto"
-	"github.com/Nafixhutao/opencloud/backend/internal/middleware"
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
-	"github.com/Nafixhutao/opencloud/backend/internal/service"
+	"github.com/nazxf/opencloud/backend/internal/apperr"
+	"github.com/nazxf/opencloud/backend/internal/dto"
+	"github.com/nazxf/opencloud/backend/internal/middleware"
+	"github.com/nazxf/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/service"
 )
 
 // EnvironmentVariableHandler handles environment variable and secret operations.
@@ -39,8 +39,8 @@ func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 		return
 	}
 
-	accountID := middleware.GetAccountID(c)
-	userID := middleware.GetUserID(c)
+	accountID := middleware.AccountID(c)
+	userID := middleware.UserID(c)
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
@@ -55,9 +55,9 @@ func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 	variable, err := h.envSvc.CreateVariable(
 		c.Request.Context(),
 		accountID,
-		userID,
 		projectID,
 		serviceID,
+		userID,
 		req.Key,
 		req.Value,
 		req.Environment,
@@ -70,7 +70,7 @@ func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 
 	// Redact secret value in response
 	response := h.toResponse(variable)
-	respond(c, http.StatusCreated, response)
+	c.JSON(http.StatusCreated, gin.H{"data": response})
 }
 
 // Update modifies an existing environment variable or secret.
@@ -82,8 +82,8 @@ func (h *EnvironmentVariableHandler) Update(c *gin.Context) {
 		return
 	}
 
-	accountID := middleware.GetAccountID(c)
-	userID := middleware.GetUserID(c)
+	accountID := middleware.AccountID(c)
+	userID := middleware.UserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid variable id"))
@@ -103,14 +103,14 @@ func (h *EnvironmentVariableHandler) Update(c *gin.Context) {
 	}
 
 	response := h.toResponse(variable)
-	respond(c, http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
 // Delete removes an environment variable.
 // DELETE /api/v1/projects/:projectId/services/:serviceId/environment/:id
 func (h *EnvironmentVariableHandler) Delete(c *gin.Context) {
-	accountID := middleware.GetAccountID(c)
-	userID := middleware.GetUserID(c)
+	accountID := middleware.AccountID(c)
+	userID := middleware.UserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid variable id"))
@@ -128,7 +128,7 @@ func (h *EnvironmentVariableHandler) Delete(c *gin.Context) {
 // List retrieves all environment variables for a service and environment.
 // GET /api/v1/projects/:projectId/services/:serviceId/environment
 func (h *EnvironmentVariableHandler) List(c *gin.Context) {
-	accountID := middleware.GetAccountID(c)
+	accountID := middleware.AccountID(c)
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
@@ -162,14 +162,14 @@ func (h *EnvironmentVariableHandler) List(c *gin.Context) {
 		responses[i] = h.toResponse(&variables[i])
 	}
 
-	respond(c, http.StatusOK, responses)
+	c.JSON(http.StatusOK, gin.H{"data": responses})
 }
 
 // Reveal decrypts and returns a secret value with audit trail.
 // POST /api/v1/projects/:projectId/services/:serviceId/environment/:id/reveal
 func (h *EnvironmentVariableHandler) Reveal(c *gin.Context) {
-	accountID := middleware.GetAccountID(c)
-	userID := middleware.GetUserID(c)
+	accountID := middleware.AccountID(c)
+	userID := middleware.UserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid variable id"))
@@ -187,13 +187,13 @@ func (h *EnvironmentVariableHandler) Reveal(c *gin.Context) {
 	c.Header("Pragma", "no-cache")
 	c.Header("Expires", "0")
 
-	respond(c, http.StatusOK, dto.RevealSecretResponse{Value: value})
+	c.JSON(http.StatusOK, gin.H{"data": dto.RevealSecretResponse{Value: value}})
 }
 
 // ListAudit retrieves audit trail for a service.
 // GET /api/v1/projects/:projectId/services/:serviceId/environment/audit
 func (h *EnvironmentVariableHandler) ListAudit(c *gin.Context) {
-	accountID := middleware.GetAccountID(c)
+	accountID := middleware.AccountID(c)
 	projectID, err := uuid.Parse(c.Param("projectId"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
@@ -218,7 +218,7 @@ func (h *EnvironmentVariableHandler) ListAudit(c *gin.Context) {
 		return
 	}
 
-	respond(c, http.StatusOK, audits)
+	c.JSON(http.StatusOK, gin.H{"data": audits})
 }
 
 func (h *EnvironmentVariableHandler) toResponse(v *model.EnvironmentVariable) dto.EnvironmentVariableResponse {
