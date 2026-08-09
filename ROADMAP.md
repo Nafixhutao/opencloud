@@ -177,7 +177,13 @@ production because no public DNS, certificate, or deployment has been activated.
   collector configuration, historical Go API, SSE live tail, authenticated BFF,
   and interactive project Logs Viewer. Runtime/build/source adapters remain
   disabled, so production log emission is not claimed yet.
-- ⏳ **4H–4M:** environment/secrets, persistent PHP storage, database manager,
+- ⏳ **4I–4M:** PHP storage, persistent PHP storage, database manager,
+- ✅ **4H ENV/SECRETS:** tenant-scoped, service-scoped, environment-scoped
+  (production/preview/development) environment variables and secrets. Secrets
+  encrypted at rest (AES-256-GCM), never logged, redacted at boundaries,
+  explicit rotation, and access audit. No NEXT_PUBLIC exposure unless
+  explicitly configured. Frontend UI for managing env/secrets per
+  project/service/environment.
   monorepos, object storage, and previews.
 
 ## Later platform work — Email, FTP/SSH & cron ⏳

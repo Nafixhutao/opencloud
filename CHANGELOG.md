@@ -465,3 +465,40 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 
 [Unreleased]: https://example.com/opencloud/compare/v0.0.0...HEAD
 [0.0.0]: https://example.com/opencloud/releases/tag/v0.0.0
+
+## [Unreleased] - 2026-08-09
+
+### Added - Phase 4H (Slice 6 — ENV/SECRETS)
+
+**Backend:**
+- Environment variables and secrets management with tenant-scoped, service-scoped, and environment-scoped (production/preview/development) configuration
+- `environment_variables` and `environment_variable_audit` tables with encrypted secret storage and append-only audit trail
+- `EnvironmentVariableRepository` with transactional create/update/delete operations and audit logging
+- `EnvironmentVariableService` with AES-256-GCM encryption via credential cipher, key validation, and reserved prefix protection
+- `EnvironmentVariableHandler` with list/create/update/delete/reveal endpoints and no-cache headers for secret reveals
+- Secrets encrypted at rest using service-scoped encryption; never logged or exposed in list responses
+- Explicit secret rotation with full audit trail of created/updated/deleted/revealed/rotated actions
+- Rate-limited reveal endpoint (10 requests per minute) with audit trail
+
+**Frontend:**
+- `environment-variables.ts` API client with typed operations for managing environment variables
+- `EnvironmentVariablesManager` component with environment switcher and variable CRUD operations
+- Secret reveal/hide toggle with audited access
+- Copy-to-clipboard support for both plain variables and revealed secrets
+- Modal dialogs for creating and updating variables with secret encryption option
+
+**Security:**
+- Reserved prefixes (`DATABASE_`, `REDIS_`, `OPENCLOUD_`, `INTERNAL_`) blocked from user configuration
+- Secrets redacted in list responses and logs; only revealed through explicit audited action
+- Key pattern validation (uppercase letters, numbers, underscores; max 128 chars)
+- No NEXT_PUBLIC exposure unless explicitly configured by user (reserved prefix protection)
+- Encryption bound to service UUID; ciphertext cannot be moved between resources
+
+**API:**
+- `GET /api/v1/projects/:projectId/services/:serviceId/environment?environment={env}` — list variables
+- `POST /api/v1/projects/:projectId/services/:serviceId/environment` — create variable
+- `PUT /api/v1/projects/:projectId/services/:serviceId/environment/:id` — update variable
+- `DELETE /api/v1/projects/:projectId/services/:serviceId/environment/:id` — delete variable
+- `POST /api/v1/projects/:projectId/services/:serviceId/environment/:id/reveal` — reveal secret (rate-limited, audited)
+- `GET /api/v1/projects/:projectId/services/:serviceId/environment/audit?limit={n}` — list audit trail
+

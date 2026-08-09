@@ -456,3 +456,34 @@ adapters emit production customer logs. Those adapters must attach
 `opencloud.account_id`, `opencloud.project_id`, `opencloud.service_id`,
 `opencloud.deployment_id`, `opencloud.environment`, and
 `opencloud.log_source` before activation.
+
+## Phase 4H environment variables and secrets
+
+- `internal/model` defines `EnvironmentVariable` and `EnvironmentVariableAudit`
+  with tenant-scoped, service-scoped, and environment-scoped
+  (production/preview/development) configuration. Secrets store only encrypted
+  ciphertext; plain values are never persisted for secret variables.
+- `EnvironmentVariableRepository` manages create/update/delete with
+  transactional audit append. The audit trail is append-only (database trigger
+  rejects UPDATE/DELETE) and records created/updated/deleted/revealed/rotated
+  actions with actor identity.
+- `EnvironmentVariableService` encrypts secrets via the credential cipher
+  (AES-256-GCM bound to service UUID), validates key patterns (uppercase,
+  alphanumeric plus underscore, max 128 chars), and blocks reserved prefixes
+  (`DATABASE_`, `REDIS_`, `OPENCLOUD_`, `INTERNAL_`). Reveal decrypts one
+  secret in memory and appends an audit record; the decrypted value never
+  enters logs or normal responses.
+- `EnvironmentVariableHandler` exposes list/create/update/delete/reveal and
+  audit endpoints. Secrets are redacted in list responses (encrypted ciphertext
+  removed, value null). Reveal responses include `Cache-Control: no-store` to
+  prevent browser caching. The reveal endpoint is rate-limited (10 req/min).
+- Key validation ensures no accidental NEXT_PUBLIC leakage: user-supplied keys
+  cannot start with reserved platform prefixes, so exposure requires explicit
+  runtime injection configuration, not a naming convention alone.
+- Secrets remain encrypted until explicitly revealed through an audited API
+  call. Rotation replaces the encrypted value and records a `rotated` audit
+  event. Deletion removes the variable but retains its audit trail.
+
+This slice provides the control-plane storage and API. Runtime injection of
+environment variables into deployment containers is deferred until the
+deployment worker and runtime adapter integrate the encrypted variable resolver.
