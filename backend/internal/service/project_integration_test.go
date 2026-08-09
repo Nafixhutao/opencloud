@@ -25,8 +25,10 @@ func TestProjectRepoDoesNotExposeAnotherAccountsProject(t *testing.T) {
 	now := time.Now().UTC()
 	owner := &model.Account{ID: uuid.New(), Name: "Project owner " + uuid.NewString(), Status: model.AccountActive, CreatedAt: now, UpdatedAt: now}
 	other := &model.Account{ID: uuid.New(), Name: "Project other " + uuid.NewString(), Status: model.AccountActive, CreatedAt: now, UpdatedAt: now}
-	require.NoError(t, db.NewInsert().Model(owner).Scan(ctx))
-	require.NoError(t, db.NewInsert().Model(other).Scan(ctx))
+	_, err := db.NewInsert().Model(owner).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(other).Exec(ctx)
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = db.NewDelete().Model((*model.Account)(nil)).Where("id IN (?, ?)", owner.ID, other.ID).Exec(ctx)
 	})
@@ -35,6 +37,6 @@ func TestProjectRepoDoesNotExposeAnotherAccountsProject(t *testing.T) {
 	project := &model.Project{ID: uuid.New(), AccountID: owner.ID, Name: "isolated-project", Status: model.ProjectActive}
 	require.NoError(t, projects.CreateProject(ctx, project))
 
-	_, err := projects.GetProjectByAccount(ctx, other.ID, project.ID)
+	_, err = projects.GetProjectByAccount(ctx, other.ID, project.ID)
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }
