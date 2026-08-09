@@ -38,6 +38,7 @@ func openDB(t *testing.T) *bun.DB {
 		t.Skip("migrations not applied")
 	}
 	_, err = db.ExecContext(context.Background(), `
+		SELECT pg_advisory_xact_lock(hashtextextended('opencloud-test-auth-user-ddl', 0));
 		CREATE SCHEMA IF NOT EXISTS auth;
 		CREATE TABLE IF NOT EXISTS auth."user" (
 			id text PRIMARY KEY,

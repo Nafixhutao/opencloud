@@ -50,6 +50,7 @@ func openTestDB(t *testing.T) *bun.DB {
 		t.Skip("account_memberships missing; run migrations first")
 	}
 	_, err = db.ExecContext(context.Background(), `
+		SELECT pg_advisory_xact_lock(hashtextextended('opencloud-test-auth-user-ddl', 0));
 		CREATE SCHEMA IF NOT EXISTS auth;
 		CREATE TABLE IF NOT EXISTS auth."user" (
 			id text PRIMARY KEY,
