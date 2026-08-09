@@ -2,12 +2,16 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Nafixhutao/opencloud/backend/internal/model"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	"xorm.io/bun"
 )
+
+// ErrSessionNotFound indicates session does not exist
+var ErrSessionNotFound = errors.New("session not found")
 
 // DatabaseConsoleSessionRepository handles database console session operations
 type DatabaseConsoleSessionRepository struct {
