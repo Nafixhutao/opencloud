@@ -403,8 +403,9 @@ credential-encryption key are configured.
   path, repository credential, Docker socket, or control-plane database handle.
   Its BuildKit client is injected behind a narrow contract, so adding a real
   client library/transport remains a separately reviewed deployment change.
-  Lifecycle events stream only fixed safe status messages for now; durable,
-  redacted raw build output and browser delivery wait for the logs slice.
+  Lifecycle events stream only fixed safe status messages for now. The logs
+  slice supplies durable redacted storage/delivery contracts, but wiring raw
+  build output waits for the real isolated executor and source transport.
   `FakeProvider` and `FakeExecutor` are test-only and never execute source.
 
 ## Phase 4 registry and deployment foundation
@@ -428,3 +429,30 @@ credential-encryption key are configured.
   test-only. No public deploy route, live runtime adapter, registry credential,
   or new third-party registry client is enabled until source acquisition and
   the hardened deployment-worker environment are available.
+
+## Phase 4 customer logs foundation
+
+- `internal/logs` defines build, runtime, request, and platform records plus a
+  storage contract implemented by the Loki HTTP API. Queries fail before I/O
+  unless they include non-empty trusted account/project identifiers and bounded
+  times/limits. Customer log lines never enter control-plane PostgreSQL.
+- `LogService` re-loads the project and any service/deployment through
+  account-scoped repository methods before it constructs a provider filter.
+  Browser-supplied `account_id` values are ignored. Common credential forms and
+  request query strings are redacted again immediately before list or SSE
+  delivery; collector-side redaction remains mandatory too.
+- `LogHandler` exposes historical query and live-tail SSE. Live tail uses
+  bounded Loki `query_range` polling, reconnect IDs, and heartbeats, avoiding a
+  websocket client dependency. When logs are enabled the API write timeout is
+  disabled for streaming responses; public ingress must enforce its own
+  header/idle limits while allowing the heartbeat.
+- `LOGS_ENABLED=false` fails the optional capability closed with `503`. The
+  local Compose topology enables Loki and Alloy, with Alloy reaching Docker
+  only through a GET-only socket proxy. The collector keeps only fully labeled
+  OpenCloud project containers and maps ownership labels to Loki labels.
+
+This slice does not claim that the currently disabled source/build/runtime
+adapters emit production customer logs. Those adapters must attach
+`opencloud.account_id`, `opencloud.project_id`, `opencloud.service_id`,
+`opencloud.deployment_id`, `opencloud.environment`, and
+`opencloud.log_source` before activation.

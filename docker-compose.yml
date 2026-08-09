@@ -1,6 +1,7 @@
 # OpenCloud local stack. Brings up Postgres and Redis, runs the Bun and Better
-# Auth migrations, then starts the Go API, worker, and the Next.js dashboard.
-# Prometheus/Grafana are added later (see ROADMAP.md / docs/INFRASTRUCTURE.md).
+# Auth migrations, then starts the Go API, worker, Next.js dashboard, and the
+# tenant-filtered Loki/Alloy customer logging path. Prometheus/Grafana remain
+# later observability work (see ROADMAP.md / docs/INFRASTRUCTURE.md).
 #
 #   docker compose up --build
 #
@@ -37,6 +38,69 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/config.yml"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./deploy/observability/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Alloy never receives the Docker socket. This allowlisted proxy exposes only
+  # read operations needed for container discovery/log reads; all write APIs
+  # remain disabled.
+  docker-log-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      INFO: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
+    expose:
+      - "2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run:size=16m,mode=0755
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.9.2
+    command: ["run", "--server.http.listen-addr=127.0.0.1:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./deploy/observability/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    depends_on:
+      docker-log-proxy:
+        condition: service_started
+      loki:
+        condition: service_started
 
   migrate:
     build: ./backend
@@ -96,6 +160,10 @@ services:
       DOMAIN_INGRESS_IPV4: ${DOMAIN_INGRESS_IPV4:-}
       DOMAIN_DNS_RESOLVER: ${DOMAIN_DNS_RESOLVER:-1.1.1.1:53}
       CLOUDFLARE_API_ENABLED: ${CLOUDFLARE_API_ENABLED:-false}
+      LOGS_ENABLED: ${LOGS_ENABLED:-true}
+      LOGS_LOKI_URL: ${LOGS_LOKI_URL:-http://loki:3100}
+      LOGS_QUERY_TIMEOUT_SECONDS: ${LOGS_QUERY_TIMEOUT_SECONDS:-10}
+      LOGS_POLL_INTERVAL_SECONDS: ${LOGS_POLL_INTERVAL_SECONDS:-2}
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
@@ -104,6 +172,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      loki:
+        condition: service_started
       dashboard:
         condition: service_started
     # No container healthcheck: the distroless image has no shell/curl. Liveness
@@ -210,3 +280,5 @@ services:
 volumes:
   pgdata:
   control_plane_backups:
+  loki_data:
+  alloy_data:

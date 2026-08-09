@@ -164,6 +164,8 @@ paginated collection.
 | `POST` | `/projects/{project_id}/services` | create a service (`201`; requires `Idempotency-Key`) |
 | `GET` | `/projects/{project_id}/services/{service_id}/deployments` | immutable deployment revisions |
 | `GET` | `/projects/{project_id}/services/{service_id}/deployments/{deployment_id}/events` | safe append-only activity |
+| `GET` | `/projects/{project_id}/logs` | bounded historical build/runtime/request/platform logs |
+| `GET` | `/projects/{project_id}/logs/stream` | live log tail over Server-Sent Events |
 
 Project creation accepts `{ "name": "toko-online" }`. Service creation accepts
 `{ "name": "api", "type": "web" }`, where `type` is `web`, `worker`, `cron`,
@@ -173,6 +175,17 @@ The internal registry/deployment foundation accepts only service-scoped
 immutable OCI digests; callers can never submit arbitrary image names or
 mutable tags. All routes are tenant-scoped and return `404` for inaccessible
 parent or child resources.
+
+Log filters are `service_id`, `deployment_id`, repeatable/comma-separated
+`source` and `level`, `environment`, `search`, RFC 3339 `start`/`end`, and
+`limit` (maximum 1000). A `deployment_id` requires its owning `service_id`.
+The maximum historical window is seven days. Both endpoints derive
+`account_id` from the validated JWT and verify project/service/deployment
+ownership before querying Loki; `account_id` is not accepted as a filter and
+is never returned. The stream emits `event: log` JSON records, a numeric
+nanosecond `id`, 15-second keepalive comments, and a generic interruption event
+that contains no provider error. Browser EventSource connects only to the
+authenticated Next.js BFF proxy, so the bearer token remains server-side.
 
 ### Sites
 | Method | Path | Purpose |

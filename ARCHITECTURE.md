@@ -173,6 +173,12 @@ PostgreSQL is the **system of record** (and the job queue); Redis is a disposabl
   revision, atomically switches Caddy traffic, and retires the prior one under
   a service-scoped advisory lock. The current code supplies contracts and fakes
   only, not public deploy APIs or live registry/runtime credentials.
+- `internal/logs` is the Phase 4 log-store boundary. It sends only authenticated,
+  account/project-scoped and bounded queries to Loki, while Alloy discovers
+  fully labeled customer containers through a read-only Docker API proxy.
+  Historical results and SSE live tail pass through a service-owned ownership
+  check and redaction layer; raw customer lines never enter PostgreSQL or the
+  browser-facing BFF without that boundary.
 - `jobs` — **the job queue itself**: async work + status, claimed by the worker
   with `FOR UPDATE SKIP LOCKED` ([ADR 0002](docs/adr/0002-postgres-backed-job-queue.md)).
 - `audit_logs` — append-only record of sensitive actions.
