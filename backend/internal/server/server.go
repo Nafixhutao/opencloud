@@ -145,6 +145,13 @@ func New(
 	projectH := handler.NewProjectHandler(projectSvc)
 	logH := handler.NewLogHandler(logSvc)
 	envH := handler.NewEnvironmentVariableHandler(log, envSvc)
+	consoleSessionSvc := service.NewDatabaseConsoleSessionService(repository.NewDatabaseConsoleSessionRepository(db))
+	consoleQuerySvc := service.NewConsoleQueryService(
+		repository.NewDatabaseConsoleSessionRepository(db),
+		repository.NewConsoleQueryAuditRepository(db),
+	)
+	consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
+	consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)
 
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
@@ -219,6 +226,14 @@ func New(
 				middleware.RateLimit(rdb, "database-credential", 10, time.Minute),
 				databaseH.RevealCredential,
 			)
+
+			// Database console routes
+			console := authed.Group("/databases/:databaseId/console")
+			{
+				console.POST("/sessions", middleware.RateLimit(rdb, "console-session", 10, time.Minute), consoleSessionH.CreateSession)
+				console.DELETE("/sessions/:sessionId", middleware.RateLimit(rdb, "console-session", 30, time.Minute), consoleSessionH.RevokeSession)
+				console.POST("/execute", middleware.RateLimit(rdb, "console-execute", 60, time.Second), consoleQueryH.ExecuteQuery)
+			}
 
 			admin := authed.Group("/admin")
 			admin.Use(middleware.RequireRole(model.RoleAdmin))
