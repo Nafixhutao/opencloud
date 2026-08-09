@@ -145,10 +145,18 @@ func New(
 	projectH := handler.NewProjectHandler(projectSvc)
 	logH := handler.NewLogHandler(logSvc)
 	envH := handler.NewEnvironmentVariableHandler(log, envSvc)
-	consoleSessionSvc := service.NewDatabaseConsoleSessionService(repository.NewDatabaseConsoleSessionRepository(db))
+	consoleSessionSvc := service.NewDatabaseConsoleSessionService(
+		repository.NewDatabaseConsoleSessionRepository(db),
+		databaseRepo,
+		cfg.CustomerDatabases.Enabled,
+	)
 	consoleQuerySvc := service.NewConsoleQueryService(
 		repository.NewDatabaseConsoleSessionRepository(db),
 		repository.NewConsoleQueryAuditRepository(db),
+		databaseRepo,
+		databaseCipher,
+		cfg.CustomerDatabases.Enabled,
+		log,
 	)
 	consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
 	consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)

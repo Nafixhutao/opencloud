@@ -347,6 +347,67 @@ func (s *ManagedDatabaseService) RevealCredential(
 	return revealed, nil
 }
 
+// ConsoleCredentials decrypts the customer database credential for a console
+// session without consuming it. Unlike RevealCredential, the envelope stays in
+// place so the console can keep executing across queries in the session.
+func (s *ManagedDatabaseService) ConsoleCredentials(
+	ctx context.Context,
+	_ string,
+	accountID, databaseID uuid.UUID,
+) (*provisioner.DatabaseCredentials, error) {
+	if !s.enabled || s.cipher == nil {
+		return nil, apperr.Unavailable("customer database credentials are not configured")
+	}
+	var revealed *provisioner.DatabaseCredentials
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		rows := s.rows.WithDB(tx)
+
+		row, err := rows.GetByAccountForUpdate(ctx, accountID, databaseID)
+		if err != nil {
+			return err
+		}
+		if row.Status != model.DatabaseActive {
+			return apperr.Conflict("database credentials are available only after provisioning completes")
+		}
+		envelope, err := rows.GetCredentialForUpdate(ctx, databaseID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return apperr.Conflict("database credentials are unavailable")
+			}
+			return err
+		}
+		plaintext, err := s.cipher.Decrypt(databaseID, envelope.Ciphertext)
+		if err != nil {
+			return err
+		}
+		defer clear(plaintext)
+		var credentials provisioner.DatabaseCredentials
+		if err := json.Unmarshal(plaintext, &credentials); err != nil {
+			return err
+		}
+		if credentials.Engine != row.Engine ||
+			credentials.Database != row.PhysicalDatabaseName ||
+			credentials.Username != row.PhysicalUsername ||
+			credentials.Host == "" ||
+			credentials.Port <= 0 ||
+			credentials.Password == "" {
+			return errors.New("database credential payload does not match its resource")
+		}
+		revealed = &credentials
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, apperr.NotFound("database not found")
+		}
+		if apperr.As(err) != nil {
+			return nil, err
+		}
+		return nil, apperr.Internal("failed to load database credentials").Wrap(err)
+	}
+	return revealed, nil
+}
+
 func validateDatabaseCreate(
 	req CreateDatabaseRequest,
 	idempotencyKey string,
