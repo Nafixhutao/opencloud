@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS database_console_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    database_id UUID NOT NULL REFERENCES managed_databases(id) ON DELETE CASCADE,
+    database_id UUID NOT NULL REFERENCES databases(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ NOT NULL,
     ip_addr VARCHAR(45),

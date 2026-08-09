@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/nazxf/opencloud/backend/internal/model"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
-	"xorm.io/bun"
+	"github.com/uptrace/bun"
 )
 
 // ErrSessionNotFound indicates session does not exist
@@ -25,8 +24,6 @@ func NewDatabaseConsoleSessionRepository(db *bun.DB) *DatabaseConsoleSessionRepo
 
 // CreateSession creates a new database console session with short TTL
 func (r *DatabaseConsoleSessionRepository) CreateSession(ctx context.Context, session *model.DatabaseConsoleSession) error {
-	ctx, span := tracer.StartSpanFromContext(ctx, "repository.DatabaseConsoleSessionRepository.CreateSession")
-	defer span.Finish()
 
 	_, err := r.db.NewInsert().Model(session).Exec(ctx)
 	return err
@@ -34,8 +31,6 @@ func (r *DatabaseConsoleSessionRepository) CreateSession(ctx context.Context, se
 
 // GetSession retrieves a session by ID
 func (r *DatabaseConsoleSessionRepository) GetSession(ctx context.Context, accountID string, sessionID string) (*model.DatabaseConsoleSession, error) {
-	ctx, span := tracer.StartSpanFromContext(ctx, "repository.DatabaseConsoleSessionRepository.GetSession")
-	defer span.Finish()
 
 	var session model.DatabaseConsoleSession
 	err := r.db.NewSelect().
@@ -53,8 +48,6 @@ func (r *DatabaseConsoleSessionRepository) GetSession(ctx context.Context, accou
 
 // RevokeSession revokes a session immediately
 func (r *DatabaseConsoleSessionRepository) RevokeSession(ctx context.Context, accountID string, sessionID string) error {
-	ctx, span := tracer.StartSpanFromContext(ctx, "repository.DatabaseConsoleSessionRepository.RevokeSession")
-	defer span.Finish()
 
 	result, err := r.db.NewDelete().
 		Model((*model.DatabaseConsoleSession)(nil)).
@@ -75,8 +68,6 @@ func (r *DatabaseConsoleSessionRepository) RevokeSession(ctx context.Context, ac
 
 // CleanupExpiredSessions removes expired sessions (called by worker/cron)
 func (r *DatabaseConsoleSessionRepository) CleanupExpiredSessions(ctx context.Context) (int64, error) {
-	ctx, span := tracer.StartSpanFromContext(ctx, "repository.DatabaseConsoleSessionRepository.CleanupExpiredSessions")
-	defer span.Finish()
 
 	now := time.Now()
 	result, err := r.db.NewDelete().
@@ -93,8 +84,6 @@ func (r *DatabaseConsoleSessionRepository) CleanupExpiredSessions(ctx context.Co
 
 // UpdateLastActivity updates the last activity timestamp for a session
 func (r *DatabaseConsoleSessionRepository) UpdateLastActivity(ctx context.Context, accountID string, sessionID string) error {
-	ctx, span := tracer.StartSpanFromContext(ctx, "repository.DatabaseConsoleSessionRepository.UpdateLastActivity")
-	defer span.Finish()
 
 	now := time.Now()
 	_, err := r.db.NewUpdate().

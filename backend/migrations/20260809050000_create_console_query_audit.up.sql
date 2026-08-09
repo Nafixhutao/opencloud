@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS console_query_audit (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     session_id UUID NOT NULL REFERENCES database_console_sessions(id) ON DELETE CASCADE,
-    database_id UUID NOT NULL REFERENCES managed_databases(id) ON DELETE CASCADE,
+    database_id UUID NOT NULL REFERENCES databases(id) ON DELETE CASCADE,
     query_hash VARCHAR(64) NOT NULL, -- SHA-256 hash of the query (not storing actual query)
     query_length INTEGER NOT NULL,
     status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'error', 'blocked')),
