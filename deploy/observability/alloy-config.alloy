@@ -1,0 +1,89 @@
+discovery.docker "opencloud" {
+  host             = "tcp://docker-log-proxy:2375"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "customer_containers" {
+  targets = discovery.docker.opencloud.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_managed"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_account_id"]
+    regex         = ".+"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_project_id"]
+    regex         = ".+"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_service_id"]
+    regex         = ".+"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_account_id"]
+    target_label  = "opencloud_account_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_project_id"]
+    target_label  = "opencloud_project_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_service_id"]
+    target_label  = "opencloud_service_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_deployment_id"]
+    target_label  = "opencloud_deployment_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_environment"]
+    target_label  = "opencloud_environment"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_opencloud_log_source"]
+    regex         = "(build|runtime|request|platform)"
+    target_label  = "opencloud_source"
+  }
+}
+
+loki.source.docker "customer_containers" {
+  host       = "tcp://docker-log-proxy:2375"
+  targets    = discovery.relabel.customer_containers.output
+  forward_to = [loki.process.redact.receiver]
+}
+
+loki.process "redact" {
+  stage.replace {
+    expression = "(?i)(authorization\\s*[:=]\\s*(?:bearer|basic)\\s+)[^\\s,;]+"
+    replace    = "${1}[REDACTED]"
+  }
+
+  stage.replace {
+    expression = "(?i)((?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token)\\s*[:=]\\s*)[^\\s,;]+"
+    replace    = "${1}[REDACTED]"
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -95,6 +95,10 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `DOMAIN_INGRESS_IPV4` | api, worker | validated public IPv4 used in instructions and TLS observation |
 | `DOMAIN_DNS_RESOLVER` | api, worker | public recursive DNS resolver for TXT/A observation |
 | `CLOUDFLARE_API_ENABLED` | api, worker | must remain `false`; `true` fails closed until per-tenant authorization exists |
+| `LOGS_ENABLED` | api | enables the external customer log API; disabled returns `503` |
+| `LOGS_LOKI_URL` | api | private Loki base URL without embedded credentials |
+| `LOGS_QUERY_TIMEOUT_SECONDS` | api | bounded Loki request timeout (`1..60`) |
+| `LOGS_POLL_INTERVAL_SECONDS` | api | live-tail query interval (`1..30`) |
 | `HESTIA_API_URL` | worker | optional fallback node API base |
 | `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | worker | scoped fallback access pair |
 | `HESTIA_API_KEY` | worker | deprecated legacy fallback credential only |
@@ -180,6 +184,21 @@ off-host copy.
 - Structured JSON logs (Zap) to stdout, captured by Docker; shipping/retention is
   an infra concern. See [`BACKEND.md`](BACKEND.md#11-logging-zap).
 - Correlate logs and metrics via `request_id`.
+- Customer logs use `container stdout/stderr → Alloy → Loki → Go Logs API →
+  authenticated BFF/SSE → dashboard`. They are separate from operator Zap logs,
+  append-only deployment events, and audit logs.
+- Alloy has no Docker socket. The Compose-only `docker-log-proxy` mounts it and
+  exposes allowlisted GET endpoints inside the private network; POST and all
+  other write capabilities remain disabled. Alloy keeps only managed containers
+  with account/project/service labels. API, dashboard, and public networks never
+  receive the socket or proxy port.
+- Loki uses a seven-day local filesystem retention in Compose. Its named volume
+  is a development/staging baseline, not a production HA or backup design.
+- Deployment and builder adapters must attach all ownership/environment/source
+  labels before live activation. Request headers, cookies, authorization, raw
+  credentials, and URL query strings must never be promoted into labels or
+  customer records. Account/project/service/deployment labels exist for strict
+  server-side selection, not Prometheus metrics.
 
 ## 7. Health & readiness
 

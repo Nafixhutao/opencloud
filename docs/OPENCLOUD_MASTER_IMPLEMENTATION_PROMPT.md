@@ -6,8 +6,8 @@
 > | 2 — Build Abstraction | ✅ Complete | Build-provider contracts plus static, Railpack-planning, and fake providers; unsafe builds remain disabled. |
 > | 3 — Isolated Builder | ✅ Complete (safe foundation) | Builder contracts, state/log abstractions, BuildKit boundary, resource-limit model, and fakes; no production build executor is enabled. |
 > | 4 — Registry + Deployments | ✅ Complete (safe foundation) | Digest-only registry/revision model, lifecycle protection, health-before-traffic-switch workflow, rollback, and PostgreSQL integration coverage; no live registry/Docker/Caddy adapter or public deployment endpoint is enabled. |
-> | 5 — Logs | ⬜ Not started | Next planned slice. |
-> | 6 — Env/Secrets | ⬜ Not started | Deferred until after logs. |
+> | 5 — Logs | ✅ Complete (safe foundation) | Tenant-safe Loki contract, collector configuration, Go query/SSE APIs, authenticated BFF, and Logs Viewer; production emitters remain disabled. |
+> | 6 — Env/Secrets | ⬜ Not started | Next planned slice. |
 > | 7 — Database Manager | ⬜ Not started | Deferred. |
 > | 8 — Object Storage | ⬜ Not started | Deferred. |
 >
@@ -2220,7 +2220,7 @@ Tests.
 
 STOP and report.
 
-SLICE 5 — LOGS ⬜ NOT STARTED
+SLICE 5 — LOGS ✅ COMPLETE (SAFE FOUNDATION)
 
 Add:
 

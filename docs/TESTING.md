@@ -288,3 +288,27 @@ then stops PostgreSQL and proves permission `503` plus denial of a previously
 unissued hostname. Its trap refuses name collisions and removes only its exact
 containers/network/volumes. It never uses public DNS, public ACME, live Caddy,
 or production ports, so passing it is not a production-deployment claim.
+
+## Phase 4 customer logs tests
+
+Backend unit coverage proves every Loki query contains the authenticated
+account/project matchers, filter text remains quoted as data, malformed or
+unscoped filters perform no storage request, arbitrary structured fields are
+not reflected, credentials and request query strings are redacted, cross-tenant
+project lookup stops before Loki, store outages map to `503`, and SSE responses
+contain no tenant identifier. The frontend behavior suite loads history,
+appends SSE events, closes EventSource on pause, and URL-encodes applied filters.
+
+The infrastructure syntax checks are:
+
+```bash
+docker compose config --quiet
+docker run --rm -v "$PWD/deploy/observability:/etc/opencloud:ro" \
+  grafana/alloy:v1.9.2 validate /etc/opencloud/alloy-config.alloy
+docker run --rm -v "$PWD/deploy/observability:/etc/opencloud:ro" \
+  grafana/loki:3.5.3 -config.file=/etc/opencloud/loki-config.yml -verify-config
+```
+
+These checks validate configuration only. A production proof still needs
+labeled disposable runtime/build containers, ingestion, tenant-negative API
+queries, reconnect behavior through the real ingress, retention, and load tests.

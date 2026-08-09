@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -39,6 +40,7 @@ type Config struct {
 	Provisioner       ProvisionerConfig      `mapstructure:",squash"`
 	CustomerDatabases CustomerDatabaseConfig `mapstructure:",squash"`
 	Domains           DomainConfig           `mapstructure:",squash"`
+	Logs              LogsConfig             `mapstructure:",squash"`
 }
 
 // ProvisionerConfig selects the hosting backend and carries only the connection
@@ -87,6 +89,15 @@ type DomainConfig struct {
 	CloudflareEnabled bool   `mapstructure:"CLOUDFLARE_API_ENABLED"`
 }
 
+// LogsConfig controls the external customer log store. Customer log lines are
+// never persisted in the control-plane PostgreSQL database.
+type LogsConfig struct {
+	Enabled             bool   `mapstructure:"LOGS_ENABLED"`
+	LokiURL             string `mapstructure:"LOGS_LOKI_URL"`
+	QueryTimeoutSeconds int    `mapstructure:"LOGS_QUERY_TIMEOUT_SECONDS"`
+	PollIntervalSeconds int    `mapstructure:"LOGS_POLL_INTERVAL_SECONDS"`
+}
+
 // Load reads API/worker configuration, including both datastores.
 func Load() (*Config, error) {
 	return load(true)
@@ -117,6 +128,9 @@ func load(requireRedis bool) (*Config, error) {
 	v.SetDefault("CUSTOMER_POSTGRES_PORT", 5432)
 	v.SetDefault("CUSTOMER_MARIADB_PORT", 3306)
 	v.SetDefault("CUSTOMER_DATABASE_TLS_REQUIRED", true)
+	v.SetDefault("LOGS_ENABLED", false)
+	v.SetDefault("LOGS_QUERY_TIMEOUT_SECONDS", 10)
+	v.SetDefault("LOGS_POLL_INTERVAL_SECONDS", 2)
 
 	// Explicitly bind every key: viper's Unmarshal only sees keys it already
 	// knows, and AutomaticEnv alone doesn't register them — so without this,
@@ -134,6 +148,7 @@ func load(requireRedis bool) (*Config, error) {
 		"CUSTOMER_DATABASE_TLS_REQUIRED",
 		"DOMAINS_ENABLED", "DOMAIN_VERIFICATION_KEY", "DOMAIN_INGRESS_IPV4",
 		"DOMAIN_DNS_RESOLVER", "CLOUDFLARE_API_ENABLED",
+		"LOGS_ENABLED", "LOGS_LOKI_URL", "LOGS_QUERY_TIMEOUT_SECONDS", "LOGS_POLL_INTERVAL_SECONDS",
 	} {
 		_ = v.BindEnv(key)
 	}
@@ -202,7 +217,10 @@ func (c *Config) ValidateAPI() error {
 	if err := c.validateSiteDomainSuffix(); err != nil {
 		return err
 	}
-	return c.validateDomains()
+	if err := c.validateDomains(); err != nil {
+		return err
+	}
+	return c.validateLogs()
 }
 
 // ValidateProvisioner enforces worker-only hosting backend configuration.
@@ -328,6 +346,30 @@ func (c *Config) validateDomains() error {
 	if _, err := provisioner.NewManualDNS(c.Domains.DNSResolver); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (c *Config) validateLogs() error {
+	if !c.Logs.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(c.Logs.LokiURL) == "" {
+		return errors.New("LOGS_LOKI_URL is required when LOGS_ENABLED=true")
+	}
+	endpoint, err := url.Parse(c.Logs.LokiURL)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return errors.New("LOGS_LOKI_URL must be an absolute HTTP(S) URL")
+	}
+	if endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return errors.New("LOGS_LOKI_URL must not contain credentials, a query, or a fragment")
+	}
+	if c.Logs.QueryTimeoutSeconds < 1 || c.Logs.QueryTimeoutSeconds > 60 {
+		return errors.New("LOGS_QUERY_TIMEOUT_SECONDS must be between 1 and 60")
+	}
+	if c.Logs.PollIntervalSeconds < 1 || c.Logs.PollIntervalSeconds > 30 {
+		return errors.New("LOGS_POLL_INTERVAL_SECONDS must be between 1 and 30")
+	}
+	c.Logs.LokiURL = strings.TrimRight(endpoint.String(), "/")
 	return nil
 }
 

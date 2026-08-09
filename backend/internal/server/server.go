@@ -20,6 +20,7 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/domainverify"
 	"github.com/nazxf/opencloud/backend/internal/handler"
+	logstore "github.com/nazxf/opencloud/backend/internal/logs"
 	"github.com/nazxf/opencloud/backend/internal/metrics"
 	"github.com/nazxf/opencloud/backend/internal/middleware"
 	"github.com/nazxf/opencloud/backend/internal/model"
@@ -120,6 +121,19 @@ func New(
 		cfg.Provisioner.SiteDomainSuffix,
 	)
 	projectSvc := service.NewProjectService(db, projectRepo, auditRepo)
+	var customerLogs logstore.Store = logstore.UnavailableStore{}
+	if cfg.Logs.Enabled {
+		var err error
+		customerLogs, err = logstore.NewLokiStore(
+			cfg.Logs.LokiURL,
+			&http.Client{Timeout: time.Duration(cfg.Logs.QueryTimeoutSeconds) * time.Second},
+			time.Duration(cfg.Logs.PollIntervalSeconds)*time.Second,
+		)
+		if err != nil {
+			log.Fatal("initialize customer log store", zap.Error(err))
+		}
+	}
+	logSvc := service.NewLogService(projectRepo, customerLogs)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
@@ -127,6 +141,7 @@ func New(
 	overviewH := handler.NewResourceOverviewHandler(overviewSvc)
 	domainH := handler.NewDomainHandler(domainSvc)
 	projectH := handler.NewProjectHandler(projectSvc)
+	logH := handler.NewLogHandler(logSvc)
 
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
@@ -163,6 +178,8 @@ func New(
 			authed.GET("/projects/:projectID/services/:serviceID/deployments", projectH.ListDeployments)
 			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID", projectH.GetDeployment)
 			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID/events", projectH.ListDeploymentEvents)
+			authed.GET("/projects/:projectID/logs", logH.List)
+			authed.GET("/projects/:projectID/logs/stream", logH.Stream)
 			authed.GET("/sites", siteH.List)
 			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
 			authed.GET("/sites/:id", siteH.Get)
@@ -221,7 +238,7 @@ func New(
 			Handler:           r,
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      30 * time.Second,
+			WriteTimeout:      apiWriteTimeout(cfg.Logs.Enabled),
 			IdleTimeout:       60 * time.Second,
 			MaxHeaderBytes:    1 << 20,
 		},
@@ -235,6 +252,15 @@ func New(
 			MaxHeaderBytes:    1 << 20,
 		},
 	}
+}
+
+func apiWriteTimeout(logsEnabled bool) time.Duration {
+	if logsEnabled {
+		// SSE responses are long-lived and carry their own 15-second heartbeat.
+		// Reverse proxies must still apply idle/header limits at the public edge.
+		return 0
+	}
+	return 30 * time.Second
 }
 
 // Run starts serving and blocks until the context is cancelled (SIGTERM/SIGINT),

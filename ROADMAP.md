@@ -173,8 +173,12 @@ production because no public DNS, certificate, or deployment has been activated.
   and immutable rollback behind injected worker-only providers. Source
   acquisition, a real private transport, and hardened runtime deployment are
   still required before any deployment is enabled.
-- ⏳ **4G–4M:** logs, environment/secrets, persistent PHP storage, database
-  manager, monorepos, object storage, and previews.
+- ✅ **4G customer logs foundation:** tenant-scoped Loki query contract,
+  collector configuration, historical Go API, SSE live tail, authenticated BFF,
+  and interactive project Logs Viewer. Runtime/build/source adapters remain
+  disabled, so production log emission is not claimed yet.
+- ⏳ **4H–4M:** environment/secrets, persistent PHP storage, database manager,
+  monorepos, object storage, and previews.
 
 ## Later platform work — Email, FTP/SSH & cron ⏳
 
