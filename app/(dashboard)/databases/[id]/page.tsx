@@ -1,31 +1,28 @@
-"use client";
+import { apiJSON } from '@/lib/api';
+import type { ManagedDatabase } from '@/lib/databases';
+import { DatabaseConsole } from '@/components/databases/database-console';
 
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
-import DatabaseOverviewPage from "@/components/databases/database-overview-page";
+type DatabaseEnvelope = { data: ManagedDatabase };
 
-export default function DatabaseConsolePage() {
-  const params = useParams();
-  const databaseId = params.id as string;
+type PageContext = { params: Promise<{ id: string }> };
 
-  const { data: database, isLoading } = useQuery({
-    queryKey: ["database", databaseId],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/databases/${databaseId}`);
-      if (!res.ok) throw new Error("Failed to fetch database");
-      const data = await res.json();
-      return data.data;
-    },
-  });
-
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
+export default async function DatabaseConsolePage({ params }: PageContext) {
+  const { id } = await params;
+  const { data: database } = await apiJSON<DatabaseEnvelope>(`/api/databases/${id}`);
   return (
-    <DatabaseOverviewPage
-      database={database}
-      accountId={params.account_id as string}
-    />
+    <main
+      id="dashboard-content"
+      className="mx-auto flex w-full max-w-[1200px] scroll-mt-20 flex-col gap-8 px-6 py-12 sm:px-8 sm:py-16"
+    >
+      <header className="max-w-2xl">
+        <p className="label-meta text-muted-foreground">Resources</p>
+        <h1 className="heading-page mt-2">{database.name}</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Run read-only SQL against your scoped database. Every query is audited
+          and bounded to keep your data safe.
+        </p>
+      </header>
+      <DatabaseConsole database={database} />
+    </main>
   );
 }

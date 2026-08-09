@@ -64,7 +64,7 @@ func (s *DatabaseConsoleSessionService) ValidateSession(ctx context.Context, acc
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		s.repo.RevokeSession(ctx, accountID, sessionID)
+		_ = s.repo.RevokeSession(ctx, accountID, sessionID)
 		return nil, ErrSessionExpired
 	}
 

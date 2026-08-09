@@ -58,7 +58,7 @@ func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
 }
 
 func handleError(c *gin.Context, err error) {
-	var svcErr *service.ServiceError
+	var svcErr *service.Error
 	if errors.As(err, &svcErr) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": svcErr.Code, "message": svcErr.Message})
 		return

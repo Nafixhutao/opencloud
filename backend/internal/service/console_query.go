@@ -89,6 +89,8 @@ func (s *ConsoleQueryService) validateQuerySafety(opts ExecuteOptions) error {
 	return nil
 }
 
+// QueryResult represents the outcome of a query execution including columns,
+// rows, affected row count and execution duration.
 type QueryResult struct {
 	Status           string
 	Columns          []string

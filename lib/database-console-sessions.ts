@@ -33,58 +33,53 @@ export interface QueryResult {
 
 export async function createConsoleSession(
   databaseId: string,
-  options?: SessionCreateRequest
+  options?: SessionCreateRequest,
 ): Promise<DatabaseConsoleSession> {
-  const response = await fetch(`/api/v1/databases/${databaseId}/console/sessions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(options || {}),
+  const response = await fetch(`/api/databases/${databaseId}/console/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options ?? {}),
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Failed to create session");
+    const error = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new Error(error?.error?.message ?? 'Failed to create session');
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as { data: DatabaseConsoleSession };
   return data.data;
 }
 
 export async function revokeConsoleSession(
   databaseId: string,
-  sessionId: string
+  sessionId: string,
 ): Promise<void> {
   const response = await fetch(
-    `/api/v1/databases/${databaseId}/console/sessions/${sessionId}`,
-    {
-      method: "DELETE",
-    }
+    `/api/databases/${databaseId}/console/sessions/${sessionId}`,
+    { method: 'DELETE' },
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Failed to revoke session");
+    const error = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new Error(error?.error?.message ?? 'Failed to revoke session');
   }
 }
 
 export async function executeConsoleQuery(
   databaseId: string,
-  request: QueryExecuteRequest
+  request: QueryExecuteRequest,
 ): Promise<QueryResult> {
-  const response = await fetch(
-    `/api/v1/databases/${databaseId}/console/execute`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    }
-  );
+  const response = await fetch(`/api/databases/${databaseId}/console/execute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Query execution failed");
+    const error = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new Error(error?.error?.message ?? 'Query execution failed');
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as { data: QueryResult };
   return data.data;
 }
