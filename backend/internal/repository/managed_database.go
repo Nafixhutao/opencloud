@@ -321,6 +321,20 @@ func (r *ManagedDatabaseRepo) StoreCredential(
 	return err
 }
 
+// GetCredential returns the encrypted credential envelope without locking or
+// consuming it. Used by the database console, which must reuse the credential.
+func (r *ManagedDatabaseRepo) GetCredential(ctx context.Context, databaseID uuid.UUID) (*model.DatabaseCredential, error) {
+	row := new(model.DatabaseCredential)
+	err := r.db.NewSelect().
+		Model(row).
+		Where("database_id = ?", databaseID).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return row, nil
+}
+
 // GetCredentialForUpdate locks an encrypted credential for one-time reveal.
 func (r *ManagedDatabaseRepo) GetCredentialForUpdate(
 	ctx context.Context,

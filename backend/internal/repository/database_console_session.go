@@ -24,73 +24,77 @@ func NewDatabaseConsoleSessionRepository(db *bun.DB) *DatabaseConsoleSessionRepo
 
 // CreateSession creates a new database console session with short TTL
 func (r *DatabaseConsoleSessionRepository) CreateSession(ctx context.Context, session *model.DatabaseConsoleSession) error {
-
 	_, err := r.db.NewInsert().Model(session).Exec(ctx)
 	return err
 }
 
-// GetSession retrieves a session by ID
+// GetSession retrieves a session by ID, scoped to the account
 func (r *DatabaseConsoleSessionRepository) GetSession(ctx context.Context, accountID string, sessionID string) (*model.DatabaseConsoleSession, error) {
-
 	var session model.DatabaseConsoleSession
 	err := r.db.NewSelect().
 		Model(&session).
 		Where("account_id = ? AND id = ?", accountID, sessionID).
 		Limit(1).
 		Scan(ctx)
-
 	if err != nil {
 		return nil, err
 	}
-
 	return &session, nil
 }
 
-// RevokeSession revokes a session immediately
+// RevokeSession marks a session revoked immediately; the row is retained for audit.
 func (r *DatabaseConsoleSessionRepository) RevokeSession(ctx context.Context, accountID string, sessionID string) error {
-
-	result, err := r.db.NewDelete().
-		Model((*model.DatabaseConsoleSession)(nil)).
+	now := time.Now()
+	result, err := r.db.NewUpdate().
+		Model(&model.DatabaseConsoleSession{}).
+		Set("status = ?", model.ConsoleSessionRevoked).
+		Set("revoked_at = ?", now).
 		Where("account_id = ? AND id = ?", accountID, sessionID).
 		Exec(ctx)
-
 	if err != nil {
 		return err
 	}
-
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected == 0 {
 		return ErrSessionNotFound
 	}
-
 	return nil
 }
 
-// CleanupExpiredSessions removes expired sessions (called by worker/cron)
-func (r *DatabaseConsoleSessionRepository) CleanupExpiredSessions(ctx context.Context) (int64, error) {
-
+// MarkExpired marks sessions past their expiry as expired; rows are retained.
+func (r *DatabaseConsoleSessionRepository) MarkExpired(ctx context.Context) (int64, error) {
 	now := time.Now()
-	result, err := r.db.NewDelete().
-		Model((*model.DatabaseConsoleSession)(nil)).
-		Where("expires_at < ?", now).
+	result, err := r.db.NewUpdate().
+		Model(&model.DatabaseConsoleSession{}).
+		Set("status = ?", model.ConsoleSessionExpired).
+		Where("status = ? AND expires_at < ?", model.ConsoleSessionActive, now).
 		Exec(ctx)
-
 	if err != nil {
 		return 0, err
 	}
+	return result.RowsAffected()
+}
 
+// CleanupExpiredSessions removes old, no longer revocable session rows.
+func (r *DatabaseConsoleSessionRepository) CleanupExpiredSessions(ctx context.Context) (int64, error) {
+	now := time.Now()
+	result, err := r.db.NewDelete().
+		Model((*model.DatabaseConsoleSession)(nil)).
+		Where("expires_at < ?", now.Add(-7*24*time.Hour)).
+		Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
 	return result.RowsAffected()
 }
 
 // UpdateLastActivity updates the last activity timestamp for a session
 func (r *DatabaseConsoleSessionRepository) UpdateLastActivity(ctx context.Context, accountID string, sessionID string) error {
-
 	now := time.Now()
 	_, err := r.db.NewUpdate().
 		Model(&model.DatabaseConsoleSession{}).
 		Set("last_activity_at = ?", now).
 		Where("account_id = ? AND id = ?", accountID, sessionID).
 		Exec(ctx)
-
 	return err
 }

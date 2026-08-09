@@ -1,28 +1,31 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/nazxf/opencloud/backend/internal/apperr"
+	"github.com/nazxf/opencloud/backend/internal/middleware"
 	"github.com/nazxf/opencloud/backend/internal/service"
 )
 
-// ConsoleQueryHandler handles SQL query execution operations
+// ConsoleQueryHandler handles SQL query execution operations.
 type ConsoleQueryHandler struct {
 	queryService *service.ConsoleQueryService
 }
 
-// NewConsoleQueryHandler creates a new query handler
+// NewConsoleQueryHandler creates a new query handler.
 func NewConsoleQueryHandler(queryService *service.ConsoleQueryService) *ConsoleQueryHandler {
 	return &ConsoleQueryHandler{queryService: queryService}
 }
 
-// ExecuteQuery executes a SQL query in the database console
+// ExecuteQuery executes a read-only SQL query in the database console.
 // POST /api/v1/databases/:databaseId/console/execute
 func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
 	databaseID := c.Param("databaseId")
-	accountID := c.GetString("account_id")
+	accountID := middleware.AccountID(c)
+	userID := middleware.UserID(c)
 
 	var req struct {
 		SessionID         string `json:"sessionId" binding:"required"`
@@ -31,14 +34,14 @@ func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
 		TimeoutSeconds    int    `json:"timeoutSeconds"`
 		DisallowMultiStmt bool   `json:"disallowMultiStatement"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		respondError(c, apperr.Validation("sessionId and query are required"))
 		return
 	}
 
 	result, err := h.queryService.ExecuteQuery(c.Request.Context(), service.ExecuteOptions{
-		AccountID:         accountID,
+		AccountID:         accountID.String(),
+		ActorID:           userID,
 		SessionID:         req.SessionID,
 		DatabaseID:        databaseID,
 		Query:             req.Query,
@@ -46,22 +49,10 @@ func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
 		TimeoutSeconds:    req.TimeoutSeconds,
 		DisallowMultiStmt: req.DisallowMultiStmt,
 	})
-
 	if err != nil {
-		handleError(c, err)
+		respondError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": result,
-	})
-}
-
-func handleError(c *gin.Context, err error) {
-	var svcErr *service.Error
-	if errors.As(err, &svcErr) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": svcErr.Code, "message": svcErr.Message})
-		return
-	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "message": err.Error()})
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
