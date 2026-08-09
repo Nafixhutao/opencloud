@@ -76,6 +76,7 @@ func New(
 	nodeRepo := repository.NewNodeRepo(db)
 	jobRepo := repository.NewJobRepo(db)
 	domainRepo := repository.NewDomainRepo(db)
+	projectRepo := repository.NewProjectRepo(db)
 	acctSvc := service.NewAccountService(db, acctRepo, auditRepo)
 	siteSvc := service.NewSiteService(
 		db,
@@ -118,12 +119,14 @@ func New(
 		domainRepo,
 		cfg.Provisioner.SiteDomainSuffix,
 	)
+	projectSvc := service.NewProjectService(db, projectRepo, auditRepo)
 	acctH := handler.NewAccountHandler(acctSvc)
 	siteH := handler.NewSiteHandler(siteSvc)
 	nodeH := handler.NewNodeHandler(nodeSvc)
 	databaseH := handler.NewManagedDatabaseHandler(databaseSvc)
 	overviewH := handler.NewResourceOverviewHandler(overviewSvc)
 	domainH := handler.NewDomainHandler(domainSvc)
+	projectH := handler.NewProjectHandler(projectSvc)
 
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
@@ -151,6 +154,15 @@ func New(
 			authed.GET("/me", acctH.Me)
 			authed.PATCH("/me", middleware.RateLimit(rdb, "me-write", 30, time.Minute), acctH.UpdateMe)
 			authed.GET("/overview", overviewH.Get)
+			authed.GET("/projects", projectH.ListProjects)
+			authed.POST("/projects", middleware.RateLimit(rdb, "project-write", 30, time.Minute), projectH.CreateProject)
+			authed.GET("/projects/:projectID", projectH.GetProject)
+			authed.GET("/projects/:projectID/services", projectH.ListServices)
+			authed.POST("/projects/:projectID/services", middleware.RateLimit(rdb, "project-write", 30, time.Minute), projectH.CreateService)
+			authed.GET("/projects/:projectID/services/:serviceID", projectH.GetService)
+			authed.GET("/projects/:projectID/services/:serviceID/deployments", projectH.ListDeployments)
+			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID", projectH.GetDeployment)
+			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID/events", projectH.ListDeploymentEvents)
 			authed.GET("/sites", siteH.List)
 			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
 			authed.GET("/sites/:id", siteH.Get)

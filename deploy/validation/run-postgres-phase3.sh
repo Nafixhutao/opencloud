@@ -404,7 +404,15 @@ test "$schema_up" = "$(schema_hash)"
 test "$(psql_value "SELECT count(*) FROM audit_logs WHERE action='migration.phase3.sentinel'")" = "1"
 test "$(psql_value "SELECT count(*) FROM domains WHERE id='00000000-0000-4000-8000-000000000307'")" = "1"
 
-go_in_validation "go run ./cmd/migrate down"
+# migrate down rolls back only the newest migration group. Slices added after
+# Phase 3 may have appended groups, so roll back until the domains schema is
+# gone before asserting the pre-Phase 3 (databases-slice) state.
+for _ in $(seq 1 8); do
+  if [ "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='domains'")" = "0" ]; then
+    break
+  fi
+  go_in_validation "go run ./cmd/migrate down"
+done
 test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='domains'")" = "0"
 test "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='hostname_claims'")" = "0"
 test "$(psql_value "SELECT count(*) FROM sites WHERE id IN ('00000000-0000-4000-8000-000000000304','00000000-0000-4000-8000-000000000306')")" = "2"

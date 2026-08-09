@@ -185,6 +185,7 @@ docker compose down                 # stop everything
 | [`CLAUDE.md`](CLAUDE.md) | AI-assisted development contract + index |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | System architecture and data flow |
 | [`ROADMAP.md`](ROADMAP.md) | Phased delivery plan |
+| [`docs/OPENCLOUD_MASTER_IMPLEMENTATION_PROMPT.md`](docs/OPENCLOUD_MASTER_IMPLEMENTATION_PROMPT.md) | Original implementation brief and annotated slice status |
 | [`docs/BACKEND.md`](docs/BACKEND.md) | Go control plane |
 | [`docs/FRONTEND.md`](docs/FRONTEND.md) | Next.js dashboard |
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Schema, migrations, Redis |

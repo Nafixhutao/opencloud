@@ -154,7 +154,29 @@ verification, and release approval.
 **Exit criteria:** met in code and disposable validation; not yet met for
 production because no public DNS, certificate, or deployment has been activated.
 
-## Phase 4 — Email, FTP/SSH & cron ⏳
+## Phase 4 — Universal application platform 🚧
+
+- ✅ **4A Projects, services, and deployment records:** additive, tenant-scoped
+  control-plane project/service/deployment/event model; Projects dashboard and
+  authenticated API. Existing sites remain unchanged; source acquisition,
+  builds, registry, and runtime deployment remain future slices.
+- ✅ **Build abstraction:** static and generic Railpack planning detect only a
+  validated source manifest. Build execution remains disabled until a dedicated
+  isolated builder can enforce resource, network, and credential boundaries.
+- ⏳ **4B–4F:** source acquisition, generic build provider, isolated builder,
+  private registry, immutable revision rollout, health checks, and rollback.
+  The isolated-builder service foundation now enforces a fail-closed BuildKit
+  contract, lifecycle, limits, cancellation, and cleanup; it has no source or
+  registry transport yet, so it is not a runnable deployment path. The registry
+  and runtime-deployment foundations now enforce digest-only artifact identity,
+  lifecycle persistence, health-before-Caddy-switch sequencing, retirement,
+  and immutable rollback behind injected worker-only providers. Source
+  acquisition, a real private transport, and hardened runtime deployment are
+  still required before any deployment is enabled.
+- ⏳ **4G–4M:** logs, environment/secrets, persistent PHP storage, database
+  manager, monorepos, object storage, and previews.
+
+## Later platform work — Email, FTP/SSH & cron ⏳
 
 - Mailbox provisioning and management — gated on a clean-IP outbound mail path;
   never sent from residential IPs (ADR 0004)

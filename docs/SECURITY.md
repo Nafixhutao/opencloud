@@ -159,6 +159,12 @@ error codes before they can reach logs.
 - The Docker daemon and Caddy admin endpoint are worker-only. Neither is mounted
   into the dashboard or public API; arbitrary Dockerfiles remain disabled until
   isolated builds and image policy exist.
+- OCI deployment identities are private-registry, tenant/service-scoped
+  `sha256:` references. The public API accepts no arbitrary image name or tag;
+  the restricted deployment worker verifies registry existence/digest equality,
+  health-checks a candidate before an atomic Caddy switch, and retains the
+  previous revision until traffic has moved. Registry credentials and runtime
+  capabilities are never loaded by the API, dashboard, or isolated builder.
 - On-Demand TLS does not authorize itself: each eligible site is configured for
   on-demand issuance and Caddy must receive `2xx` from the internal permission
   endpoint. Exact-host routes prevent an authorized certificate name from

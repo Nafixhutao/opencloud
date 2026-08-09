@@ -14,6 +14,28 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 4 registry/deployment foundation (not production-deployed):** a
+  provider-neutral private OCI registry contract with strict digest-only,
+  tenant/service-scoped repository identities; database-enforced deployment
+  lifecycle; and a restricted runtime workflow for health-checked Caddy traffic
+  switching, immutable revision activation, retirement, and rollback. It has
+  fakes and integration coverage only—no public deploy API, registry client,
+  source acquisition, or live runtime credential is enabled.
+- **Phase 4 isolated builder foundation (not production-deployed):** mandatory
+  resource/time guards, a rootless/no-host-mount/network-disabled BuildKit
+  request contract, strict lifecycle states, bounded lifecycle streaming,
+  cancellation, and mandatory cleanup. It remains disconnected from source
+  acquisition and registry publication, so no customer source is executed.
+- **Phase 4 build planning foundation (not production-deployed):** a
+  provider-neutral, source-metadata-only build planner with static-site and
+  generic Railpack detection, plus a deterministic fake provider for tests.
+  Real build execution fails closed until the isolated worker, BuildKit, and
+  private registry boundaries are implemented.
+- **Phase 4A project domain (not production-deployed):** additive tenant-scoped
+  projects, services, immutable deployment identities, and append-only
+  deployment events; authenticated project/service APIs and the initial Projects
+  dashboard. Existing sites remain fully supported and are not migrated or
+  implicitly attached to projects.
 - **Phase 3 customer domains (not production-deployed):** additive
   tenant-scoped domains and a global hostname-claim registry; expiring HMAC
   ownership challenges; staged TXT-then-A instructions; durable verify,
