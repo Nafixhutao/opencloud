@@ -352,7 +352,7 @@ func (s *ManagedDatabaseService) RevealCredential(
 // place so the console can keep executing across queries in the session.
 func (s *ManagedDatabaseService) ConsoleCredentials(
 	ctx context.Context,
-	actorUserID string,
+	_ string,
 	accountID, databaseID uuid.UUID,
 ) (*provisioner.DatabaseCredentials, error) {
 	if !s.enabled || s.cipher == nil {

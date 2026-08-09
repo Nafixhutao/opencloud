@@ -307,7 +307,7 @@ func executeReadOnlyQuery(
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -319,7 +319,7 @@ func executeReadOnlyQuery(
 		if err != nil {
 			return nil, err
 		}
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }()
 		if _, err := tx.ExecContext(runCtx, "SET TRANSACTION READ ONLY"); err != nil {
 			return nil, err
 		}
@@ -330,7 +330,7 @@ func executeReadOnlyQuery(
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		result, err := collectRows(rows, maxRows)
 		if err != nil {
 			return nil, err
@@ -343,7 +343,7 @@ func executeReadOnlyQuery(
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(runCtx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func executeReadOnlyQuery(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	result, err := collectRows(rows, maxRows)
 	if err != nil {
 		return nil, err
@@ -420,7 +420,7 @@ func collectRows(rows *sql.Rows, maxRows int) (*QueryResult, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	var affected int64 = int64(count)
+	affected := int64(count)
 	result.RowsAffected = &affected
 	return result, nil
 }
