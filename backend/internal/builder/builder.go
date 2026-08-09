@@ -132,12 +132,19 @@ func (r Request) validate(limits Limits) error {
 type State string
 
 const (
-	StateQueued    State = "queued"
+	// StateQueued is the initial state before an isolated builder begins preparation.
+	StateQueued State = "queued"
+	// StatePreparing validates the build request and isolated execution environment.
 	StatePreparing State = "preparing"
-	StateBuilding  State = "building"
+	// StateBuilding represents an active isolated build.
+	StateBuilding State = "building"
+	// StateExporting represents exporting the completed immutable artifact.
 	StateExporting State = "exporting"
+	// StateSucceeded represents a completed build with a valid immutable artifact.
 	StateSucceeded State = "succeeded"
-	StateFailed    State = "failed"
+	// StateFailed represents a terminal failed build.
+	StateFailed State = "failed"
+	// StateCancelled represents a terminal cancelled build.
 	StateCancelled State = "cancelled"
 )
 

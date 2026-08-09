@@ -131,8 +131,7 @@ func TestServiceCancellationCleansUp(t *testing.T) {
 
 func TestServiceRejectsInvalidArtifactAfterCleanup(t *testing.T) {
 	executor := &FakeExecutor{}
-	service, err := NewService(executor, DefaultLimits())
-	if err != nil {
+	if _, err := NewService(executor, DefaultLimits()); err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
 	// An executor is a narrow interface and may be independently implemented;
@@ -140,7 +139,7 @@ func TestServiceRejectsInvalidArtifactAfterCleanup(t *testing.T) {
 	invalid := executorFunc{execute: func(context.Context, ExecutionRequest) (ExecutionResult, error) {
 		return ExecutionResult{ImageBytes: 1}, nil
 	}, cleanup: executor.Cleanup}
-	service, err = NewService(invalid, DefaultLimits())
+	service, err := NewService(invalid, DefaultLimits())
 	if err != nil {
 		t.Fatalf("NewService invalid executor: %v", err)
 	}

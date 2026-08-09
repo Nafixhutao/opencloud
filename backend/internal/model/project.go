@@ -9,29 +9,50 @@ import (
 )
 
 const (
-	ProjectActive   = "active"
+	// ProjectActive marks a project available for service operations.
+	ProjectActive = "active"
+	// ProjectArchived marks a project retained but unavailable for normal operations.
 	ProjectArchived = "archived"
-	ProjectDeleted  = "deleted"
+	// ProjectDeleted marks a soft-deleted project.
+	ProjectDeleted = "deleted"
 
-	ServiceActive   = "active"
+	// ServiceActive marks a service available for deployment operations.
+	ServiceActive = "active"
+	// ServiceDisabled marks a service unavailable for new runtime work.
 	ServiceDisabled = "disabled"
-	ServiceDeleted  = "deleted"
+	// ServiceDeleted marks a soft-deleted service.
+	ServiceDeleted = "deleted"
 
-	ServiceTypeWeb    = "web"
+	// ServiceTypeWeb identifies a request-serving workload.
+	ServiceTypeWeb = "web"
+	// ServiceTypeWorker identifies a background workload.
 	ServiceTypeWorker = "worker"
-	ServiceTypeCron   = "cron"
+	// ServiceTypeCron identifies a scheduled workload.
+	ServiceTypeCron = "cron"
+	// ServiceTypeStatic identifies a static-file workload.
 	ServiceTypeStatic = "static"
 
-	DeploymentQueued    = "queued"
-	DeploymentCloning   = "cloning"
+	// DeploymentQueued marks a newly created deployment revision.
+	DeploymentQueued = "queued"
+	// DeploymentCloning marks source acquisition in progress.
+	DeploymentCloning = "cloning"
+	// DeploymentDetecting marks build-provider detection in progress.
 	DeploymentDetecting = "detecting"
-	DeploymentPlanning  = "planning"
-	DeploymentBuilding  = "building"
-	DeploymentPushing   = "pushing"
-	DeploymentScanning  = "scanning"
+	// DeploymentPlanning marks build planning in progress.
+	DeploymentPlanning = "planning"
+	// DeploymentBuilding marks isolated image construction in progress.
+	DeploymentBuilding = "building"
+	// DeploymentPushing marks immutable artifact publication in progress.
+	DeploymentPushing = "pushing"
+	// DeploymentScanning marks security scanning in progress.
+	DeploymentScanning = "scanning"
+	// DeploymentDeploying marks restricted runtime deployment in progress.
 	DeploymentDeploying = "deploying"
-	DeploymentReady     = "ready"
-	DeploymentFailed    = "failed"
+	// DeploymentReady marks a healthy immutable revision.
+	DeploymentReady = "ready"
+	// DeploymentFailed marks a terminal failed revision.
+	DeploymentFailed = "failed"
+	// DeploymentCancelled marks a terminal cancelled revision.
 	DeploymentCancelled = "cancelled"
 )
 

@@ -16,6 +16,7 @@ import (
 // ProjectHandler serves tenant-scoped Phase 4A resources.
 type ProjectHandler struct{ svc *service.ProjectService }
 
+// NewProjectHandler constructs a handler for tenant-scoped project resources.
 func NewProjectHandler(svc *service.ProjectService) *ProjectHandler { return &ProjectHandler{svc: svc} }
 
 type projectResponse struct {
@@ -52,6 +53,7 @@ type deploymentEventResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ListProjects returns the current account's paginated projects.
 func (h *ProjectHandler) ListProjects(c *gin.Context) {
 	page, perPage := queryPagination(c)
 	rows, total, err := h.svc.ListProjects(c.Request.Context(), middleware.AccountID(c), page, perPage)
@@ -61,6 +63,8 @@ func (h *ProjectHandler) ListProjects(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": projectResponses(rows), "meta": gin.H{"page": page, "per_page": perPage, "total": total}})
 }
+
+// CreateProject creates a project for the current account.
 func (h *ProjectHandler) CreateProject(c *gin.Context) {
 	var req service.CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -74,6 +78,8 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": newProjectResponse(row)})
 }
+
+// GetProject returns one account-owned project.
 func (h *ProjectHandler) GetProject(c *gin.Context) {
 	projectID, ok := projectIDParam(c)
 	if !ok {
@@ -86,6 +92,8 @@ func (h *ProjectHandler) GetProject(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": newProjectResponse(row)})
 }
+
+// ListServices returns the paginated services for one account-owned project.
 func (h *ProjectHandler) ListServices(c *gin.Context) {
 	projectID, ok := projectIDParam(c)
 	if !ok {
@@ -99,6 +107,8 @@ func (h *ProjectHandler) ListServices(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": serviceResponses(rows), "meta": gin.H{"page": page, "per_page": perPage, "total": total}})
 }
+
+// CreateService creates a service within one account-owned project.
 func (h *ProjectHandler) CreateService(c *gin.Context) {
 	projectID, ok := projectIDParam(c)
 	if !ok {
@@ -116,6 +126,8 @@ func (h *ProjectHandler) CreateService(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": newServiceResponse(row)})
 }
+
+// GetService returns one account-owned project service.
 func (h *ProjectHandler) GetService(c *gin.Context) {
 	projectID, serviceID, ok := projectServiceParams(c)
 	if !ok {
@@ -128,6 +140,8 @@ func (h *ProjectHandler) GetService(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": newServiceResponse(row)})
 }
+
+// ListDeployments returns the paginated revisions for one account-owned service.
 func (h *ProjectHandler) ListDeployments(c *gin.Context) {
 	projectID, serviceID, ok := projectServiceParams(c)
 	if !ok {
@@ -141,6 +155,8 @@ func (h *ProjectHandler) ListDeployments(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": deploymentResponses(rows), "meta": gin.H{"page": page, "per_page": perPage, "total": total}})
 }
+
+// GetDeployment returns one account-owned immutable deployment revision.
 func (h *ProjectHandler) GetDeployment(c *gin.Context) {
 	projectID, serviceID, deploymentID, ok := projectDeploymentParams(c)
 	if !ok {
@@ -153,6 +169,8 @@ func (h *ProjectHandler) GetDeployment(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": newDeploymentResponse(row)})
 }
+
+// ListDeploymentEvents returns the paginated safe events for one deployment.
 func (h *ProjectHandler) ListDeploymentEvents(c *gin.Context) {
 	projectID, serviceID, deploymentID, ok := projectDeploymentParams(c)
 	if !ok {

@@ -17,6 +17,7 @@ func NewFakeProvider() *FakeProvider {
 	return &FakeProvider{artifacts: make(map[string]Artifact)}
 }
 
+// Push stores a validated immutable artifact in memory.
 func (p *FakeProvider) Push(_ context.Context, request PushRequest) (Artifact, error) {
 	if err := request.Validate(); err != nil {
 		return Artifact{}, err
@@ -28,6 +29,7 @@ func (p *FakeProvider) Push(_ context.Context, request PushRequest) (Artifact, e
 	return artifact, nil
 }
 
+// Delete removes a validated immutable artifact from memory.
 func (p *FakeProvider) Delete(_ context.Context, artifact Artifact) error {
 	if err := artifact.Validate(); err != nil {
 		return err
@@ -41,6 +43,7 @@ func (p *FakeProvider) Delete(_ context.Context, artifact Artifact) error {
 	return nil
 }
 
+// Exists reports whether a validated immutable artifact is stored in memory.
 func (p *FakeProvider) Exists(_ context.Context, artifact Artifact) (bool, error) {
 	if err := artifact.Validate(); err != nil {
 		return false, err
@@ -51,6 +54,7 @@ func (p *FakeProvider) Exists(_ context.Context, artifact Artifact) (bool, error
 	return exists, nil
 }
 
+// ResolveDigest returns the exact immutable artifact stored for a repository and digest.
 func (p *FakeProvider) ResolveDigest(_ context.Context, repository Repository, digest string) (Artifact, error) {
 	if err := repository.Validate(); err != nil {
 		return Artifact{}, err

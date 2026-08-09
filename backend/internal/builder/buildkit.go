@@ -11,6 +11,7 @@ import (
 // network access from arbitrary customer build steps.
 type NetworkPolicy string
 
+// NetworkDisabled prevents general network access from isolated build steps.
 const NetworkDisabled NetworkPolicy = "disabled"
 
 // BuildKitSolveRequest is the only request shape an eventual BuildKit client

@@ -20,7 +20,9 @@ var (
 )
 
 const (
-	KindStatic      = "static"
+	// KindStatic identifies a build that serves static files without an application runtime.
+	KindStatic = "static"
+	// KindApplication identifies a build that requires an application runtime.
 	KindApplication = "application"
 )
 

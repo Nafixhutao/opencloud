@@ -32,6 +32,7 @@ func NewDistributionProvider(client DistributionClient) (*DistributionProvider, 
 	return &DistributionProvider{client: client}, nil
 }
 
+// Push validates and publishes an immutable artifact through the injected client.
 func (p *DistributionProvider) Push(ctx context.Context, request PushRequest) (Artifact, error) {
 	if p == nil || p.client == nil {
 		return Artifact{}, errors.New("OCI Distribution client is unavailable")
@@ -50,6 +51,7 @@ func (p *DistributionProvider) Push(ctx context.Context, request PushRequest) (A
 	return artifact, nil
 }
 
+// Delete removes a validated immutable artifact through the injected client.
 func (p *DistributionProvider) Delete(ctx context.Context, artifact Artifact) error {
 	if p == nil || p.client == nil {
 		return errors.New("OCI Distribution client is unavailable")
@@ -63,6 +65,7 @@ func (p *DistributionProvider) Delete(ctx context.Context, artifact Artifact) er
 	return nil
 }
 
+// Exists reports whether a validated immutable artifact is present.
 func (p *DistributionProvider) Exists(ctx context.Context, artifact Artifact) (bool, error) {
 	if p == nil || p.client == nil {
 		return false, errors.New("OCI Distribution client is unavailable")
@@ -77,6 +80,7 @@ func (p *DistributionProvider) Exists(ctx context.Context, artifact Artifact) (b
 	return exists, nil
 }
 
+// ResolveDigest verifies that the registry resolves exactly the requested digest.
 func (p *DistributionProvider) ResolveDigest(ctx context.Context, repository Repository, digest string) (Artifact, error) {
 	if p == nil || p.client == nil {
 		return Artifact{}, errors.New("OCI Distribution client is unavailable")

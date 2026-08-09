@@ -26,18 +26,23 @@ type ProjectService struct {
 	audit    *repository.AuditRepo
 }
 
+// NewProjectService constructs the tenant-scoped project-domain service.
 func NewProjectService(db *bun.DB, projects *repository.ProjectRepo, audit *repository.AuditRepo) *ProjectService {
 	return &ProjectService{db: db, projects: projects, audit: audit}
 }
 
+// CreateProjectRequest contains customer-controlled project creation fields.
 type CreateProjectRequest struct {
 	Name string `json:"name"`
 }
+
+// CreateServiceRequest contains customer-controlled service creation fields.
 type CreateServiceRequest struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
 }
 
+// CreateProject creates an idempotent tenant-owned project and audit event.
 func (s *ProjectService) CreateProject(ctx context.Context, actor string, accountID uuid.UUID, key string, req CreateProjectRequest) (*model.Project, error) {
 	name, key, err := validateProjectCreate(req, key)
 	if err != nil {
@@ -82,6 +87,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, actor string, accoun
 	return created, nil
 }
 
+// ListProjects returns paginated projects owned by one account.
 func (s *ProjectService) ListProjects(ctx context.Context, accountID uuid.UUID, page, perPage int) ([]model.Project, int, error) {
 	page, perPage = canonicalProjectPage(page, perPage)
 	rows, total, err := s.projects.ListProjects(ctx, accountID, perPage, (page-1)*perPage)
@@ -91,6 +97,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, accountID uuid.UUID, 
 	return rows, total, nil
 }
 
+// GetProject returns one project only when it belongs to the account.
 func (s *ProjectService) GetProject(ctx context.Context, accountID, projectID uuid.UUID) (*model.Project, error) {
 	project, err := s.projects.GetProjectByAccount(ctx, accountID, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -102,6 +109,7 @@ func (s *ProjectService) GetProject(ctx context.Context, accountID, projectID uu
 	return project, nil
 }
 
+// CreateService creates an idempotent service within one tenant-owned project.
 func (s *ProjectService) CreateService(ctx context.Context, actor string, accountID, projectID uuid.UUID, key string, req CreateServiceRequest) (*model.Service, error) {
 	name, serviceType, key, err := validateServiceCreate(req, key)
 	if err != nil {
@@ -152,6 +160,7 @@ func (s *ProjectService) CreateService(ctx context.Context, actor string, accoun
 	return created, nil
 }
 
+// ListServices returns paginated services for one tenant-owned project.
 func (s *ProjectService) ListServices(ctx context.Context, accountID, projectID uuid.UUID, page, perPage int) ([]model.Service, int, error) {
 	if _, err := s.GetProject(ctx, accountID, projectID); err != nil {
 		return nil, 0, err
@@ -164,6 +173,7 @@ func (s *ProjectService) ListServices(ctx context.Context, accountID, projectID 
 	return rows, total, nil
 }
 
+// GetService returns one service only when its project belongs to the account.
 func (s *ProjectService) GetService(ctx context.Context, accountID, projectID, serviceID uuid.UUID) (*model.Service, error) {
 	row, err := s.projects.GetServiceByAccount(ctx, accountID, projectID, serviceID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -175,6 +185,7 @@ func (s *ProjectService) GetService(ctx context.Context, accountID, projectID, s
 	return row, nil
 }
 
+// ListDeployments returns paginated immutable revisions for one tenant-owned service.
 func (s *ProjectService) ListDeployments(ctx context.Context, accountID, projectID, serviceID uuid.UUID, page, perPage int) ([]model.Deployment, int, error) {
 	if _, err := s.GetService(ctx, accountID, projectID, serviceID); err != nil {
 		return nil, 0, err
@@ -187,6 +198,7 @@ func (s *ProjectService) ListDeployments(ctx context.Context, accountID, project
 	return rows, total, nil
 }
 
+// GetDeployment returns one immutable revision only when its service is tenant-owned.
 func (s *ProjectService) GetDeployment(ctx context.Context, accountID, projectID, serviceID, deploymentID uuid.UUID) (*model.Deployment, error) {
 	row, err := s.projects.GetDeploymentByAccount(ctx, accountID, projectID, serviceID, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -198,6 +210,7 @@ func (s *ProjectService) GetDeployment(ctx context.Context, accountID, projectID
 	return row, nil
 }
 
+// ListDeploymentEvents returns paginated safe events for one tenant-owned revision.
 func (s *ProjectService) ListDeploymentEvents(ctx context.Context, accountID, projectID, serviceID, deploymentID uuid.UUID, page, perPage int) ([]model.DeploymentEvent, int, error) {
 	if _, err := s.GetDeployment(ctx, accountID, projectID, serviceID, deploymentID); err != nil {
 		return nil, 0, err

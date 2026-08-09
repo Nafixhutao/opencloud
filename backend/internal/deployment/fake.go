@@ -7,10 +7,14 @@ import (
 )
 
 const (
-	ActionStart         = "start"
-	ActionCheckHealth   = "health"
+	// ActionStart records a runtime start attempt.
+	ActionStart = "start"
+	// ActionCheckHealth records a runtime health check.
+	ActionCheckHealth = "health"
+	// ActionSwitchTraffic records a Caddy traffic-switch attempt.
 	ActionSwitchTraffic = "switch_caddy_traffic"
-	ActionRetire        = "retire"
+	// ActionRetire records retiring a previous runtime revision.
+	ActionRetire = "retire"
 )
 
 // Action records a fake runtime call for sequence tests.
@@ -29,6 +33,7 @@ type FakeRuntime struct {
 	actions []Action
 }
 
+// Start validates and records a simulated runtime start.
 func (f *FakeRuntime) Start(_ context.Context, revision Revision) error {
 	if err := ValidateProviderRevision(revision); err != nil {
 		return err
@@ -37,6 +42,7 @@ func (f *FakeRuntime) Start(_ context.Context, revision Revision) error {
 	return f.fail(ActionStart)
 }
 
+// CheckHealth validates and records a simulated runtime health check.
 func (f *FakeRuntime) CheckHealth(_ context.Context, revision Revision) error {
 	if err := ValidateProviderRevision(revision); err != nil {
 		return err
@@ -45,6 +51,7 @@ func (f *FakeRuntime) CheckHealth(_ context.Context, revision Revision) error {
 	return f.fail(ActionCheckHealth)
 }
 
+// SwitchCaddyTraffic validates and records a simulated traffic switch.
 func (f *FakeRuntime) SwitchCaddyTraffic(_ context.Context, traffic TrafficSwitch) error {
 	if err := traffic.Validate(); err != nil {
 		return err
@@ -53,6 +60,7 @@ func (f *FakeRuntime) SwitchCaddyTraffic(_ context.Context, traffic TrafficSwitc
 	return f.fail(ActionSwitchTraffic)
 }
 
+// Retire validates and records a simulated runtime retirement.
 func (f *FakeRuntime) Retire(_ context.Context, revision Revision) error {
 	if err := ValidateProviderRevision(revision); err != nil {
 		return err

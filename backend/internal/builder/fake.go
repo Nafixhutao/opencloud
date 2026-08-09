@@ -24,6 +24,7 @@ type FakeExecutor struct {
 	cleanupCalls int
 }
 
+// Execute produces a deterministic simulated artifact without executing source.
 func (f *FakeExecutor) Execute(ctx context.Context, request ExecutionRequest) (ExecutionResult, error) {
 	if f.Started != nil {
 		select {
@@ -50,6 +51,7 @@ func (f *FakeExecutor) Execute(ctx context.Context, request ExecutionRequest) (E
 	}, nil
 }
 
+// Cleanup records cleanup for the simulated isolated build.
 func (f *FakeExecutor) Cleanup(context.Context, ExecutionRequest) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

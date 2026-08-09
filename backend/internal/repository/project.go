@@ -361,7 +361,7 @@ func (r *ProjectRepo) MarkDeploymentDeploying(ctx context.Context, deploymentID 
 		Set("last_error = NULL").
 		Set("updated_at = now()").
 		Where("id = ?", deploymentID).
-		Where("status IN (?)", bun.In([]string{model.DeploymentPushing, model.DeploymentScanning})).
+		Where("status IN (?)", bun.List([]string{model.DeploymentPushing, model.DeploymentScanning})).
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -379,7 +379,7 @@ func (r *ProjectRepo) MarkDeploymentFailed(ctx context.Context, deploymentID uui
 		Set("completed_at = now()").
 		Set("updated_at = now()").
 		Where("id = ?", deploymentID).
-		Where("status NOT IN (?)", bun.In([]string{model.DeploymentReady, model.DeploymentFailed, model.DeploymentCancelled})).
+		Where("status NOT IN (?)", bun.List([]string{model.DeploymentReady, model.DeploymentFailed, model.DeploymentCancelled})).
 		Exec(ctx)
 	if err != nil {
 		return err
