@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Copy, Play, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Copy, Eraser, Play, ShieldCheck, Square, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -27,6 +27,7 @@ import {
   executeConsoleQuery,
   revokeConsoleSession,
   type DatabaseConsoleSession,
+  type QueryExecuteRequest,
   type QueryResult,
 } from '@/lib/database-console-sessions';
 import type { ManagedDatabase } from '@/lib/databases';
@@ -37,6 +38,22 @@ type DatabaseConsoleProps = {
 
 const MAX_QUERY_LENGTH = 10_000;
 const SESSION_TTL_MINUTES = 30;
+
+function formatSql(sql: string): string {
+  const trimmed = sql.trim();
+  if (!trimmed) return '';
+  const keywords = [
+    'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'OFFSET',
+    'HAVING', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'OUTER JOIN',
+    'AND', 'OR',
+  ];
+  let formatted = trimmed.replace(/\s+/g, ' ');
+  for (const keyword of keywords) {
+    const re = new RegExp(`\\b${keyword}\\b`, 'gi');
+    formatted = formatted.replace(re, `\n${keyword} `);
+  }
+  return formatted.replace(/\n\s+/g, '\n').trim();
+}
 
 export function DatabaseConsole({ database }: DatabaseConsoleProps) {
   const queryClient = useQueryClient();
@@ -55,11 +72,12 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
   });
 
   const execute = useMutation({
-    mutationFn: () =>
+    mutationFn: (overrides?: Partial<QueryExecuteRequest>) =>
       executeConsoleQuery(database.id, {
         sessionId: session?.id ?? '',
-        query,
+        query: overrides?.query ?? query,
         disallowMultiStatement: true,
+        ...overrides,
       }),
     onSuccess: (data) => setResult(data),
   });
@@ -177,10 +195,10 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
               </p>
             ) : null}
           </FieldGroup>
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               disabled={!session || !query.trim() || queryTooLong || execute.isPending}
-              onClick={() => execute.mutate()}
+              onClick={() => execute.mutate(undefined)}
             >
               {execute.isPending ? (
                 <Spinner className="size-4" aria-hidden="true" />
@@ -188,6 +206,39 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
                 <Play className="size-4" aria-hidden="true" />
               )}
               {execute.isPending ? 'Running…' : 'Run query'}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!session || !query.trim() || queryTooLong || execute.isPending}
+              onClick={() =>
+                execute.mutate({ query: `EXPLAIN ${query.replace(/;\s*$/, '')}` })
+              }
+            >
+              Explain
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!query.trim()}
+              onClick={() => setQuery(formatSql(query))}
+            >
+              Format
+            </Button>
+            {execute.isPending ? (
+              <Button variant="outline" onClick={() => execute.reset()}>
+                <Square className="size-4" aria-hidden="true" />
+                Cancel
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              disabled={!query.trim()}
+              onClick={() => {
+                setQuery('');
+                setResult(null);
+              }}
+            >
+              <Eraser className="size-4" aria-hidden="true" />
+              Clear
             </Button>
           </div>
 
