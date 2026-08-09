@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
-	"github.com/Nafixhutao/opencloud/backend/internal/repository"
+	"github.com/nazxf/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )

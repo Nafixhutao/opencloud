@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Nafixhutao/opencloud/backend/internal/model"
+	"github.com/nazxf/opencloud/backend/internal/model"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	"xorm.io/bun"
 )
