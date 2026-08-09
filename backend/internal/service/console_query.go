@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nazxf/opencloud/backend/internal/model"
 	"github.com/nazxf/opencloud/backend/internal/repository"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -31,12 +31,12 @@ func NewConsoleQueryService(sessionRepo *repository.DatabaseConsoleSessionReposi
 
 // ExecuteOptions contains parameters for query execution
 type ExecuteOptions struct {
-	AccountID       string
-	SessionID       string
-	DatabaseID      string
-	Query           string
-	MaxRows         int
-	TimeoutSeconds  int
+	AccountID         string
+	SessionID         string
+	DatabaseID        string
+	Query             string
+	MaxRows           int
+	TimeoutSeconds    int
 	DisallowMultiStmt bool
 }
 
@@ -90,10 +90,10 @@ func (s *ConsoleQueryService) validateQuerySafety(opts ExecuteOptions) error {
 }
 
 type QueryResult struct {
-	Status          string
-	Columns         []string
-	Rows            [][]interface{}
-	RowsAffected    *int64
+	Status           string
+	Columns          []string
+	Rows             [][]interface{}
+	RowsAffected     *int64
 	ExecutionTimeSec *float64
 }
 
@@ -118,7 +118,7 @@ func containsMultipleStatements(query string) bool {
 func containsDangerousOperation(query string) bool {
 	dangerousKeywords := []string{"DROP DATABASE", "TRUNCATE TABLE", "ALTER SYSTEM"}
 	queryUpper := strings.ToUpper(query)
-	
+
 	for _, keyword := range dangerousKeywords {
 		if strings.Contains(queryUpper, keyword) {
 			return true

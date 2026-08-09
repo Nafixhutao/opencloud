@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nazxf/opencloud/backend/internal/model"
 	"github.com/nazxf/opencloud/backend/internal/repository"
-	"github.com/google/uuid"
 )
 
 // DatabaseConsoleSessionService handles session business logic
@@ -21,11 +21,11 @@ func NewDatabaseConsoleSessionService(repo *repository.DatabaseConsoleSessionRep
 
 // CreateOptions contains parameters for session creation
 type CreateOptions struct {
-	AccountID   string
-	DatabaseID  string
-	IPAddress   string
-	UserAgent   string
-	TTLMinutes  int // 15, 30, or 60 minutes
+	AccountID  string
+	DatabaseID string
+	IPAddress  string
+	UserAgent  string
+	TTLMinutes int // 15, 30, or 60 minutes
 }
 
 // CreateSession creates a new database console session

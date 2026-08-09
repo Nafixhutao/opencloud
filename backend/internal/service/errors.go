@@ -40,4 +40,3 @@ func wrapErr(err error, msg string) error {
 	}
 	return errors.New(msg + ": " + err.Error())
 }
-

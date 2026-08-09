@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nazxf/opencloud/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/nazxf/opencloud/backend/internal/service"
 )
 
 // DatabaseConsoleSessionHandler handles database console session operations

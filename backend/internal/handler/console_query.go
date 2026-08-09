@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nazxf/opencloud/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/nazxf/opencloud/backend/internal/service"
 )
 
 // ConsoleQueryHandler handles SQL query execution operations
@@ -25,11 +25,11 @@ func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
 	accountID := c.GetString("account_id")
 
 	var req struct {
-		SessionID          string `json:"sessionId" binding:"required"`
-		Query              string `json:"query" binding:"required"`
-		MaxRows            int    `json:"maxRows"`
-		TimeoutSeconds     int    `json:"timeoutSeconds"`
-		DisallowMultiStmt  bool   `json:"disallowMultiStatement"`
+		SessionID         string `json:"sessionId" binding:"required"`
+		Query             string `json:"query" binding:"required"`
+		MaxRows           int    `json:"maxRows"`
+		TimeoutSeconds    int    `json:"timeoutSeconds"`
+		DisallowMultiStmt bool   `json:"disallowMultiStatement"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
