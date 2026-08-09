@@ -226,7 +226,7 @@ func New(
 				middleware.RateLimit(rdb, "database-credential", 10, time.Minute),
 				databaseH.RevealCredential,
 			)
-			
+
 			// Database console routes
 			console := authed.Group("/databases/:databaseId/console")
 			{
