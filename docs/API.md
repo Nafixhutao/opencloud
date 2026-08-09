@@ -154,6 +154,26 @@ The overview is calculated by one aggregate database statement and excludes
 soft-deleted rows. Dashboard metrics never infer totals or status counts from a
 paginated collection.
 
+### Projects (Phase 4A)
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/projects?page=&per_page=` | list caller-owned projects |
+| `POST` | `/projects` | create a project (`201`; requires `Idempotency-Key`) |
+| `GET` | `/projects/{project_id}` | caller-owned project detail |
+| `GET` | `/projects/{project_id}/services?page=&per_page=` | list project services |
+| `POST` | `/projects/{project_id}/services` | create a service (`201`; requires `Idempotency-Key`) |
+| `GET` | `/projects/{project_id}/services/{service_id}/deployments` | immutable deployment revisions |
+| `GET` | `/projects/{project_id}/services/{service_id}/deployments/{deployment_id}/events` | safe append-only activity |
+
+Project creation accepts `{ "name": "toko-online" }`. Service creation accepts
+`{ "name": "api", "type": "web" }`, where `type` is `web`, `worker`, `cron`,
+or `static`. Deployment creation remains intentionally unavailable to the public
+API until source acquisition can feed the restricted build/deployment workers.
+The internal registry/deployment foundation accepts only service-scoped
+immutable OCI digests; callers can never submit arbitrary image names or
+mutable tags. All routes are tenant-scoped and return `404` for inaccessible
+parent or child resources.
+
 ### Sites
 | Method | Path | Purpose |
 |---|---|---|

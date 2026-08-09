@@ -155,6 +155,24 @@ PostgreSQL is the **system of record** (and the job queue); Redis is a disposabl
 - `nodes` — hosting capacity registered by backend driver.
 - `sites`, `domains`, `databases`, `mailboxes`, `dns_zones`, `certificates` —
   customer resources, each linked to an `account_id` and a `node_id`.
+- `projects`, `services`, `deployments`, `deployment_events` — Phase 4A's
+  application hierarchy. Services are tenant/project-scoped, deployment OCI
+  identities are immutable, and deployment events are append-only. Existing
+  `sites` remain an independent compatibility resource until an explicit import
+  path is delivered.
+- `internal/builder` is the Phase 4D isolated execution boundary. It admits
+  only immutable artifact references and declarative plans, enforces a strict
+  lifecycle with resource/time cleanup guards, and hands an injected BuildKit
+  adapter a rootless, network-disabled, no-host-mount request. It has no
+  control-plane database handle, source path, repository credential, or Docker
+  socket; source and registry transports remain separate future capabilities.
+- `internal/registry` and `internal/deployment` form the Phase 4E handoff. An
+  OCI image is addressed only as
+  `registry-host/opencloud/<account>/<project>/<service>@sha256:…`; a
+  restricted deployment worker verifies it, starts and health-checks a
+  revision, atomically switches Caddy traffic, and retires the prior one under
+  a service-scoped advisory lock. The current code supplies contracts and fakes
+  only, not public deploy APIs or live registry/runtime credentials.
 - `jobs` — **the job queue itself**: async work + status, claimed by the worker
   with `FOR UPDATE SKIP LOCKED` ([ADR 0002](docs/adr/0002-postgres-backed-job-queue.md)).
 - `audit_logs` — append-only record of sensitive actions.

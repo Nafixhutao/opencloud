@@ -25,6 +25,8 @@ backend/
 │   ├── repository/        # Bun data access, account-scoped
 │   ├── model/             # domain structs + Bun models
 │   ├── provisioner/       # provider-neutral contract + Docker/Hestia/fake adapters
+│   ├── registry/          # private OCI registry contract + fake/test adapters
+│   ├── deployment/        # restricted runtime/Caddy deployment contract
 │   ├── middleware/        # auth, request-id, logging, recovery, ratelimit
 │   ├── queue/             # Postgres-backed job queue + job handlers
 │   ├── dto/               # request/response shapes
@@ -382,3 +384,47 @@ The data-plane admin connections are separate worker-only secrets and must
 never equal the control-plane `DATABASE_URL`. `CUSTOMER_DATABASES_ENABLED=false`
 is the default until both targets, TLS endpoints, and the shared external
 credential-encryption key are configured.
+
+## Phase 4 build planning foundation
+
+- `internal/build` owns provider-neutral source detection and declarative build
+  plans. Its input is a validated file manifest from a future trusted source
+  acquisition layer, never an unbounded filesystem path or source content.
+- Providers are ordered by the planner: `StaticProvider` recognizes root
+  `index.html`; `RailpackProvider` is the generic fallback and defers runtime
+  detection to Railpack inside the later isolated builder. There is no
+  application-language switch in control-plane service code.
+- `Build` exists on the interface but real providers return
+  `ErrExecutionDisabled`. The dedicated `internal/builder` service now owns
+  mandatory CPU, memory, PID, source/image-size, timeout, cleanup, rootless,
+  no-host-mount, and network-disabled contracts plus the guarded lifecycle
+  `queued → preparing → building → exporting → terminal`. It receives only an
+  immutable source-artifact reference and a declarative plan; it has no source
+  path, repository credential, Docker socket, or control-plane database handle.
+  Its BuildKit client is injected behind a narrow contract, so adding a real
+  client library/transport remains a separately reviewed deployment change.
+  Lifecycle events stream only fixed safe status messages for now; durable,
+  redacted raw build output and browser delivery wait for the logs slice.
+  `FakeProvider` and `FakeExecutor` are test-only and never execute source.
+
+## Phase 4 registry and deployment foundation
+
+- `internal/registry` defines `Push`, `Delete`, `Exists`, and `ResolveDigest`
+  over tenant-scoped repositories of the form
+  `registry-host/opencloud/<account>/<project>/<service>`. It accepts and
+  returns only canonical `sha256:` OCI identities; mutable tags such as
+  `latest` cannot enter a deployment record. `DistributionProvider` adapts an
+  injected OCI Distribution-compatible client, keeping registry credentials and
+  its client dependency out of the public control-plane process.
+- `DeploymentService` publishes an isolated-builder artifact, verifies it
+  exists and resolves to the same digest, then creates the next immutable
+  revision. It holds a service-scoped PostgreSQL session advisory lock across
+  runtime start, health verification, atomic Caddy traffic switch, activation,
+  and retirement of the previous revision. Lifecycle and deployment events are
+  persisted transactionally; a database trigger rejects invalid state rewinds.
+- `internal/deployment.RuntimeProvider` is a restricted worker-only capability:
+  `Start`, `CheckHealth`, `SwitchCaddyTraffic`, and `Retire`. Its Caddy switch
+  contract requires errors to leave the prior route intact. The present fake is
+  test-only. No public deploy route, live runtime adapter, registry credential,
+  or new third-party registry client is enabled until source acquisition and
+  the hardened deployment-worker environment are available.
