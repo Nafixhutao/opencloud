@@ -18,8 +18,6 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/repository"
 )
 
-var bucketNamePattern = `^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$`
-
 // StorageBucketService owns bucket lifecycle and tenant-scoped operations.
 type StorageBucketService struct {
 	db         *bun.DB

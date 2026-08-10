@@ -4,7 +4,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -279,13 +278,4 @@ func (r *StorageBucketRepo) CheckNonEmpty(ctx context.Context, bucketID uuid.UUI
 		return false, err
 	}
 	return objectCount > 0, nil
-}
-
-// coerceMimeTypes converts allowed mime types to JSON.
-func coerceMimeTypes(types []string) json.RawMessage {
-	if len(types) == 0 {
-		return []byte("[]")
-	}
-	raw, _ := json.Marshal(types)
-	return raw
 }
