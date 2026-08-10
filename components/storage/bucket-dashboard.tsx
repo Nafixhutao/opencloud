@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { FolderPlusIcon } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from '@/components/ui/card';
@@ -17,10 +19,15 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, 
 import { FieldGroup, Field, FieldLabel, FieldError } from '@/components/ui/field';
 
 import { listBuckets, createBucket, deleteBucket, hasPendingBuckets, type StorageBucket } from '@/lib/storage';
-import { createBucketSchema } from '@/lib/bucket-validation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { CreateBucketValues } from '@/lib/bucket-validation';
+import { createBucketSchema, type CreateBucketValues } from '@/lib/bucket-validation';
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
 
 type Props = { projectId: string; initialData: StorageBucket[] };
 
@@ -150,6 +157,7 @@ export function BucketDashboard({ projectId, initialData }: Props) {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden sm:table-cell">Usage</TableHead>
                   <TableHead className="hidden sm:table-cell">Created</TableHead>
                   <TableHead className="w-0" />
                 </TableRow>
@@ -176,6 +184,19 @@ export function BucketDashboard({ projectId, initialData }: Props) {
                           <Spinner data-icon="inline-end" />
                         )}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{ width: `${Math.min(100, (bucket.bytes_used / bucket.storage_limit_bytes) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatBytes(bucket.bytes_used)} / {formatBytes(bucket.storage_limit_bytes)}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {new Date(bucket.created_at).toLocaleDateString()}

@@ -8,6 +8,7 @@ export type StorageBucket = {
   visibility: BucketVisibility;
   status: BucketStatus;
   storage_limit_bytes: number;
+  bytes_used: number;
   max_object_size_bytes: number;
   object_count: number;
   allowed_mime_types: string[];

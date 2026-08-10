@@ -61,6 +61,10 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		return nil, apperr.Validation("object exceeds maximum size",
 			apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("max %d bytes", bucket.MaxObjectSizeBytes)})
 	}
+	if bucket.BytesUsed+size > bucket.StorageLimitBytes {
+		return nil, apperr.Conflict("bucket storage quota exceeded").
+			WithDetails(apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("limit %d bytes, used %d bytes", bucket.StorageLimitBytes, bucket.BytesUsed)})
+	}
 	if contentType == "" {
 		contentType = detectContentType(key)
 	}
@@ -87,6 +91,9 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 	}
 	if err := s.objectRepo.Upsert(ctx, obj); err != nil {
 		return nil, apperr.Internal("failed to store object metadata").Wrap(err)
+	}
+	if _, err := s.bucketRepo.IncrementUsage(ctx, bucketID, info.Size); err != nil {
+		s.log.Warn("failed to update bucket usage counter", zap.Error(err))
 	}
 	return obj, nil
 }
@@ -173,6 +180,13 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 		return apperr.Internal("failed to load bucket").Wrap(err)
 	}
 
+	// Fetch object size before deletion for quota tracking.
+	objMeta, _ := s.objectRepo.GetByBucketAndKey(ctx, accountID, bucketID, key)
+	objSize := int64(0)
+	if objMeta != nil {
+		objSize = objMeta.Size
+	}
+
 	if err := s.provider.DeleteObject(ctx, provisioner.ObjectRef{
 		BucketPhysicalName: bucket.PhysicalName,
 		Key:                key,
@@ -188,6 +202,10 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 	if rows == 0 {
 		s.log.Warn("object deleted from provider but no metadata row found",
 			zap.String("key", key), zap.Stringer("bucket_id", bucketID))
+	} else {
+		if _, decErr := s.bucketRepo.DecrementUsage(ctx, bucketID, objSize); decErr != nil {
+			s.log.Warn("failed to decrement bucket usage counter", zap.Error(decErr))
+		}
 	}
 	return nil
 }

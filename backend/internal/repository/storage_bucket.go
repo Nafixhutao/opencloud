@@ -281,3 +281,25 @@ func (r *StorageBucketRepo) CheckNonEmpty(ctx context.Context, bucketID uuid.UUI
 	}
 	return objectCount > 0, nil
 }
+
+// IncrementUsage adds bytes and count for a bucket atomically.
+func (r *StorageBucketRepo) IncrementUsage(ctx context.Context, bucketID uuid.UUID, size int64) (sql.Result, error) {
+	return r.db.NewUpdate().
+		Model((*model.StorageBucket)(nil)).
+		Set("bytes_used = bytes_used + ?", size).
+		Set("object_count = object_count + 1").
+		Set("updated_at = now()").
+		Where("id = ?", bucketID).
+		Exec(ctx)
+}
+
+// DecrementUsage removes bytes and count for a bucket atomically.
+func (r *StorageBucketRepo) DecrementUsage(ctx context.Context, bucketID uuid.UUID, size int64) (sql.Result, error) {
+	return r.db.NewUpdate().
+		Model((*model.StorageBucket)(nil)).
+		Set("bytes_used = GREATEST(0, bytes_used - ?)", size).
+		Set("object_count = GREATEST(0, object_count - 1)").
+		Set("updated_at = now()").
+		Where("id = ?", bucketID).
+		Exec(ctx)
+}
