@@ -15,6 +15,7 @@ import (
 
 var _ ObjectStorageProvider = (*S3StorageProvider)(nil)
 
+// S3StorageConfig holds connection parameters for an S3-compatible backend.
 type S3StorageConfig struct {
 	Endpoint        string
 	Region          string
@@ -39,43 +40,36 @@ func (c S3StorageConfig) validate() error {
 	return nil
 }
 
+// S3StorageProvider implements ObjectStorageProvider using the AWS S3 SDK.
 type S3StorageProvider struct {
 	client *s3.Client
 }
 
+// NewS3StorageProvider creates an S3-compatible storage client.
 func NewS3StorageProvider(ctx context.Context, cfg S3StorageConfig) (*S3StorageProvider, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-
-	resolver := aws.EndpointResolverWithOptionsFunc(
-		func(service, region string, _ ...any) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL:               cfg.Endpoint,
-				SigningRegion:     cfg.Region,
-				HostnameImmutable: true,
-			}, nil
-		},
-	)
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(cfg.Region),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		),
-		awsconfig.WithEndpointResolverWithOptions(resolver),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
 
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(cfg.Endpoint)
 		o.UsePathStyle = cfg.UsePathStyle
 	})
 
 	return &S3StorageProvider{client: client}, nil
 }
 
+// CreateBucket creates a new bucket using the S3 API.
 func (p *S3StorageProvider) CreateBucket(ctx context.Context, spec BucketSpec) error {
 	_, err := p.client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(spec.PhysicalName),
@@ -86,6 +80,7 @@ func (p *S3StorageProvider) CreateBucket(ctx context.Context, spec BucketSpec) e
 	return nil
 }
 
+// DeleteBucket removes a bucket using the S3 API.
 func (p *S3StorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) error {
 	_, err := p.client.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(ref.PhysicalName),
@@ -96,6 +91,7 @@ func (p *S3StorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) err
 	return nil
 }
 
+// BucketExists checks whether a bucket exists using the S3 HeadBucket API.
 func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bool, error) {
 	_, err := p.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(ref.PhysicalName),
