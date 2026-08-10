@@ -20,15 +20,16 @@ import (
 
 // StorageBucketService owns bucket lifecycle and tenant-scoped operations.
 type StorageBucketService struct {
-	db         *bun.DB
-	bucketRepo *repository.StorageBucketRepo
-	jobRepo    *repository.JobRepo
-	audit      *repository.AuditRepo
+	db          *bun.DB
+	bucketRepo  *repository.StorageBucketRepo
+	projectRepo *repository.ProjectRepo
+	jobRepo     *repository.JobRepo
+	audit       *repository.AuditRepo
 }
 
 // NewStorageBucketService constructs a StorageBucketService.
-func NewStorageBucketService(db *bun.DB, bucketRepo *repository.StorageBucketRepo, jobRepo *repository.JobRepo, audit *repository.AuditRepo) *StorageBucketService {
-	return &StorageBucketService{db: db, bucketRepo: bucketRepo, jobRepo: jobRepo, audit: audit}
+func NewStorageBucketService(db *bun.DB, bucketRepo *repository.StorageBucketRepo, projectRepo *repository.ProjectRepo, jobRepo *repository.JobRepo, audit *repository.AuditRepo) *StorageBucketService {
+	return &StorageBucketService{db: db, bucketRepo: bucketRepo, projectRepo: projectRepo, jobRepo: jobRepo, audit: audit}
 }
 
 // CreateBucketRequest is validated at handler layer first.
@@ -46,6 +47,14 @@ func (s *StorageBucketService) CreateBucket(ctx context.Context, userID string, 
 	// Validate bucket name
 	if err := validateBucketName(req.Name); err != nil {
 		return nil, apperr.Validation("invalid bucket name", apperr.FieldIssue{Field: "name", Issue: err.Error()})
+	}
+
+	// Verify the tenant owns the project before inserting anything.
+	if _, err := s.projectRepo.GetProjectByAccount(ctx, accountID, projectID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, apperr.PermissionDenied("permission denied: project not found for account")
+		}
+		return nil, apperr.Internal("failed to verify project ownership").Wrap(err)
 	}
 
 	// Check name uniqueness within project

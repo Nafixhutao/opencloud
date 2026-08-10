@@ -163,7 +163,7 @@ func New(
 
 	// Object storage services (SLICE 1).
 	bucketRepo := repository.NewStorageBucketRepo(db)
-	bucketSvc := service.NewStorageBucketService(db, bucketRepo, jobRepo, auditRepo)
+	bucketSvc := service.NewStorageBucketService(db, bucketRepo, projectRepo, jobRepo, auditRepo)
 	bucketH := handler.NewStorageBucketHandler(bucketSvc)
 
 	v1 := r.Group("/api/v1")

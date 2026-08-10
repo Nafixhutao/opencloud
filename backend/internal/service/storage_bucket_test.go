@@ -25,7 +25,7 @@ func TestStorageBucketServiceCreateTenantIsolation(t *testing.T) {
 	jobRepo := repository.NewJobRepo(db)
 	auditRepo := repository.NewAuditRepo(db)
 
-	svc := service.NewStorageBucketService(db, bucketRepo, jobRepo, auditRepo)
+	svc := service.NewStorageBucketService(db, bucketRepo, projectRepo, jobRepo, auditRepo)
 
 	account1, err := acctRepo.CreateAccount(ctx, "account-1")
 	require.NoError(t, err)
@@ -48,9 +48,10 @@ func TestStorageBucketServiceCreateTenantIsolation(t *testing.T) {
 	_, err = svc.CreateBucket(ctx, userID, account2.ID, project1.ID, "unique-key", service.CreateBucketRequest{
 		Name: "test-bucket",
 	})
-	errTyped := apperr.PermissionDenied("permission denied")
-	require.ErrorIs(t, err, errTyped)
-	require.Contains(t, err.Error(), "permission denied")
+	var ae *apperr.Error
+	require.ErrorAs(t, err, &ae)
+	require.Equal(t, "FORBIDDEN", ae.Code)
+	require.Contains(t, ae.Message, "permission denied")
 }
 
 func TestStorageBucketServiceIdempotencySameKey(t *testing.T) {
@@ -65,7 +66,7 @@ func TestStorageBucketServiceIdempotencySameKey(t *testing.T) {
 	jobRepo := repository.NewJobRepo(db)
 	auditRepo := repository.NewAuditRepo(db)
 
-	svc := service.NewStorageBucketService(db, bucketRepo, jobRepo, auditRepo)
+	svc := service.NewStorageBucketService(db, bucketRepo, projectRepo, jobRepo, auditRepo)
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)

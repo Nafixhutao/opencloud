@@ -54,6 +54,20 @@ CREATE INDEX idx_storage_buckets_account_project_created
     ON storage_buckets (account_id, project_id, created_at DESC)
     WHERE deleted_at IS NULL;
 
+-- Extend the jobs kind whitelist with storage bucket operations (see
+-- 20260727010000 and 20260730010000 for the same pattern).
+ALTER TABLE jobs DROP CONSTRAINT jobs_kind_check;
+ALTER TABLE jobs ADD CONSTRAINT jobs_kind_check
+    CHECK (kind IN (
+        'provision_site', 'delete_site', 'suspend_site',
+        'resume_site', 'cleanup_site', 'reconcile_site',
+        'provision_database', 'delete_database', 'cleanup_database',
+        'verify_domain', 'provision_domain', 'deprovision_domain',
+        'reconcile_domain', 'observe_domain_certificate',
+        'provision_storage_bucket', 'delete_storage_bucket',
+        'reconcile_storage_bucket'
+    ));
+
 -- IMPORTANT OPERATIONAL WARNING:
 -- ON DELETE RESTRICT on both account_id and project_id prevents deletion of accounts/projects
 -- that have existing storage buckets. This protects against orphaning physical RustFS/S3 buckets.
