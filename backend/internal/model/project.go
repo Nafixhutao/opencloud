@@ -79,20 +79,20 @@ type Project struct {
 type Service struct {
 	bun.BaseModel `bun:"table:services,alias:srv"`
 
-	ID             uuid.UUID  `bun:"id,pk,type:uuid,default:gen_random_uuid()" json:"id"`
-	AccountID      uuid.UUID  `bun:"account_id,notnull,type:uuid" json:"account_id"`
-	ProjectID      uuid.UUID  `bun:"project_id,notnull,type:uuid" json:"project_id"`
-	Name           string     `bun:"name,notnull" json:"name"`
-	ServiceType    string     `bun:"service_type,notnull" json:"service_type"`
-	SourceRoot     string     `bun:"source_root,notnull" json:"source_root"`
-	GitRepoURL     string     `bun:"git_repo_url,notnull" json:"git_repo_url"`
-	GitBranch      string     `bun:"git_branch,notnull" json:"git_branch"`
-	StoragePersistBytes int64  `bun:"storage_persist_bytes,notnull" json:"storage_persist_bytes"`
-	Status         string     `bun:"status,notnull" json:"status"`
-	IdempotencyKey *string    `bun:"idempotency_key" json:"-"`
-	CreatedAt      time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
-	UpdatedAt      time.Time  `bun:"updated_at,notnull,default:now()" json:"updated_at"`
-	DeletedAt      *time.Time `bun:"deleted_at" json:"deleted_at,omitempty"`
+	ID                  uuid.UUID  `bun:"id,pk,type:uuid,default:gen_random_uuid()" json:"id"`
+	AccountID           uuid.UUID  `bun:"account_id,notnull,type:uuid" json:"account_id"`
+	ProjectID           uuid.UUID  `bun:"project_id,notnull,type:uuid" json:"project_id"`
+	Name                string     `bun:"name,notnull" json:"name"`
+	ServiceType         string     `bun:"service_type,notnull" json:"service_type"`
+	SourceRoot          string     `bun:"source_root,notnull" json:"source_root"`
+	GitRepoURL          string     `bun:"git_repo_url,notnull" json:"git_repo_url"`
+	GitBranch           string     `bun:"git_branch,notnull" json:"git_branch"`
+	StoragePersistBytes int64      `bun:"storage_persist_bytes,notnull" json:"storage_persist_bytes"`
+	Status              string     `bun:"status,notnull" json:"status"`
+	IdempotencyKey      *string    `bun:"idempotency_key" json:"-"`
+	CreatedAt           time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
+	UpdatedAt           time.Time  `bun:"updated_at,notnull,default:now()" json:"updated_at"`
+	DeletedAt           *time.Time `bun:"deleted_at" json:"deleted_at,omitempty"`
 }
 
 // Deployment is an immutable OCI revision. Build and runtime workers will
