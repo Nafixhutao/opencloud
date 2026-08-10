@@ -8,6 +8,7 @@ const (
 	JobDestroyPreview = "destroy_preview"
 )
 
+// Max retry attempts for build/deploy jobs.
 const (
 	MaxCloneAttempts  = 3
 	MaxBuildAttempts  = 3
