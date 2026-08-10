@@ -85,7 +85,7 @@ func NewFakeStorageProvider() *FakeStorageProvider {
 }
 
 // CreateBucket implements ObjectStorageProvider.CreateBucket.
-func (f *FakeStorageProvider) CreateBucket(ctx context.Context, spec BucketSpec) error {
+func (f *FakeStorageProvider) CreateBucket(_ context.Context, spec BucketSpec) error {
 	if _, exists := f.buckets[spec.PhysicalName]; exists {
 		return ErrBucketExists
 	}
@@ -99,7 +99,7 @@ func (f *FakeStorageProvider) CreateBucket(ctx context.Context, spec BucketSpec)
 }
 
 // DeleteBucket implements ObjectStorageProvider.DeleteBucket.
-func (f *FakeStorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) error {
+func (f *FakeStorageProvider) DeleteBucket(_ context.Context, ref BucketRef) error {
 	bucket, exists := f.buckets[ref.PhysicalName]
 	if !exists {
 		return ErrBucketNotFound
@@ -113,7 +113,7 @@ func (f *FakeStorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) e
 }
 
 // BucketExists implements ObjectStorageProvider.BucketExists.
-func (f *FakeStorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bool, error) {
+func (f *FakeStorageProvider) BucketExists(_ context.Context, ref BucketRef) (bool, error) {
 	_, exists := f.buckets[ref.PhysicalName]
 	return exists, nil
 }
