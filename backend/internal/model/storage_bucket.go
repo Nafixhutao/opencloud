@@ -54,6 +54,11 @@ type StorageBucketPayload interface {
 	Kind() string
 }
 
+// ProvisionStorageBucketPayload is the unmarshaled job payload.
+type ProvisionStorageBucketPayload struct {
+	BucketID uuid.UUID `json:"bucket_id"`
+}
+
 // Kind returns the job type for ProvisionStorageBucketPayload.
 func (p ProvisionStorageBucketPayload) Kind() string {
 	return JobProvisionStorageBucket
