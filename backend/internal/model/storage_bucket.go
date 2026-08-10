@@ -54,13 +54,8 @@ type StorageBucketPayload interface {
 	Kind() string
 }
 
-// ProvisionStorageBucketPayload is the unmarshaled job payload.
-type ProvisionStorageBucketPayload struct {
-	BucketID uuid.UUID `json:"bucket_id"`
-}
-
+// Kind returns the job type for ProvisionStorageBucketPayload.
 func (p ProvisionStorageBucketPayload) Kind() string {
-	// JobProvisionStorageBucket identifies this payload as a provision bucket job.
 	return JobProvisionStorageBucket
 }
 
@@ -69,8 +64,8 @@ type DeleteStorageBucketPayload struct {
 	BucketID uuid.UUID `json:"bucket_id"`
 }
 
+// Kind returns the job type for DeleteStorageBucketPayload.
 func (p DeleteStorageBucketPayload) Kind() string {
-	// JobDeleteStorageBucket identifies this payload as a delete bucket job.
 	return JobDeleteStorageBucket
 }
 
@@ -79,7 +74,7 @@ type ReconcileStorageBucketPayload struct {
 	BucketID uuid.UUID `json:"bucket_id"`
 }
 
+// Kind returns the job type for ReconcileStorageBucketPayload.
 func (p ReconcileStorageBucketPayload) Kind() string {
-	// JobReconcileStorageBucket identifies this payload as a reconcile bucket job.
 	return JobReconcileStorageBucket
 }

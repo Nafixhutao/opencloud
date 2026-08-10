@@ -290,14 +290,14 @@ func TestIdempotentPhysicalNameStability(t *testing.T) {
 // Helper provider that always fails
 type alwaysFailProvider struct{}
 
-func (a *alwaysFailProvider) CreateBucket(_ context.Context, spec provisioner.BucketSpec) error {
+func (a *alwaysFailProvider) CreateBucket(_ context.Context, _ provisioner.BucketSpec) error {
 	return errors.New("permanent provision failure")
 }
 
-func (a *alwaysFailProvider) DeleteBucket(_ context.Context, ref provisioner.BucketRef) error {
+func (a *alwaysFailProvider) DeleteBucket(_ context.Context, _ provisioner.BucketRef) error {
 	return provisioner.ErrBucketNotFound
 }
 
-func (a *alwaysFailProvider) BucketExists(_ context.Context, ref provisioner.BucketRef) (bool, error) {
+func (a *alwaysFailProvider) BucketExists(_ context.Context, _ provisioner.BucketRef) (bool, error) {
 	return false, nil
 }

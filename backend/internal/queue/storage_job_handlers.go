@@ -434,9 +434,10 @@ func (h *StorageJobHandlers) restoreFromTerminal(ctx context.Context, bucket mod
 		bucketRepo := h.bucketRepo.WithDB(tx)
 
 		var status string
-		if bucket.Status == model.BucketFailed {
+		switch bucket.Status {
+		case model.BucketFailed:
 			status = model.BucketActive
-		} else if bucket.Status == model.BucketDeleting {
+		case model.BucketDeleting:
 			status = model.BucketDeleting // Keep deleting but reset error
 		}
 		result, err := bucketRepo.UpdateStatusNoError(ctx, bucket.ID, status, now)

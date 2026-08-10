@@ -13,11 +13,6 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/model"
 )
 
-const (
-	minBucketNameLength = 1
-	maxBucketNameLength = 63
-)
-
 // StorageBucketRepo manages tenant-owned storage buckets.
 type StorageBucketRepo struct {
 	db bun.IDB

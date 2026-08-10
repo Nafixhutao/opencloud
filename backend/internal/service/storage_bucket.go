@@ -367,11 +367,11 @@ func validateBucketName(name string) error {
 	// Full regex validation
 	for i, r := range name {
 		if i == 0 {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) { // nolint:staticcheck
 				return errors.New("bucket name must start with lowercase letter or digit")
 			}
 		} else {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') { // nolint:staticcheck
 				return errors.New("bucket name can only contain lowercase letters, digits, and hyphens")
 			}
 		}
