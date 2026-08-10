@@ -16,19 +16,26 @@ import (
 )
 
 var (
-	ErrBucketExists     = errors.New("bucket already exists")
-	ErrBucketNotFound   = errors.New("bucket not found")
-	ErrObjectNotFound   = errors.New("object not found")
+	// ErrBucketExists is returned when a bucket already exists.
+	ErrBucketExists = errors.New("bucket already exists")
+	// ErrBucketNotFound is returned when a bucket is not found.
+	ErrBucketNotFound = errors.New("bucket not found")
+	// ErrObjectNotFound is returned when an object is not found.
+	ErrObjectNotFound = errors.New("object not found")
+	// ErrInvalidObjectKey is returned when an object key is invalid.
 	ErrInvalidObjectKey = errors.New("invalid object key")
-	ErrObjectTooLarge   = errors.New("object exceeds maximum size")
+	// ErrObjectTooLarge is returned when an object exceeds the maximum size.
+	ErrObjectTooLarge = errors.New("object exceeds maximum size")
 )
 
+// BucketNotEmptyError is returned when a bucket cannot be deleted because it contains objects.
 type BucketNotEmptyError struct {
 	Count *int64
 }
 
 func (e BucketNotEmptyError) Error() string { return "bucket is not empty" }
 
+// IsBucketNotEmpty reports whether err is a BucketNotEmptyError.
 func IsBucketNotEmpty(err error) bool {
 	var bucketErr BucketNotEmptyError
 	return errors.As(err, &bucketErr)
@@ -36,6 +43,7 @@ func IsBucketNotEmpty(err error) bool {
 
 // --- Bucket operations ---
 
+// ObjectStorageProvider defines the interface for object storage operations.
 type ObjectStorageProvider interface {
 	CreateBucket(ctx context.Context, spec BucketSpec) error
 	DeleteBucket(ctx context.Context, ref BucketRef) error
@@ -53,6 +61,7 @@ type ObjectStorageProvider interface {
 
 // --- Types ---
 
+// BucketSpec holds the configuration for creating a bucket.
 type BucketSpec struct {
 	BucketID     uuid.UUID
 	AccountID    uuid.UUID
@@ -60,17 +69,20 @@ type BucketSpec struct {
 	Visibility   string
 }
 
+// BucketRef is a reference to a physical bucket.
 type BucketRef struct {
 	BucketID     uuid.UUID
 	AccountID    uuid.UUID
 	PhysicalName string
 }
 
+// ObjectRef is a reference to an object within a bucket.
 type ObjectRef struct {
 	BucketPhysicalName string
 	Key                string
 }
 
+// PutObjectSpec holds the data for uploading an object.
 type PutObjectSpec struct {
 	Bucket      string
 	Key         string
@@ -79,12 +91,14 @@ type PutObjectSpec struct {
 	ContentType string
 }
 
+// ListObjectsOptions holds options for listing objects.
 type ListObjectsOptions struct {
 	Prefix            string
 	MaxKeys           int32
 	ContinuationToken string
 }
 
+// ObjectInfo holds metadata about a stored object.
 type ObjectInfo struct {
 	Key          string
 	Size         int64
@@ -95,16 +109,19 @@ type ObjectInfo struct {
 
 // --- FakeStorageProvider ---
 
+// FakeStorageProvider is an in-memory ObjectStorageProvider for testing.
 type FakeStorageProvider struct {
 	buckets map[string]*FakeBucketState
 }
 
+// FakeBucketState holds the state of a fake bucket.
 type FakeBucketState struct {
 	PhysicalName string
 	Visibility   string
 	Objects      map[string]*FakeObjectState
 }
 
+// FakeObjectState holds the state of a fake object.
 type FakeObjectState struct {
 	Key         string
 	Data        []byte
@@ -113,6 +130,7 @@ type FakeObjectState struct {
 	Modified    time.Time
 }
 
+// NewFakeStorageProvider creates a new in-memory fake storage provider.
 func NewFakeStorageProvider() *FakeStorageProvider {
 	return &FakeStorageProvider{buckets: make(map[string]*FakeBucketState)}
 }
@@ -126,6 +144,7 @@ func (f *FakeStorageProvider) ensureBucket(physicalName string) *FakeBucketState
 	return b
 }
 
+// CreateBucket creates a new fake bucket.
 func (f *FakeStorageProvider) CreateBucket(_ context.Context, spec BucketSpec) error {
 	if _, exists := f.buckets[spec.PhysicalName]; exists {
 		return ErrBucketExists
@@ -138,6 +157,7 @@ func (f *FakeStorageProvider) CreateBucket(_ context.Context, spec BucketSpec) e
 	return nil
 }
 
+// DeleteBucket removes a fake bucket.
 func (f *FakeStorageProvider) DeleteBucket(_ context.Context, ref BucketRef) error {
 	b, exists := f.buckets[ref.PhysicalName]
 	if !exists {
@@ -151,11 +171,13 @@ func (f *FakeStorageProvider) DeleteBucket(_ context.Context, ref BucketRef) err
 	return nil
 }
 
+// BucketExists checks whether a fake bucket exists.
 func (f *FakeStorageProvider) BucketExists(_ context.Context, ref BucketRef) (bool, error) {
 	_, exists := f.buckets[ref.PhysicalName]
 	return exists, nil
 }
 
+// PutObject stores an object in the fake bucket.
 func (f *FakeStorageProvider) PutObject(_ context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
 	b := f.ensureBucket(spec.Bucket)
 	data, err := io.ReadAll(spec.Body)
@@ -180,6 +202,7 @@ func (f *FakeStorageProvider) PutObject(_ context.Context, spec PutObjectSpec) (
 	}, nil
 }
 
+// GetObject retrieves an object from the fake bucket.
 func (f *FakeStorageProvider) GetObject(_ context.Context, ref ObjectRef) (io.ReadCloser, *ObjectInfo, error) {
 	b, ok := f.buckets[ref.BucketPhysicalName]
 	if !ok {
@@ -199,6 +222,7 @@ func (f *FakeStorageProvider) GetObject(_ context.Context, ref ObjectRef) (io.Re
 	return io.NopCloser(bytes.NewReader(obj.Data)), info, nil
 }
 
+// ListObjects lists objects in the fake bucket.
 func (f *FakeStorageProvider) ListObjects(_ context.Context, ref ObjectRef, opts ListObjectsOptions) ([]ObjectInfo, string, error) {
 	b, ok := f.buckets[ref.BucketPhysicalName]
 	if !ok {
@@ -241,6 +265,7 @@ func (f *FakeStorageProvider) ListObjects(_ context.Context, ref ObjectRef, opts
 	return objects, nextToken, nil
 }
 
+// DeleteObject removes an object from the fake bucket.
 func (f *FakeStorageProvider) DeleteObject(_ context.Context, ref ObjectRef) error {
 	b, ok := f.buckets[ref.BucketPhysicalName]
 	if !ok {
@@ -253,6 +278,7 @@ func (f *FakeStorageProvider) DeleteObject(_ context.Context, ref ObjectRef) err
 	return nil
 }
 
+// HeadObject returns metadata for an object in the fake bucket.
 func (f *FakeStorageProvider) HeadObject(_ context.Context, ref ObjectRef) (*ObjectInfo, error) {
 	b, ok := f.buckets[ref.BucketPhysicalName]
 	if !ok {
@@ -271,6 +297,7 @@ func (f *FakeStorageProvider) HeadObject(_ context.Context, ref ObjectRef) (*Obj
 	}, nil
 }
 
+// PresignedGetURL generates a fake presigned URL for downloading an object.
 func (f *FakeStorageProvider) PresignedGetURL(_ context.Context, ref ObjectRef, _ time.Duration) (string, error) {
 	if b, ok := f.buckets[ref.BucketPhysicalName]; ok {
 		if _, ok := b.Objects[ref.Key]; ok {
@@ -280,6 +307,7 @@ func (f *FakeStorageProvider) PresignedGetURL(_ context.Context, ref ObjectRef, 
 	return "", ErrObjectNotFound
 }
 
+// PresignedPutURL generates a fake presigned URL for uploading an object.
 func (f *FakeStorageProvider) PresignedPutURL(_ context.Context, ref ObjectRef, _ time.Duration) (string, error) {
 	if _, ok := f.buckets[ref.BucketPhysicalName]; ok {
 		return "http://fake-presigned.example.com/put/" + ref.BucketPhysicalName + "/" + ref.Key, nil
@@ -287,6 +315,7 @@ func (f *FakeStorageProvider) PresignedPutURL(_ context.Context, ref ObjectRef, 
 	return "", ErrBucketNotFound
 }
 
+// SetBucketsForTest replaces the internal bucket map for testing.
 func (f *FakeStorageProvider) SetBucketsForTest(buckets map[string]*FakeBucketState) {
 	f.buckets = buckets
 }

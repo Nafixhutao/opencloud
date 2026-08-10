@@ -41,7 +41,7 @@ func TestFakeProviderObjectOperations(t *testing.T) {
 
 		rc, info2, err := p.GetObject(ctx, provisioner.ObjectRef{BucketPhysicalName: bucket, Key: "hello.txt"})
 		require.NoError(t, err)
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		buf := new(bytes.Buffer)
 		_, _ = buf.ReadFrom(rc)
 		require.Equal(t, "hello world", buf.String())
@@ -55,9 +55,12 @@ func TestFakeProviderObjectOperations(t *testing.T) {
 	})
 
 	t.Run("list-objects", func(t *testing.T) {
-		p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "sub/a.txt", Body: strings.NewReader("a"), ContentType: "text/plain"})
-		p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "sub/b.txt", Body: strings.NewReader("b"), ContentType: "text/plain"})
-		p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "root.txt", Body: strings.NewReader("r"), ContentType: "text/plain"})
+		_, err := p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "sub/a.txt", Body: strings.NewReader("a"), ContentType: "text/plain"})
+		require.NoError(t, err)
+		_, err = p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "sub/b.txt", Body: strings.NewReader("b"), ContentType: "text/plain"})
+		require.NoError(t, err)
+		_, err = p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "root.txt", Body: strings.NewReader("r"), ContentType: "text/plain"})
+		require.NoError(t, err)
 
 		objects, token, err := p.ListObjects(ctx, provisioner.ObjectRef{BucketPhysicalName: bucket}, provisioner.ListObjectsOptions{
 			Prefix:  "sub/",
@@ -87,7 +90,8 @@ func TestFakeProviderObjectOperations(t *testing.T) {
 	})
 
 	t.Run("presigned-get-url", func(t *testing.T) {
-		p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "presign.txt", Body: strings.NewReader("x"), ContentType: "text/plain"})
+		_, err := p.PutObject(ctx, provisioner.PutObjectSpec{Bucket: bucket, Key: "presign.txt", Body: strings.NewReader("x"), ContentType: "text/plain"})
+		require.NoError(t, err)
 		url, err := p.PresignedGetURL(ctx, provisioner.ObjectRef{BucketPhysicalName: bucket, Key: "presign.txt"}, 15*time.Minute)
 		require.NoError(t, err)
 		require.Contains(t, url, bucket)

@@ -22,6 +22,7 @@ import (
 
 const maxObjectKeyLength = 1024
 
+// StorageObjectService manages object storage operations.
 type StorageObjectService struct {
 	log        *zap.Logger
 	bucketRepo *repository.StorageBucketRepo
@@ -29,6 +30,7 @@ type StorageObjectService struct {
 	provider   provisioner.ObjectStorageProvider
 }
 
+// NewStorageObjectService creates a new StorageObjectService.
 func NewStorageObjectService(
 	log *zap.Logger,
 	bucketRepo *repository.StorageBucketRepo,
@@ -38,6 +40,7 @@ func NewStorageObjectService(
 	return &StorageObjectService{log: log, bucketRepo: bucketRepo, objectRepo: objectRepo, provider: provider}
 }
 
+// PutObject stores an object in the bucket and records its metadata.
 func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketID uuid.UUID, key string, body io.Reader, size int64, contentType string) (*model.StorageObject, error) {
 	if err := validateObjectKey(key); err != nil {
 		return nil, err
@@ -88,6 +91,7 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 	return obj, nil
 }
 
+// GetObject retrieves an object's content and metadata.
 func (s *StorageObjectService) GetObject(ctx context.Context, accountID, bucketID uuid.UUID, key string) (io.ReadCloser, *ObjectDownloadInfo, error) {
 	if err := validateObjectKey(key); err != nil {
 		return nil, nil, err
@@ -117,6 +121,7 @@ func (s *StorageObjectService) GetObject(ctx context.Context, accountID, bucketI
 	}, nil
 }
 
+// ListObjects lists objects in a bucket with optional prefix and pagination.
 func (s *StorageObjectService) ListObjects(ctx context.Context, accountID, bucketID uuid.UUID, prefix, continuationToken string, limit int32) ([]ObjectItem, string, error) {
 	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
 	if err != nil {
@@ -154,6 +159,7 @@ func (s *StorageObjectService) ListObjects(ctx context.Context, accountID, bucke
 	return result, nextToken, nil
 }
 
+// DeleteObject removes an object from the bucket and soft-deletes its metadata.
 func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, bucketID uuid.UUID, key string) error {
 	if err := validateObjectKey(key); err != nil {
 		return err
@@ -186,6 +192,7 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 	return nil
 }
 
+// HeadObject returns metadata for an object without its body.
 func (s *StorageObjectService) HeadObject(ctx context.Context, accountID, bucketID uuid.UUID, key string) (*ObjectStatInfo, error) {
 	if err := validateObjectKey(key); err != nil {
 		return nil, err
@@ -216,6 +223,7 @@ func (s *StorageObjectService) HeadObject(ctx context.Context, accountID, bucket
 	}, nil
 }
 
+// PresignedGetURL generates a presigned URL for downloading an object.
 func (s *StorageObjectService) PresignedGetURL(ctx context.Context, accountID, bucketID uuid.UUID, key string, expiry time.Duration) (string, error) {
 	if err := validateObjectKey(key); err != nil {
 		return "", err
@@ -239,6 +247,7 @@ func (s *StorageObjectService) PresignedGetURL(ctx context.Context, accountID, b
 	return url, nil
 }
 
+// PresignedPutURL generates a presigned URL for uploading an object.
 func (s *StorageObjectService) PresignedPutURL(ctx context.Context, accountID, bucketID uuid.UUID, key string, expiry time.Duration) (string, error) {
 	if err := validateObjectKey(key); err != nil {
 		return "", err
@@ -262,6 +271,7 @@ func (s *StorageObjectService) PresignedPutURL(ctx context.Context, accountID, b
 	return url, nil
 }
 
+// ObjectDownloadInfo holds metadata for a downloaded object.
 type ObjectDownloadInfo struct {
 	Key         string
 	Size        int64
@@ -269,6 +279,7 @@ type ObjectDownloadInfo struct {
 	ETag        string
 }
 
+// ObjectItem represents an object in a list response.
 type ObjectItem struct {
 	Key          string `json:"key"`
 	Size         int64  `json:"size"`
@@ -277,6 +288,7 @@ type ObjectItem struct {
 	LastModified string `json:"last_modified"`
 }
 
+// ObjectStatInfo holds object metadata for stat/head responses.
 type ObjectStatInfo struct {
 	Key          string `json:"key"`
 	Size         int64  `json:"size"`

@@ -7,6 +7,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// StorageObject represents an object stored in a tenant bucket.
 type StorageObject struct {
 	bun.BaseModel `bun:"table:storage_objects,alias:o"`
 

@@ -14,14 +14,17 @@ import (
 	service "github.com/nazxf/opencloud/backend/internal/service"
 )
 
+// StorageObjectHandler serves tenant-scoped object storage endpoints.
 type StorageObjectHandler struct {
 	svc *service.StorageObjectService
 }
 
+// NewStorageObjectHandler constructs an object storage handler.
 func NewStorageObjectHandler(svc *service.StorageObjectService) *StorageObjectHandler {
 	return &StorageObjectHandler{svc: svc}
 }
 
+// PutObject handles object upload via raw body.
 func (h *StorageObjectHandler) PutObject(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -45,6 +48,7 @@ func (h *StorageObjectHandler) PutObject(c *gin.Context) {
 	c.JSON(http.StatusOK, toObjectResponse(obj))
 }
 
+// GetObject handles object download as a streaming response.
 func (h *StorageObjectHandler) GetObject(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -58,7 +62,7 @@ func (h *StorageObjectHandler) GetObject(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	if info.ContentType != "" {
 		c.Header("Content-Type", info.ContentType)
@@ -72,6 +76,7 @@ func (h *StorageObjectHandler) GetObject(c *gin.Context) {
 	_, _ = io.Copy(c.Writer, body)
 }
 
+// ListObjects returns paginated objects for a bucket.
 func (h *StorageObjectHandler) ListObjects(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -98,6 +103,7 @@ func (h *StorageObjectHandler) ListObjects(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// DeleteObject removes an object from a bucket.
 func (h *StorageObjectHandler) DeleteObject(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -113,6 +119,7 @@ func (h *StorageObjectHandler) DeleteObject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
+// HeadObject returns object metadata.
 func (h *StorageObjectHandler) HeadObject(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -129,6 +136,7 @@ func (h *StorageObjectHandler) HeadObject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": info})
 }
 
+// PresignedGetURL generates a time-limited download URL.
 func (h *StorageObjectHandler) PresignedGetURL(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {
@@ -150,6 +158,7 @@ func (h *StorageObjectHandler) PresignedGetURL(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"url": url, "expires_in_seconds": int64(expiry.Seconds())}})
 }
 
+// PresignedPutURL generates a time-limited upload URL.
 func (h *StorageObjectHandler) PresignedPutURL(c *gin.Context) {
 	_, bucketID, ok := projectBucketParams(c)
 	if !ok {

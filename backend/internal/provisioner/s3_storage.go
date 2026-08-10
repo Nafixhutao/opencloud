@@ -110,6 +110,7 @@ func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bo
 
 // --- Object operations ---
 
+// PutObject uploads an object to the S3 bucket.
 func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(spec.Bucket),
@@ -133,6 +134,7 @@ func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (
 	}, nil
 }
 
+// GetObject retrieves an object from the S3 bucket.
 func (p *S3StorageProvider) GetObject(ctx context.Context, ref ObjectRef) (io.ReadCloser, *ObjectInfo, error) {
 	out, err := p.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(ref.BucketPhysicalName),
@@ -151,6 +153,7 @@ func (p *S3StorageProvider) GetObject(ctx context.Context, ref ObjectRef) (io.Re
 	return out.Body, info, nil
 }
 
+// ListObjects lists objects in the S3 bucket with the given prefix and options.
 func (p *S3StorageProvider) ListObjects(ctx context.Context, ref ObjectRef, opts ListObjectsOptions) ([]ObjectInfo, string, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket:            aws.String(ref.BucketPhysicalName),
@@ -179,6 +182,7 @@ func (p *S3StorageProvider) ListObjects(ctx context.Context, ref ObjectRef, opts
 	return objects, nextToken, nil
 }
 
+// DeleteObject removes an object from the S3 bucket.
 func (p *S3StorageProvider) DeleteObject(ctx context.Context, ref ObjectRef) error {
 	_, err := p.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(ref.BucketPhysicalName),
@@ -190,6 +194,7 @@ func (p *S3StorageProvider) DeleteObject(ctx context.Context, ref ObjectRef) err
 	return nil
 }
 
+// HeadObject returns metadata for an object in the S3 bucket.
 func (p *S3StorageProvider) HeadObject(ctx context.Context, ref ObjectRef) (*ObjectInfo, error) {
 	out, err := p.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(ref.BucketPhysicalName),
@@ -207,6 +212,7 @@ func (p *S3StorageProvider) HeadObject(ctx context.Context, ref ObjectRef) (*Obj
 	}, nil
 }
 
+// PresignedGetURL generates a presigned URL for downloading an object.
 func (p *S3StorageProvider) PresignedGetURL(ctx context.Context, ref ObjectRef, expiry time.Duration) (string, error) {
 	req, err := p.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(ref.BucketPhysicalName),
@@ -218,6 +224,7 @@ func (p *S3StorageProvider) PresignedGetURL(ctx context.Context, ref ObjectRef, 
 	return req.URL, nil
 }
 
+// PresignedPutURL generates a presigned URL for uploading an object.
 func (p *S3StorageProvider) PresignedPutURL(ctx context.Context, ref ObjectRef, expiry time.Duration) (string, error) {
 	req, err := p.presign.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(ref.BucketPhysicalName),

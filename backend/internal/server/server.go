@@ -171,7 +171,8 @@ func New(
 	objectRepo := repository.NewStorageObjectRepo(db)
 	var objectH *handler.StorageObjectHandler
 	storageProviderType := os.Getenv("STORAGE_PROVIDER")
-	if storageProviderType == "s3" {
+	switch storageProviderType {
+	case "s3":
 		s3cfg := provisioner.S3StorageConfig{
 			Endpoint:        os.Getenv("STORAGE_S3_ENDPOINT"),
 			Region:          os.Getenv("STORAGE_S3_REGION"),
@@ -188,7 +189,7 @@ func New(
 		}
 		objectSvc := service.NewStorageObjectService(log, bucketRepo, objectRepo, p)
 		objectH = handler.NewStorageObjectHandler(objectSvc)
-	} else if storageProviderType == "fake" {
+	case "fake":
 		p := provisioner.NewFakeStorageProvider()
 		objectSvc := service.NewStorageObjectService(log, bucketRepo, objectRepo, p)
 		objectH = handler.NewStorageObjectHandler(objectSvc)
