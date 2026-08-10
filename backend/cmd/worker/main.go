@@ -157,6 +157,17 @@ func main() {
 		processor.SetStorageHandlers(storageHandlers)
 	}
 
+	// Build pipeline handlers (git clone + preview deploy).
+	services := repository.NewServiceRepo(deps.DB)
+	previews := repository.NewPreviewDeploymentRepo(deps.DB)
+	gitProvisioner := provisioner.NewLocalGitProvisioner()
+	buildHandlers := queue.NewBuildJobHandlers(
+		deps.Log, deps.DB,
+		services, previews, jobs,
+		gitProvisioner, siteProvisioner,
+	)
+	processor.SetBuildHandlers(buildHandlers)
+
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(

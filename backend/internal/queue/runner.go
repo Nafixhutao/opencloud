@@ -226,6 +226,7 @@ type Processor struct {
 	credentialCipher    *credential.Cipher
 	domainProcessor     *DomainProcessor
 	storageHandlers     *StorageJobHandlers
+	buildHandlers       *BuildJobHandlers
 }
 
 // SetDomainProcessor enables customer-domain jobs and domain-aware site route
@@ -268,6 +269,11 @@ func (p *Processor) SetStorageHandlers(handlers *StorageJobHandlers) {
 	p.storageProvider = handlers.provider
 }
 
+// SetBuildHandlers configures build and preview deploy handlers.
+func (p *Processor) SetBuildHandlers(handlers *BuildJobHandlers) {
+	p.buildHandlers = handlers
+}
+
 type sitePayload struct {
 	SiteID uuid.UUID `json:"site_id"`
 }
@@ -292,6 +298,11 @@ func (p *Processor) Handle(ctx context.Context, job *model.Job, workerID string)
 			return errors.New("storage handlers are not configured")
 		}
 		return p.storageHandlers.Handle(ctx, job, workerID)
+	case model.JobCloneGitSource, model.JobBuildSource, model.JobDeployPreview, model.JobDestroyPreview:
+		if p.buildHandlers == nil {
+			return errors.New("build handlers are not configured")
+		}
+		return p.buildHandlers.Handle(ctx, job, workerID)
 	default:
 		return p.handleSite(ctx, job, workerID)
 	}

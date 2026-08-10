@@ -122,7 +122,9 @@ ALTER TABLE jobs ADD CONSTRAINT jobs_kind_check
         'verify_domain', 'provision_domain', 'deprovision_domain',
         'reconcile_domain', 'observe_domain_certificate',
         'provision_storage_bucket', 'delete_storage_bucket',
-        'reconcile_storage_bucket'
+        'reconcile_storage_bucket',
+        'clone_git_source', 'build_source',
+        'deploy_preview', 'destroy_preview'
     ));
 SQL
 
