@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -67,6 +68,7 @@ func main() {
 	sites := repository.NewSiteRepo(deps.DB)
 	domains := repository.NewDomainRepo(deps.DB)
 	databases := repository.NewManagedDatabaseRepo(deps.DB)
+	buckets := repository.NewStorageBucketRepo(deps.DB)
 	nodes := repository.NewNodeRepo(deps.DB)
 	jobs := repository.NewJobRepo(deps.DB)
 	audit := repository.NewAuditRepo(deps.DB)
@@ -103,6 +105,28 @@ func main() {
 			deps.Cfg.Domains.IngressIPv4,
 		))
 	}
+
+	// Storage provider selection via STORAGE_PROVIDER environment variable.
+	// Accepts: "fake" for development/testing only. Defaults to disabled (no storage workers).
+	storageProviderType := os.Getenv("STORAGE_PROVIDER")
+	if storageProviderType == "fake" {
+		deps.Log.Warn("storage worker configured with FAKE provider; FOR DEVELOPMENT/TESTING ONLY")
+		storageProvider := provisioner.NewFakeStorageProvider()
+		storageHandlers := queue.NewStorageJobHandlers(
+			deps.Log,
+			deps.DB,
+			buckets,
+			jobs,
+			audit,
+			storageProvider,
+		)
+		processor.SetStorageHandlers(storageHandlers)
+	} else if storageProviderType != "" {
+		deps.Log.Fatal("unsupported STORAGE_PROVIDER value; use 'fake' or unset", zap.String("value", storageProviderType))
+	} else {
+		deps.Log.Info("storage worker disabled; set STORAGE_PROVIDER=fake for development/testing")
+	}
+
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(
@@ -110,6 +134,7 @@ func main() {
 		zap.String("provisioner_backend", string(deps.Cfg.Provisioner.Backend)),
 		zap.Bool("customer_databases_enabled", deps.Cfg.CustomerDatabases.Enabled),
 		zap.Bool("domains_enabled", deps.Cfg.Domains.Enabled),
+		zap.String("storage_provider", storageProviderType),
 	)
 	runner.Run(ctx)
 	deps.Log.Info("worker shutting down")

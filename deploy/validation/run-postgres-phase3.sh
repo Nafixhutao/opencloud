@@ -106,6 +106,26 @@ test "$(docker run --rm --network "$network_name" postgres:18-alpine psql "$psql
 psql_file "$psql_database_url" "$repo_root/backend/migrations/20260730010000_create_domains.down.sql" >/dev/null
 test "$(docker run --rm --network "$network_name" postgres:18-alpine psql "$psql_database_url" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('domains','hostname_claims')")" = "0"
 psql_file "$psql_database_url" "$repo_root/backend/migrations/20260730010000_create_domains.up.sql" >/dev/null
+
+# The domains down migration resets jobs_kind_check to a hardcoded pre-domain
+# list. Later migrations (e.g. create_storage_buckets) extend it with additional
+# kinds. Re-apply those extensions so the schema hash is stable after the
+# domains down/up exercise.
+cat <<'SQL' | docker run --rm -i --network "$network_name" postgres:18-alpine \
+  psql "$psql_database_url" -v ON_ERROR_STOP=1 >/dev/null
+ALTER TABLE jobs DROP CONSTRAINT jobs_kind_check;
+ALTER TABLE jobs ADD CONSTRAINT jobs_kind_check
+    CHECK (kind IN (
+        'provision_site', 'delete_site', 'suspend_site',
+        'resume_site', 'cleanup_site', 'reconcile_site',
+        'provision_database', 'delete_database', 'cleanup_database',
+        'verify_domain', 'provision_domain', 'deprovision_domain',
+        'reconcile_domain', 'observe_domain_certificate',
+        'provision_storage_bucket', 'delete_storage_bucket',
+        'reconcile_storage_bucket'
+    ));
+SQL
+
 test "$psql_schema_up" = "$(schema_hash_for_url "$psql_database_url")"
 
 go_in_validation "go test ./migrations -run TestCommittedMigrationChecksums -count=1"

@@ -26,7 +26,7 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/model"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/repository"
-	"github.com/nazxf/opencloud/backend/internal/service"
+	service "github.com/nazxf/opencloud/backend/internal/service"
 )
 
 const apiRateLimitWindow = time.Second
@@ -161,6 +161,11 @@ func New(
 	consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
 	consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)
 
+	// Object storage services (SLICE 1).
+	bucketRepo := repository.NewStorageBucketRepo(db)
+	bucketSvc := service.NewStorageBucketService(db, bucketRepo, projectRepo, jobRepo, auditRepo)
+	bucketH := handler.NewStorageBucketHandler(bucketSvc)
+
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
 	// budget. The customer budget is applied after auth and keyed by account,
@@ -241,6 +246,16 @@ func New(
 				console.POST("/sessions", middleware.RateLimit(rdb, "console-session", 10, time.Minute), consoleSessionH.CreateSession)
 				console.DELETE("/sessions/:sessionId", middleware.RateLimit(rdb, "console-session", 30, time.Minute), consoleSessionH.RevokeSession)
 				console.POST("/execute", middleware.RateLimit(rdb, "console-execute", 60, time.Second), consoleQueryH.ExecuteQuery)
+			}
+
+			// Object storage routes (SLICE 1) - bucket lifecycle management
+			storage := authed.Group("/projects/:projectID/storage")
+			{
+				storage.GET("/buckets", middleware.RateLimit(rdb, "storage-list", 60, time.Minute), bucketH.ListBuckets)
+				storage.POST("/buckets", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), bucketH.CreateBucket)
+				storage.GET("/buckets/:bucketID", bucketH.GetBucket)
+				storage.PATCH("/buckets/:bucketID", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), bucketH.PatchBucket)
+				storage.DELETE("/buckets/:bucketID", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), bucketH.DeleteBucket)
 			}
 
 			admin := authed.Group("/admin")
