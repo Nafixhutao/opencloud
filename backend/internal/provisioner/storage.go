@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	// Sentinel errors for S3-compatible operations
-	ErrBucketExists   = errors.New("bucket already exists")
+	// ErrBucketExists is returned when attempting to create a bucket that already exists.
+	ErrBucketExists = errors.New("bucket already exists")
+	// ErrBucketNotFound is returned when attempting to operate on a non-existent bucket.
 	ErrBucketNotFound = errors.New("bucket not found")
 )
 
@@ -68,6 +69,7 @@ type FakeStorageProvider struct {
 	buckets map[string]*BucketState
 }
 
+// BucketState holds the current state of a bucket in the fake provider.
 type BucketState struct {
 	PhysicalName string
 	Visibility   string
