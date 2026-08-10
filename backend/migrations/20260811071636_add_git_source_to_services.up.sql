@@ -1,0 +1,2 @@
+ALTER TABLE services ADD COLUMN git_repo_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE services ADD COLUMN git_branch TEXT NOT NULL DEFAULT 'main';
