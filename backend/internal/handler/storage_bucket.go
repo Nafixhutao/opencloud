@@ -24,16 +24,16 @@ func NewStorageBucketHandler(svc *service.StorageBucketService) *StorageBucketHa
 }
 
 type bucketResponse struct {
-	ID                   string  `json:"id"`
-	Name                 string  `json:"name"`
-	PhysicalName         string  `json:"physical_name"`
-	Visibility           string  `json:"visibility"`
-	Status               string  `json:"status"`
-	StorageLimitBytes    int64   `json:"storage_limit_bytes"`
-	MaxObjectSizeBytes   int64   `json:"max_object_size_bytes"`
-	ObjectCount          int64   `json:"object_count"`
-	AllowedMimeTypes     []string `json:"allowed_mime_types,omitempty"`
-	CreatedAt            string  `json:"created_at"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	PhysicalName       string   `json:"physical_name"`
+	Visibility         string   `json:"visibility"`
+	Status             string   `json:"status"`
+	StorageLimitBytes  int64    `json:"storage_limit_bytes"`
+	MaxObjectSizeBytes int64    `json:"max_object_size_bytes"`
+	ObjectCount        int64    `json:"object_count"`
+	AllowedMimeTypes   []string `json:"allowed_mime_types,omitempty"`
+	CreatedAt          string   `json:"created_at"`
 }
 
 func newBucketResponse(bucket *model.StorageBucket) bucketResponse {
@@ -44,16 +44,16 @@ func newBucketResponse(bucket *model.StorageBucket) bucketResponse {
 		}
 	}
 	return bucketResponse{
-		ID:               bucket.ID.String(),
-		Name:             bucket.Name,
-		PhysicalName:     bucket.PhysicalName,
-		Visibility:       bucket.Visibility,
-		Status:           bucket.Status,
-		StorageLimitBytes: bucket.StorageLimitBytes,
+		ID:                 bucket.ID.String(),
+		Name:               bucket.Name,
+		PhysicalName:       bucket.PhysicalName,
+		Visibility:         bucket.Visibility,
+		Status:             bucket.Status,
+		StorageLimitBytes:  bucket.StorageLimitBytes,
 		MaxObjectSizeBytes: bucket.MaxObjectSizeBytes,
-		ObjectCount:      bucket.ObjectCount,
-		AllowedMimeTypes: mimeTypes,
-		CreatedAt:        bucket.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		ObjectCount:        bucket.ObjectCount,
+		AllowedMimeTypes:   mimeTypes,
+		CreatedAt:          bucket.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
 

@@ -158,13 +158,13 @@ func New(
 		cfg.CustomerDatabases.Enabled,
 		log,
 	)
-		consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
-		consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)
+	consoleSessionH := handler.NewDatabaseConsoleSessionHandler(consoleSessionSvc)
+	consoleQueryH := handler.NewConsoleQueryHandler(consoleQuerySvc)
 
-		// Object storage services (SLICE 1).
-		bucketRepo := repository.NewStorageBucketRepo(db)
-		bucketSvc := service.NewStorageBucketService(db, bucketRepo, jobRepo, auditRepo)
-		bucketH := handler.NewStorageBucketHandler(bucketSvc)
+	// Object storage services (SLICE 1).
+	bucketRepo := repository.NewStorageBucketRepo(db)
+	bucketSvc := service.NewStorageBucketService(db, bucketRepo, jobRepo, auditRepo)
+	bucketH := handler.NewStorageBucketHandler(bucketSvc)
 
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
