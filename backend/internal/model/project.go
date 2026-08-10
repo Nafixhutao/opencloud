@@ -31,6 +31,8 @@ const (
 	ServiceTypeCron = "cron"
 	// ServiceTypeStatic identifies a static-file workload.
 	ServiceTypeStatic = "static"
+	// ServiceTypePHP identifies a PHP workload.
+	ServiceTypePHP = "php"
 
 	// DeploymentQueued marks a newly created deployment revision.
 	DeploymentQueued = "queued"
@@ -85,6 +87,7 @@ type Service struct {
 	SourceRoot     string     `bun:"source_root,notnull" json:"source_root"`
 	GitRepoURL     string     `bun:"git_repo_url,notnull" json:"git_repo_url"`
 	GitBranch      string     `bun:"git_branch,notnull" json:"git_branch"`
+	StoragePersistBytes int64  `bun:"storage_persist_bytes,notnull" json:"storage_persist_bytes"`
 	Status         string     `bun:"status,notnull" json:"status"`
 	IdempotencyKey *string    `bun:"idempotency_key" json:"-"`
 	CreatedAt      time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
