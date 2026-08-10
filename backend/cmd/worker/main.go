@@ -106,22 +106,22 @@ func main() {
 		))
 	}
 
-		// Storage provider selection via STORAGE_PROVIDER environment variable.
-		// Accepts: "fake" for development/testing only. Defaults to disabled (no storage workers).
-		storageProviderType := os.Getenv("STORAGE_PROVIDER")
-		if storageProviderType == "fake" {
-			deps.Log.Warn("storage worker configured with FAKE provider; FOR DEVELOPMENT/TESTING ONLY")
-			storageProvider := provisioner.NewFakeStorageProvider()
-			storageHandlers := queue.NewStorageJobHandlers(
-				deps.Log,
-				deps.DB,
-				buckets,
-				jobs,
-				audit,
-				storageProvider,
-			)
-			processor.SetStorageHandlers(storageHandlers)
-		} else if storageProviderType != "" {
+	// Storage provider selection via STORAGE_PROVIDER environment variable.
+	// Accepts: "fake" for development/testing only. Defaults to disabled (no storage workers).
+	storageProviderType := os.Getenv("STORAGE_PROVIDER")
+	if storageProviderType == "fake" {
+		deps.Log.Warn("storage worker configured with FAKE provider; FOR DEVELOPMENT/TESTING ONLY")
+		storageProvider := provisioner.NewFakeStorageProvider()
+		storageHandlers := queue.NewStorageJobHandlers(
+			deps.Log,
+			deps.DB,
+			buckets,
+			jobs,
+			audit,
+			storageProvider,
+		)
+		processor.SetStorageHandlers(storageHandlers)
+	} else if storageProviderType != "" {
 		deps.Log.Fatal("unsupported STORAGE_PROVIDER value; use 'fake' or unset", zap.String("value", storageProviderType))
 	} else {
 		deps.Log.Info("storage worker disabled; set STORAGE_PROVIDER=fake for development/testing")
