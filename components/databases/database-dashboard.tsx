@@ -475,6 +475,16 @@ function DatabaseActions({
           onReveal={onReveal}
         />
       ) : null}
+      {database.status === 'active' && database.engine === 'mariadb' ? (
+        <a
+          href={`/api/databases/${database.id}/phpmyadmin`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-muted"
+        >
+          phpMyAdmin
+        </a>
+      ) : null}
       {!['deleting', 'deleted'].includes(database.status) ? (
         <DeleteDatabaseDialog
           database={database}

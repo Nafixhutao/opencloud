@@ -39,6 +39,15 @@ services:
       timeout: 3s
       retries: 10
 
+  phpmyadmin:
+    image: phpmyadmin:latest
+    environment:
+      PMA_HOST: ${CUSTOMER_MARIADB_HOST:-mariadb}
+      PMA_PORT: ${CUSTOMER_MARIADB_PORT:-3306}
+    ports:
+      - "127.0.0.1:8081:80"
+    profiles: ["phpmyadmin"]
+
   rustfs:
     image: rustfs/rustfs:latest
     ports:
