@@ -115,8 +115,7 @@ func (h *StorageJobHandlers) handleProvision(ctx context.Context, job *model.Job
 	if err != nil {
 		if errors.Is(err, provisioner.ErrBucketExists) {
 			h.log.Warn("bucket already exists at provider", zap.Stringer("bucket_id", bucketID))
-			// Update state to active since resource exists
-			return h.completeCreation(ctx, job.ID, bucketID, workerID, accountID)
+			return h.completeJob(ctx, job.ID, bucketID, workerID, accountID)
 		}
 
 		var bucketErr provisioner.BucketNotEmptyError
@@ -173,6 +172,12 @@ func (h *StorageJobHandlers) completeCreation(ctx context.Context, jobID uuid.UU
 	})
 
 	return err
+}
+
+func (h *StorageJobHandlers) completeJob(ctx context.Context, jobID uuid.UUID, _ uuid.UUID, workerID string, _ uuid.UUID) error {
+	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return h.jobRepo.WithDB(tx).Complete(ctx, jobID, workerID)
+	})
 }
 
 // restoreActiveWithError restores a bucket from creating->active when BUCKET_NOT_EMPTY,

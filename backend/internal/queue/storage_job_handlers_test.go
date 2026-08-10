@@ -231,4 +231,45 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, model.BucketActive, result.Status)
 	})
+
+	t.Run("status-guard-prevents-race", func(t *testing.T) {
+		bucketID := uuid.New()
+		physicalName := "ocb-" + bucketID.String()
+
+		bucket := &model.StorageBucket{
+			ID:                 bucketID,
+			AccountID:          account.ID,
+			ProjectID:          project.ID,
+			Name:               "race-bucket",
+			PhysicalName:       physicalName,
+			Status:             model.BucketDeleting,
+			ObjectCount:        0,
+			StorageLimitBytes:  1073741824,
+			MaxObjectSizeBytes: 104857600,
+			AllowedMimeTypes:   []byte("[]"),
+		}
+		require.NoError(t, bucketRepo.Create(ctx, bucket))
+
+		payload := model.ProvisionStorageBucketPayload{BucketID: bucketID}
+		rawPayload, _ := json.Marshal(payload)
+		job := &model.Job{
+			ID:          uuid.New(),
+			AccountID:   &account.ID,
+			Kind:        model.JobProvisionStorageBucket,
+			Status:      model.JobQueued,
+			MaxAttempts: 3,
+			Payload:     rawPayload,
+			RunAt:       time.Now().UTC(),
+		}
+		_, err = db.NewInsert().Model(job).Exec(ctx)
+		require.NoError(t, err)
+
+		err = handlers.Handle(ctx, job, "worker-1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no rows updated")
+
+		result, err := bucketRepo.GetByAccount(ctx, account.ID, bucketID)
+		require.NoError(t, err)
+		require.Equal(t, model.BucketDeleting, result.Status)
+	})
 }

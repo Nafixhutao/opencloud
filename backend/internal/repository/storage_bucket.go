@@ -183,6 +183,7 @@ func (r *StorageBucketRepo) FindStaleAndFailingBuckets(ctx context.Context, acco
 }
 
 // UpdateStatusCompleted transitions a bucket to active on successful creation.
+// Only updates if the bucket is still in 'creating' state.
 func (r *StorageBucketRepo) UpdateStatusCompleted(ctx context.Context, bucketID uuid.UUID, status string, completedAt time.Time, lastError *string) (sql.Result, error) {
 	result, err := r.db.NewUpdate().
 		Model((*model.StorageBucket)(nil)).
@@ -191,6 +192,7 @@ func (r *StorageBucketRepo) UpdateStatusCompleted(ctx context.Context, bucketID 
 		Set("last_reconciled_at = ?", completedAt).
 		Set("updated_at = now()").
 		Where("id = ?", bucketID).
+		Where("status = ?", model.BucketCreating).
 		Exec(ctx)
 	return result, err
 }

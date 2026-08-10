@@ -107,11 +107,45 @@ func main() {
 	}
 
 	// Storage provider selection via STORAGE_PROVIDER environment variable.
-	// Accepts: "fake" for development/testing only. Defaults to disabled (no storage workers).
+	// Accepts: "fake" for development/testing, "s3" for S3-compatible backends.
+	// Defaults to disabled (no storage workers). Fails closed on unknown values.
 	storageProviderType := os.Getenv("STORAGE_PROVIDER")
-	if storageProviderType == "fake" {
+	var storageProvider provisioner.ObjectStorageProvider
+	switch storageProviderType {
+	case "fake":
+		if deps.Cfg.IsProduction() {
+			deps.Log.Fatal("STORAGE_PROVIDER=fake is not allowed in production")
+		}
 		deps.Log.Warn("storage worker configured with FAKE provider; FOR DEVELOPMENT/TESTING ONLY")
-		storageProvider := provisioner.NewFakeStorageProvider()
+		storageProvider = provisioner.NewFakeStorageProvider()
+	case "s3":
+		s3cfg := provisioner.S3StorageConfig{
+			Endpoint:        os.Getenv("STORAGE_S3_ENDPOINT"),
+			Region:          os.Getenv("STORAGE_S3_REGION"),
+			AccessKeyID:     os.Getenv("STORAGE_S3_ACCESS_KEY_ID"),
+			SecretAccessKey: os.Getenv("STORAGE_S3_SECRET_ACCESS_KEY"),
+			UsePathStyle:    os.Getenv("STORAGE_S3_USE_PATH_STYLE") != "false",
+		}
+		if s3cfg.Region == "" {
+			s3cfg.Region = "us-east-1"
+		}
+		var err error
+		storageProvider, err = provisioner.NewS3StorageProvider(ctx, s3cfg)
+		if err != nil {
+			deps.Log.Fatal("initialize S3 storage provider", zap.Error(err))
+		}
+		deps.Log.Info("storage worker configured with S3 provider",
+			zap.String("endpoint", s3cfg.Endpoint),
+			zap.String("region", s3cfg.Region),
+			zap.Bool("use_path_style", s3cfg.UsePathStyle),
+		)
+	case "":
+		deps.Log.Info("storage worker disabled; set STORAGE_PROVIDER=fake or STORAGE_PROVIDER=s3 to enable")
+	default:
+		deps.Log.Fatal("unsupported STORAGE_PROVIDER value; use 'fake', 's3', or leave unset", zap.String("value", storageProviderType))
+	}
+
+	if storageProvider != nil {
 		storageHandlers := queue.NewStorageJobHandlers(
 			deps.Log,
 			deps.DB,
@@ -121,10 +155,6 @@ func main() {
 			storageProvider,
 		)
 		processor.SetStorageHandlers(storageHandlers)
-	} else if storageProviderType != "" {
-		deps.Log.Fatal("unsupported STORAGE_PROVIDER value; use 'fake' or unset", zap.String("value", storageProviderType))
-	} else {
-		deps.Log.Info("storage worker disabled; set STORAGE_PROVIDER=fake for development/testing")
 	}
 
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
