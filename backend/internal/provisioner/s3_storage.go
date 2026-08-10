@@ -127,7 +127,7 @@ func mapDeleteBucketError(err error) error {
 		return ErrBucketNotFound
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "BucketNotEmpty") || strings.Contains(msg, "409") {
+	if strings.Contains(msg, "BucketNotEmpty") {
 		return BucketNotEmptyError{Count: nil}
 	}
 	return err
