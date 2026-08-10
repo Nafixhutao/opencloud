@@ -18,7 +18,7 @@ func BucketNotActive() *Error {
 }
 
 // BucketNotEmpty returns a 409 conflict when a non-empty bucket cannot be deleted.
-func BucketNotEmpty(count int64) *Error {
+func BucketNotEmpty(_ int64) *Error {
 	return Conflict("BUCKET_NOT_EMPTY").WithDetails(FieldIssue{Field: "object_count", Issue: "non-zero"})
 }
 
@@ -28,7 +28,7 @@ func BucketInactiveOperation() *Error {
 }
 
 // BucketsLimitReached returns a 409 error when account bucket count exceeds quota.
-func BucketsLimitReached(limit int) *Error {
+func BucketsLimitReached(_ int) *Error {
 	return Conflict("BUCKETS_LIMIT_REACHED").WithDetails(FieldIssue{Field: "bucket_count", Issue: "limit reached"})
 }
 

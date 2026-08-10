@@ -60,6 +60,7 @@ type ProvisionStorageBucketPayload struct {
 }
 
 func (p ProvisionStorageBucketPayload) Kind() string {
+	// JobProvisionStorageBucket identifies this payload as a provision bucket job.
 	return JobProvisionStorageBucket
 }
 
@@ -69,6 +70,7 @@ type DeleteStorageBucketPayload struct {
 }
 
 func (p DeleteStorageBucketPayload) Kind() string {
+	// JobDeleteStorageBucket identifies this payload as a delete bucket job.
 	return JobDeleteStorageBucket
 }
 
@@ -78,5 +80,6 @@ type ReconcileStorageBucketPayload struct {
 }
 
 func (p ReconcileStorageBucketPayload) Kind() string {
+	// JobReconcileStorageBucket identifies this payload as a reconcile bucket job.
 	return JobReconcileStorageBucket
 }

@@ -352,7 +352,7 @@ func (h *StorageJobHandlers) finalizeDeletion(ctx context.Context, jobID uuid.UU
 }
 
 // handleReconcile scans for buckets that need convergence and updates their status.
-func (h *StorageJobHandlers) handleReconcile(ctx context.Context, job *model.Job, workerID string) error {
+func (h *StorageJobHandlers) handleReconcile(ctx context.Context, job *model.Job, _ string) error {
 	h.log.Info("reconciling storage buckets", zap.Stringer("account_id", *job.AccountID))
 
 	// Find stale or failing buckets without an active job
