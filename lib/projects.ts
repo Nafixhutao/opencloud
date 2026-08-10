@@ -12,6 +12,9 @@ export type ProjectService = {
   id: string;
   name: string;
   type: 'web' | 'worker' | 'cron' | 'static';
+  source_root: string;
+  git_repo_url: string;
+  git_branch: string;
   status: 'active' | 'disabled' | 'deleted';
   created_at: string;
   updated_at: string;

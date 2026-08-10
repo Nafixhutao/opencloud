@@ -83,6 +83,8 @@ type Service struct {
 	Name           string     `bun:"name,notnull" json:"name"`
 	ServiceType    string     `bun:"service_type,notnull" json:"service_type"`
 	SourceRoot     string     `bun:"source_root,notnull" json:"source_root"`
+	GitRepoURL     string     `bun:"git_repo_url,notnull" json:"git_repo_url"`
+	GitBranch      string     `bun:"git_branch,notnull" json:"git_branch"`
 	Status         string     `bun:"status,notnull" json:"status"`
 	IdempotencyKey *string    `bun:"idempotency_key" json:"-"`
 	CreatedAt      time.Time  `bun:"created_at,notnull,default:now()" json:"created_at"`
