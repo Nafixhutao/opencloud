@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -166,6 +167,33 @@ func New(
 	bucketSvc := service.NewStorageBucketService(db, bucketRepo, projectRepo, jobRepo, auditRepo)
 	bucketH := handler.NewStorageBucketHandler(bucketSvc)
 
+	// Object storage object services (SLICE 3).
+	objectRepo := repository.NewStorageObjectRepo(db)
+	var objectH *handler.StorageObjectHandler
+	storageProviderType := os.Getenv("STORAGE_PROVIDER")
+	if storageProviderType == "s3" {
+		s3cfg := provisioner.S3StorageConfig{
+			Endpoint:        os.Getenv("STORAGE_S3_ENDPOINT"),
+			Region:          os.Getenv("STORAGE_S3_REGION"),
+			AccessKeyID:     os.Getenv("STORAGE_S3_ACCESS_KEY_ID"),
+			SecretAccessKey: os.Getenv("STORAGE_S3_SECRET_ACCESS_KEY"),
+			UsePathStyle:    os.Getenv("STORAGE_S3_USE_PATH_STYLE") != "false",
+		}
+		if s3cfg.Region == "" {
+			s3cfg.Region = "us-east-1"
+		}
+		p, err := provisioner.NewS3StorageProvider(context.Background(), s3cfg)
+		if err != nil {
+			log.Fatal("initialize S3 storage provider for API", zap.Error(err))
+		}
+		objectSvc := service.NewStorageObjectService(log, bucketRepo, objectRepo, p)
+		objectH = handler.NewStorageObjectHandler(objectSvc)
+	} else if storageProviderType == "fake" {
+		p := provisioner.NewFakeStorageProvider()
+		objectSvc := service.NewStorageObjectService(log, bucketRepo, objectRepo, p)
+		objectH = handler.NewStorageObjectHandler(objectSvc)
+	}
+
 	v1 := r.Group("/api/v1")
 	// The public edge guard limits one source IP at a deliberately coarse
 	// budget. The customer budget is applied after auth and keyed by account,
@@ -256,6 +284,16 @@ func New(
 				storage.GET("/buckets/:bucketID", bucketH.GetBucket)
 				storage.PATCH("/buckets/:bucketID", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), bucketH.PatchBucket)
 				storage.DELETE("/buckets/:bucketID", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), bucketH.DeleteBucket)
+
+				if objectH != nil {
+					storage.GET("/buckets/:bucketID/objects", middleware.RateLimit(rdb, "storage-list", 60, time.Minute), objectH.ListObjects)
+					storage.PUT("/buckets/:bucketID/objects", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), objectH.PutObject)
+					storage.GET("/buckets/:bucketID/objects/download", middleware.RateLimit(rdb, "storage-read", 120, time.Minute), objectH.GetObject)
+					storage.HEAD("/buckets/:bucketID/objects/stat", middleware.RateLimit(rdb, "storage-read", 120, time.Minute), objectH.HeadObject)
+					storage.DELETE("/buckets/:bucketID/objects", middleware.RateLimit(rdb, "storage-write", 30, time.Minute), objectH.DeleteObject)
+					storage.GET("/buckets/:bucketID/presigned-get", middleware.RateLimit(rdb, "storage-presign", 30, time.Minute), objectH.PresignedGetURL)
+					storage.GET("/buckets/:bucketID/presigned-put", middleware.RateLimit(rdb, "storage-presign", 30, time.Minute), objectH.PresignedPutURL)
+				}
 			}
 
 			admin := authed.Group("/admin")

@@ -194,8 +194,8 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 	t.Run("provider-exists-converge-active", func(t *testing.T) {
 		bucketID := uuid.New()
 		physicalName := "ocb-" + bucketID.String()
-		fakeProvider.SetBucketsForTest(map[string]*provisioner.BucketState{
-			physicalName: {PhysicalName: physicalName, Visibility: "private", HasObjects: false},
+		fakeProvider.SetBucketsForTest(map[string]*provisioner.FakeBucketState{
+			physicalName: {PhysicalName: physicalName, Visibility: "private", Objects: map[string]*provisioner.FakeObjectState{}},
 		})
 		bucket := &model.StorageBucket{
 			ID:                 bucketID,

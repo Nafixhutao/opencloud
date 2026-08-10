@@ -140,12 +140,13 @@ func TestStorageJobDeleteBlockedRestoreToActive(t *testing.T) {
 	log, _ := zap.NewDevelopment()
 
 	fakeProvider := provisioner.NewFakeStorageProvider()
-	fakeProvider.SetBucketsForTest(map[string]*provisioner.BucketState{
+	fakeProvider.SetBucketsForTest(map[string]*provisioner.FakeBucketState{
 		bucket.PhysicalName: {
 			PhysicalName: bucket.PhysicalName,
 			Visibility:   "private",
-			HasObjects:   true,
-			ObjectCount:  1,
+			Objects: map[string]*provisioner.FakeObjectState{
+				"obj1": {Key: "obj1", Data: []byte("x")},
+			},
 		},
 	})
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, fakeProvider)

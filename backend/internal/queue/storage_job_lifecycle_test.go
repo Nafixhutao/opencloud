@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -186,12 +187,13 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 
 	log, _ := zap.NewDevelopment()
 	fakeProvider := provisioner.NewFakeStorageProvider()
-	fakeProvider.SetBucketsForTest(map[string]*provisioner.BucketState{
+	fakeProvider.SetBucketsForTest(map[string]*provisioner.FakeBucketState{
 		bucket.PhysicalName: {
 			PhysicalName: bucket.PhysicalName,
 			Visibility:   "private",
-			HasObjects:   true,
-			ObjectCount:  0, // Set to 0 but HasObjects=true forces nil Count
+			Objects: map[string]*provisioner.FakeObjectState{
+				"obj1": {Key: "obj1", Data: []byte("x")},
+			},
 		},
 	})
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, fakeProvider)
@@ -300,4 +302,32 @@ func (a *alwaysFailProvider) DeleteBucket(_ context.Context, _ provisioner.Bucke
 
 func (a *alwaysFailProvider) BucketExists(_ context.Context, _ provisioner.BucketRef) (bool, error) {
 	return false, nil
+}
+
+func (a *alwaysFailProvider) PutObject(_ context.Context, _ provisioner.PutObjectSpec) (*provisioner.ObjectInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) GetObject(_ context.Context, _ provisioner.ObjectRef) (io.ReadCloser, *provisioner.ObjectInfo, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) ListObjects(_ context.Context, _ provisioner.ObjectRef, _ provisioner.ListObjectsOptions) ([]provisioner.ObjectInfo, string, error) {
+	return nil, "", errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) DeleteObject(_ context.Context, _ provisioner.ObjectRef) error {
+	return errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) HeadObject(_ context.Context, _ provisioner.ObjectRef) (*provisioner.ObjectInfo, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) PresignedGetURL(_ context.Context, _ provisioner.ObjectRef, _ time.Duration) (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func (a *alwaysFailProvider) PresignedPutURL(_ context.Context, _ provisioner.ObjectRef, _ time.Duration) (string, error) {
+	return "", errors.New("not implemented")
 }

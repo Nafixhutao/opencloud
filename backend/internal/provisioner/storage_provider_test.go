@@ -72,11 +72,12 @@ func TestStorageProviderSelection(t *testing.T) {
 		provider := provisioner.NewFakeStorageProvider()
 
 		physicalName := "nonempty-bucket"
-		provider.SetBucketsForTest(map[string]*provisioner.BucketState{
+		provider.SetBucketsForTest(map[string]*provisioner.FakeBucketState{
 			physicalName: {
 				PhysicalName: physicalName,
-				HasObjects:   true,
-				ObjectCount:  5,
+				Objects: map[string]*provisioner.FakeObjectState{
+					"obj1": {Key: "obj1", Data: []byte("x")},
+				},
 			},
 		})
 

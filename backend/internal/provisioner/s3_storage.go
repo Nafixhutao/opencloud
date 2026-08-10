@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -15,7 +17,6 @@ import (
 
 var _ ObjectStorageProvider = (*S3StorageProvider)(nil)
 
-// S3StorageConfig holds connection parameters for an S3-compatible backend.
 type S3StorageConfig struct {
 	Endpoint        string
 	Region          string
@@ -40,36 +41,46 @@ func (c S3StorageConfig) validate() error {
 	return nil
 }
 
-// S3StorageProvider implements ObjectStorageProvider using the AWS S3 SDK.
 type S3StorageProvider struct {
-	client *s3.Client
+	client  *s3.Client
+	presign *s3.PresignClient
 }
 
-// NewS3StorageProvider creates an S3-compatible storage client.
 func NewS3StorageProvider(ctx context.Context, cfg S3StorageConfig) (*S3StorageProvider, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+
+	resolver := aws.EndpointResolverWithOptionsFunc(
+		func(service, region string, _ ...any) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               cfg.Endpoint,
+				SigningRegion:     cfg.Region,
+				HostnameImmutable: true,
+			}, nil
+		},
+	)
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(cfg.Region),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		),
+		awsconfig.WithEndpointResolverWithOptions(resolver),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
 
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(cfg.Endpoint)
 		o.UsePathStyle = cfg.UsePathStyle
 	})
 
-	return &S3StorageProvider{client: client}, nil
+	return &S3StorageProvider{client: client, presign: s3.NewPresignClient(client)}, nil
 }
 
-// CreateBucket creates a new bucket using the S3 API.
+// --- Bucket operations ---
+
 func (p *S3StorageProvider) CreateBucket(ctx context.Context, spec BucketSpec) error {
 	_, err := p.client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(spec.PhysicalName),
@@ -80,7 +91,6 @@ func (p *S3StorageProvider) CreateBucket(ctx context.Context, spec BucketSpec) e
 	return nil
 }
 
-// DeleteBucket removes a bucket using the S3 API.
 func (p *S3StorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) error {
 	_, err := p.client.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(ref.PhysicalName),
@@ -91,7 +101,6 @@ func (p *S3StorageProvider) DeleteBucket(ctx context.Context, ref BucketRef) err
 	return nil
 }
 
-// BucketExists checks whether a bucket exists using the S3 HeadBucket API.
 func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bool, error) {
 	_, err := p.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(ref.PhysicalName),
@@ -104,6 +113,129 @@ func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bo
 	}
 	return true, nil
 }
+
+// --- Object operations ---
+
+func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
+	input := &s3.PutObjectInput{
+		Bucket:      aws.String(spec.Bucket),
+		Key:         aws.String(spec.Key),
+		Body:        spec.Body,
+		ContentType: aws.String(spec.ContentType),
+	}
+	if spec.Size > 0 {
+		input.ContentLength = aws.Int64(spec.Size)
+	}
+	out, err := p.client.PutObject(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return &ObjectInfo{
+		Key:          spec.Key,
+		Size:         spec.Size,
+		ContentType:  spec.ContentType,
+		ETag:         deref(out.ETag),
+		LastModified: time.Now().UTC(),
+	}, nil
+}
+
+func (p *S3StorageProvider) GetObject(ctx context.Context, ref ObjectRef) (io.ReadCloser, *ObjectInfo, error) {
+	out, err := p.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(ref.BucketPhysicalName),
+		Key:    aws.String(ref.Key),
+	})
+	if err != nil {
+		return nil, nil, mapGetObjectError(err)
+	}
+	info := &ObjectInfo{
+		Key:          ref.Key,
+		Size:         derefInt(out.ContentLength),
+		ContentType:  deref(out.ContentType),
+		ETag:         deref(out.ETag),
+		LastModified: derefTime(out.LastModified),
+	}
+	return out.Body, info, nil
+}
+
+func (p *S3StorageProvider) ListObjects(ctx context.Context, ref ObjectRef, opts ListObjectsOptions) ([]ObjectInfo, string, error) {
+	input := &s3.ListObjectsV2Input{
+		Bucket:            aws.String(ref.BucketPhysicalName),
+		Prefix:            aws.String(opts.Prefix),
+		MaxKeys:           aws.Int32(opts.MaxKeys),
+		ContinuationToken: aws.String(opts.ContinuationToken),
+	}
+	out, err := p.client.ListObjectsV2(ctx, input)
+	if err != nil {
+		return nil, "", err
+	}
+	objects := make([]ObjectInfo, 0, len(out.Contents))
+	for _, o := range out.Contents {
+		objects = append(objects, ObjectInfo{
+			Key:          deref(o.Key),
+			Size:         derefInt(o.Size),
+			ContentType:  "",
+			ETag:         deref(o.ETag),
+			LastModified: derefTime(o.LastModified),
+		})
+	}
+	nextToken := ""
+	if out.IsTruncated != nil && *out.IsTruncated {
+		nextToken = deref(out.NextContinuationToken)
+	}
+	return objects, nextToken, nil
+}
+
+func (p *S3StorageProvider) DeleteObject(ctx context.Context, ref ObjectRef) error {
+	_, err := p.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(ref.BucketPhysicalName),
+		Key:    aws.String(ref.Key),
+	})
+	if err != nil {
+		return mapGetObjectError(err)
+	}
+	return nil
+}
+
+func (p *S3StorageProvider) HeadObject(ctx context.Context, ref ObjectRef) (*ObjectInfo, error) {
+	out, err := p.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(ref.BucketPhysicalName),
+		Key:    aws.String(ref.Key),
+	})
+	if err != nil {
+		return nil, mapGetObjectError(err)
+	}
+	return &ObjectInfo{
+		Key:          ref.Key,
+		Size:         derefInt(out.ContentLength),
+		ContentType:  deref(out.ContentType),
+		ETag:         deref(out.ETag),
+		LastModified: derefTime(out.LastModified),
+	}, nil
+}
+
+func (p *S3StorageProvider) PresignedGetURL(ctx context.Context, ref ObjectRef, expiry time.Duration) (string, error) {
+	req, err := p.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(ref.BucketPhysicalName),
+		Key:    aws.String(ref.Key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", err
+	}
+	return req.URL, nil
+}
+
+func (p *S3StorageProvider) PresignedPutURL(ctx context.Context, ref ObjectRef, expiry time.Duration) (string, error) {
+	req, err := p.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(ref.BucketPhysicalName),
+		Key:    aws.String(ref.Key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", err
+	}
+	return req.URL, nil
+}
+
+// --- Helpers ---
 
 func mapCreateBucketError(err error) error {
 	var bae *s3types.BucketAlreadyExists
@@ -123,8 +255,15 @@ func mapDeleteBucketError(err error) error {
 		return ErrBucketNotFound
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "BucketNotEmpty") {
+	if strings.Contains(msg, "BucketNotEmpty") || strings.Contains(msg, "409") {
 		return BucketNotEmptyError{Count: nil}
+	}
+	return err
+}
+
+func mapGetObjectError(err error) error {
+	if isNotFoundError(err) {
+		return ErrObjectNotFound
 	}
 	return err
 }
@@ -134,6 +273,31 @@ func isNotFoundError(err error) bool {
 	if errors.As(err, &nsb) {
 		return true
 	}
+	var nsk *s3types.NoSuchKey
+	if errors.As(err, &nsk) {
+		return true
+	}
 	msg := err.Error()
-	return strings.Contains(msg, "404") || strings.Contains(msg, "Not Found") || strings.Contains(msg, "NoSuchBucket")
+	return strings.Contains(msg, "404") || strings.Contains(msg, "Not Found") || strings.Contains(msg, "NoSuchBucket") || strings.Contains(msg, "NoSuchKey")
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func derefTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
+
+func derefInt(s *int64) int64 {
+	if s == nil {
+		return 0
+	}
+	return *s
 }

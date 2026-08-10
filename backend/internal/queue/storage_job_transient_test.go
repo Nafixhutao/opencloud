@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -206,4 +207,32 @@ func (p *transientFailProvider) DeleteBucket(ctx context.Context, ref provisione
 
 func (p *transientFailProvider) BucketExists(ctx context.Context, ref provisioner.BucketRef) (bool, error) {
 	return p.fakeProvider.BucketExists(ctx, ref)
+}
+
+func (p *transientFailProvider) PutObject(ctx context.Context, spec provisioner.PutObjectSpec) (*provisioner.ObjectInfo, error) {
+	return p.fakeProvider.PutObject(ctx, spec)
+}
+
+func (p *transientFailProvider) GetObject(ctx context.Context, ref provisioner.ObjectRef) (io.ReadCloser, *provisioner.ObjectInfo, error) {
+	return p.fakeProvider.GetObject(ctx, ref)
+}
+
+func (p *transientFailProvider) ListObjects(ctx context.Context, ref provisioner.ObjectRef, opts provisioner.ListObjectsOptions) ([]provisioner.ObjectInfo, string, error) {
+	return p.fakeProvider.ListObjects(ctx, ref, opts)
+}
+
+func (p *transientFailProvider) DeleteObject(ctx context.Context, ref provisioner.ObjectRef) error {
+	return p.fakeProvider.DeleteObject(ctx, ref)
+}
+
+func (p *transientFailProvider) HeadObject(ctx context.Context, ref provisioner.ObjectRef) (*provisioner.ObjectInfo, error) {
+	return p.fakeProvider.HeadObject(ctx, ref)
+}
+
+func (p *transientFailProvider) PresignedGetURL(ctx context.Context, ref provisioner.ObjectRef, expiry time.Duration) (string, error) {
+	return p.fakeProvider.PresignedGetURL(ctx, ref, expiry)
+}
+
+func (p *transientFailProvider) PresignedPutURL(ctx context.Context, ref provisioner.ObjectRef, expiry time.Duration) (string, error) {
+	return p.fakeProvider.PresignedPutURL(ctx, ref, expiry)
 }
