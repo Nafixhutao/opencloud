@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_storage_buckets_account_project_idempotency;
+DROP INDEX IF EXISTS idx_storage_buckets_account_project_name_live;
+DROP INDEX IF EXISTS idx_storage_buckets_account_project_created;
+DROP TABLE IF EXISTS storage_buckets;

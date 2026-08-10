@@ -44,6 +44,17 @@ const (
 	AuditDatabaseFailed              = "database.lifecycle.failed"
 	AuditDatabaseCleanupCompleted    = "database.cleanup.complete"
 	AuditDatabaseProvisionSuperseded = "database.provision.superseded"
+
+	// Storage bucket audit actions (Phase 4M).
+	AuditStorageBucketCreateRequested    = "storage.bucket.create_requested"
+	AuditStorageBucketProvisioned        = "storage.bucket.provisioned"
+	AuditStorageBucketProvisionFailed    = "storage.bucket.provision_failed"
+	AuditStorageBucketDeleteRequested    = "storage.bucket.delete_requested"
+	AuditStorageBucketDeleted            = "storage.bucket.deleted"
+	AuditStorageBucketDeleteFailed       = "storage.bucket.delete_failed"
+	AuditStorageBucketReconciled         = "storage.bucket.reconciled"
+	AuditStorageBucketDeleteAttempted    = "storage.bucket.delete_attempted"
+	AuditStorageBucketDeleteBlocked      = "storage.bucket.delete_blocked"
 )
 
 // AuditLog is an append-only sensitive-action record (SECURITY §12).

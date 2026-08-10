@@ -217,12 +217,15 @@ type Processor struct {
 	domains             *repository.DomainRepo
 	nodes               *repository.NodeRepo
 	databases           *repository.ManagedDatabaseRepo
+	buckets             *repository.StorageBucketRepo
 	jobs                *repository.JobRepo
 	audit               *repository.AuditRepo
 	provisioner         provisioner.SiteProvisioner
 	databaseProvisioner provisioner.DatabaseProvisioner
+	storageProvider     provisioner.ObjectStorageProvider
 	credentialCipher    *credential.Cipher
 	domainProcessor     *DomainProcessor
+	storageHandlers     *StorageJobHandlers
 }
 
 // SetDomainProcessor enables customer-domain jobs and domain-aware site route
@@ -258,6 +261,13 @@ func NewProcessor(
 	}
 }
 
+// SetStorageHandlers configures storage bucket job workers after optional provider setup.
+func (p *Processor) SetStorageHandlers(handlers *StorageJobHandlers) {
+	p.storageHandlers = handlers
+	p.buckets = handlers.bucketRepo
+	p.storageProvider = handlers.provider
+}
+
 type sitePayload struct {
 	SiteID uuid.UUID `json:"site_id"`
 }
@@ -277,6 +287,11 @@ func (p *Processor) Handle(ctx context.Context, job *model.Job, workerID string)
 		return p.domainProcessor.Handle(ctx, job, workerID)
 	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
 		return p.handleDatabase(ctx, job, workerID)
+	case model.JobProvisionStorageBucket, model.JobDeleteStorageBucket, model.JobReconcileStorageBucket:
+		if p.storageHandlers == nil {
+			return errors.New("storage handlers are not configured")
+		}
+		return p.storageHandlers.Handle(ctx, job, workerID)
 	default:
 		return p.handleSite(ctx, job, workerID)
 	}
