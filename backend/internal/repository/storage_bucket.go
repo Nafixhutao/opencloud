@@ -55,7 +55,10 @@ func (r *StorageBucketRepo) Create(ctx context.Context, bucket *model.StorageBuc
 func (r *StorageBucketRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.StorageBucket, error) {
 	bucket := new(model.StorageBucket)
 	err := r.db.NewSelect().Model(bucket).Where("id = ?", id).Scan(ctx)
-	return bucket, err
+	if err != nil {
+		return nil, fmt.Errorf("get storage bucket by id: %w", err)
+	}
+	return bucket, nil
 }
 
 // GetByAccount returns a live bucket only when the tenant owns it.

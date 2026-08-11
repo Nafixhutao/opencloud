@@ -245,7 +245,7 @@ func entryFromLoki(labels map[string]string, raw string, timestamp time.Time) En
 }
 
 func decodeStructuredLine(entry *Entry, raw string) {
-	var fields map[string]any
+	fields := make(map[string]any)
 	if json.Unmarshal([]byte(raw), &fields) != nil {
 		return
 	}

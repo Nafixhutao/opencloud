@@ -21,9 +21,9 @@ func NewConsoleQueryHandler(queryService *service.ConsoleQueryService) *ConsoleQ
 }
 
 // ExecuteQuery executes a read-only SQL query in the database console.
-// POST /api/v1/databases/:databaseId/console/execute
+// POST /api/v1/databases/:id/console/execute
 func (h *ConsoleQueryHandler) ExecuteQuery(c *gin.Context) {
-	databaseID := c.Param("databaseId")
+	databaseID := c.Param("id")
 	accountID := middleware.AccountID(c)
 	userID := middleware.UserID(c)
 

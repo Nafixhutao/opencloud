@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,31 +37,43 @@ func siteRoutingLockScope(siteID uuid.UUID) string {
 // provider and route work for the same site. It must run inside the lifecycle
 // transaction so PostgreSQL releases it automatically on commit or rollback.
 func (r *SiteRepo) LockRoutingTransition(ctx context.Context, siteID uuid.UUID) error {
+	scope := siteRoutingLockScope(siteID)
 	_, err := r.db.NewRaw(
-		`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`,
-		siteRoutingLockScope(siteID),
+		`SELECT pg_advisory_xact_lock(hashtext(?))`,
+		scope,
 	).Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("lock routing transition: %w", err)
+	}
+	return nil
 }
 
 // LockRoutingSession holds the same lock across provider work and the worker's
 // final persistence transaction. The caller owns the dedicated connection.
 func (r *SiteRepo) LockRoutingSession(ctx context.Context, siteID uuid.UUID) error {
+	scope := siteRoutingLockScope(siteID)
 	_, err := r.db.NewRaw(
-		`SELECT pg_advisory_lock(hashtextextended(?, 0))`,
-		siteRoutingLockScope(siteID),
+		`SELECT pg_advisory_lock(hashtext(?))`,
+		scope,
 	).Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("lock routing session: %w", err)
+	}
+	return nil
 }
 
 // UnlockRoutingSession releases a session lock obtained by LockRoutingSession.
 func (r *SiteRepo) UnlockRoutingSession(ctx context.Context, siteID uuid.UUID) (bool, error) {
+	scope := siteRoutingLockScope(siteID)
 	var unlocked bool
 	err := r.db.NewRaw(
-		`SELECT pg_advisory_unlock(hashtextextended(?, 0))`,
-		siteRoutingLockScope(siteID),
+		`SELECT pg_advisory_unlock(hashtext(?))`,
+		scope,
 	).Scan(ctx, &unlocked)
-	return unlocked, err
+	if err != nil {
+		return false, fmt.Errorf("unlock routing session: %w", err)
+	}
+	return unlocked, nil
 }
 
 // LockCreateRequest serializes idempotent retries for one account/key. The
@@ -71,8 +84,14 @@ func (r *SiteRepo) LockCreateRequest(ctx context.Context, accountID uuid.UUID, k
 		return nil
 	}
 	lockScope := accountID.String() + ":" + key
-	_, err := r.db.NewRaw(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, lockScope).Exec(ctx)
-	return err
+	_, err := r.db.NewRaw(
+		`SELECT pg_advisory_xact_lock(hashtext(?))`,
+		lockScope,
+	).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("lock create request: %w", err)
+	}
+	return nil
 }
 
 // Create inserts a site row.
@@ -130,7 +149,7 @@ func (r *SiteRepo) GetByAccount(ctx context.Context, accountID, siteID uuid.UUID
 		Where("deleted_at IS NULL").
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get site by account: %w", err)
 	}
 	return site, nil
 }
@@ -146,7 +165,7 @@ func (r *SiteRepo) GetByAccountForUpdate(ctx context.Context, accountID, siteID 
 		For("UPDATE").
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get site by account for update: %w", err)
 	}
 	return site, nil
 }
@@ -165,7 +184,7 @@ func (r *SiteRepo) GetByAccountForUpdateIncludingDeleted(
 		For("UPDATE").
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get site by account for update including deleted: %w", err)
 	}
 	return site, nil
 }
@@ -179,28 +198,36 @@ func (r *SiteRepo) GetByIdempotencyKey(ctx context.Context, accountID uuid.UUID,
 		Where("idempotency_key = ?", key).
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get site by idempotency key: %w", err)
 	}
 	return site, nil
 }
 
 // GetForWorker is the deliberate unscoped lookup used only after a durable job
-// supplies a server-generated site ID.
+// supplies a server-generated site ID. MUST only be called from:
+//   - Job workers (internal/pkg/worker/)
+//   - Reconciliation loops in internal/provisioner/
+//
+// DO NOT call from handlers or services - they must use GetByAccount variants.
+//
+// Security note: This bypasses tenant scoping by design for worker durability.
+// Any accidental caller path from user-facing code will cause data leaks.
 func (r *SiteRepo) GetForWorker(ctx context.Context, siteID uuid.UUID) (*model.Site, error) {
 	site := new(model.Site)
 	err := r.db.NewSelect().Model(site).Where("id = ?", siteID).Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get for worker: %w", err)
 	}
 	return site, nil
 }
 
 // GetForWorkerForUpdate locks a worker-owned site transition.
+// Same usage constraints as GetForWorker.
 func (r *SiteRepo) GetForWorkerForUpdate(ctx context.Context, siteID uuid.UUID) (*model.Site, error) {
 	site := new(model.Site)
 	err := r.db.NewSelect().Model(site).Where("id = ?", siteID).For("UPDATE").Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get for worker for update: %w", err)
 	}
 	return site, nil
 }

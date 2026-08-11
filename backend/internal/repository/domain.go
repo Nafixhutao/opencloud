@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
@@ -36,11 +37,12 @@ func (r *DomainRepo) LockCreateRequest(
 		scopes = append(scopes, "domain-idempotency:"+accountID.String()+":"+idempotencyKey)
 	}
 	for _, scope := range scopes {
-		if _, err := r.db.NewRaw(
-			`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`,
+		_, err := r.db.NewRaw(
+			`SELECT pg_advisory_xact_lock(hashtext(?))`,
 			scope,
-		).Exec(ctx); err != nil {
-			return err
+		).Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("lock create request: %w", err)
 		}
 	}
 	return nil
@@ -49,21 +51,29 @@ func (r *DomainRepo) LockCreateRequest(
 // LockSiteRouting serializes Caddy/DNS provider calls affecting one site. It
 // must run on a dedicated session and must be paired with UnlockSiteRouting.
 func (r *DomainRepo) LockSiteRouting(ctx context.Context, siteID uuid.UUID) error {
+	scope := siteRoutingLockScope(siteID)
 	_, err := r.db.NewRaw(
-		`SELECT pg_advisory_lock(hashtextextended(?, 0))`,
-		siteRoutingLockScope(siteID),
+		`SELECT pg_advisory_lock(hashtext(?))`,
+		scope,
 	).Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("lock site routing: %w", err)
+	}
+	return nil
 }
 
 // UnlockSiteRouting releases the session-scoped site routing lock.
 func (r *DomainRepo) UnlockSiteRouting(ctx context.Context, siteID uuid.UUID) (bool, error) {
+	scope := siteRoutingLockScope(siteID)
 	var unlocked bool
 	err := r.db.NewRaw(
-		`SELECT pg_advisory_unlock(hashtextextended(?, 0))`,
-		siteRoutingLockScope(siteID),
+		`SELECT pg_advisory_unlock(hashtext(?))`,
+		scope,
 	).Scan(ctx, &unlocked)
-	return unlocked, err
+	if err != nil {
+		return false, fmt.Errorf("unlock site routing: %w", err)
+	}
+	return unlocked, nil
 }
 
 // AccountHostnameInUse rejects duplicate intent inside one tenant without
@@ -174,30 +184,53 @@ func (r *DomainRepo) GetByIdempotencyKey(
 	return domain, nil
 }
 
-// ListBySite returns a bounded tenant-scoped collection.
+// ListBySite returns a bounded tenant-scoped collection with optimized single-query pagination.
 func (r *DomainRepo) ListBySite(
 	ctx context.Context,
 	accountID, siteID uuid.UUID,
 	limit, offset int,
 ) ([]model.Domain, int, error) {
-	query := r.db.NewSelect().Model((*model.Domain)(nil)).
-		Where("account_id = ?", accountID).
-		Where("site_id = ?", siteID).
-		Where("deleted_at IS NULL")
-	total, err := query.Count(ctx)
-	if err != nil {
-		return nil, 0, err
+	if limit <= 0 {
+		limit = 25
 	}
-	var domains []model.Domain
-	err = r.db.NewSelect().Model(&domains).
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	type DomainWithTotal struct {
+		model.Domain
+		Total int `bun:"total"`
+	}
+
+	var items []DomainWithTotal
+	err := r.db.NewSelect().
+		Model((*model.Domain)(nil)).
+		ColumnExpr("domains.*, COUNT(*) OVER() as total").
 		Where("account_id = ?", accountID).
 		Where("site_id = ?", siteID).
 		Where("deleted_at IS NULL").
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
-		Scan(ctx)
-	return domains, total, err
+		Scan(ctx, &items)
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("list domains by site: %w", err)
+	}
+
+	if len(items) == 0 {
+		return nil, 0, nil
+	}
+
+	domains := make([]model.Domain, len(items))
+	total := items[0].Total
+	for i, item := range items {
+		domains[i] = item.Domain
+	}
+	return domains, total, nil
 }
 
 // GetVerifiedActiveByHostname is the constant-query security boundary for

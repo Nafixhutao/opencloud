@@ -12,7 +12,10 @@ export default async function StoragePage({ params }: PageProps) {
   const { projectId } = await params;
   const envelope = await apiJSON<BucketListEnvelope>(
     `/api/v1/projects/${projectId}/storage/buckets?page=1&per_page=25`,
-  ).catch(() => null);
+  ).catch((err) => {
+    console.error('Failed to load storage buckets:', err);
+    return null;
+  });
 
   if (!envelope) {
     return (

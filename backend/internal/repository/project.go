@@ -79,7 +79,10 @@ func (r *ProjectRepo) GetProjectByIdempotencyKey(
 		Where("account_id = ?", accountID).
 		Where("idempotency_key = ?", idempotencyKey).
 		Scan(ctx)
-	return project, err
+	if err != nil {
+		return nil, fmt.Errorf("get project by idempotency key: %w", err)
+	}
+	return project, nil
 }
 
 // ListProjects returns live projects owned by accountID.
@@ -119,7 +122,10 @@ func (r *ProjectRepo) GetProjectByAccount(
 		Where("id = ?", projectID).
 		Where("deleted_at IS NULL").
 		Scan(ctx)
-	return project, err
+	if err != nil {
+		return nil, fmt.Errorf("get project by account: %w", err)
+	}
+	return project, nil
 }
 
 // GetProjectByAccountForUpdate locks a live project while a service is added.
@@ -134,7 +140,10 @@ func (r *ProjectRepo) GetProjectByAccountForUpdate(
 		Where("deleted_at IS NULL").
 		For("UPDATE").
 		Scan(ctx)
-	return project, err
+	if err != nil {
+		return nil, fmt.Errorf("get project by account for update: %w", err)
+	}
+	return project, nil
 }
 
 // CreateService inserts one independently deployable project workload.

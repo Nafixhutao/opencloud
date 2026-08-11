@@ -232,12 +232,12 @@ func New(
 			authed.GET("/projects/:projectID/services/:serviceID/deployments/:deploymentID/events", projectH.ListDeploymentEvents)
 			authed.GET("/projects/:projectID/logs", logH.List)
 			authed.GET("/projects/:projectID/logs/stream", logH.Stream)
-			authed.GET("/projects/:projectId/services/:serviceId/environment", envH.List)
-			authed.POST("/projects/:projectId/services/:serviceId/environment", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Create)
-			authed.PUT("/projects/:projectId/services/:serviceId/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Update)
-			authed.DELETE("/projects/:projectId/services/:serviceId/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Delete)
-			authed.POST("/projects/:projectId/services/:serviceId/environment/:id/reveal", middleware.RateLimit(rdb, "env-reveal", 10, time.Minute), envH.Reveal)
-			authed.GET("/projects/:projectId/services/:serviceId/environment/audit", envH.ListAudit)
+			authed.GET("/projects/:projectID/services/:serviceID/environment", envH.List)
+			authed.POST("/projects/:projectID/services/:serviceID/environment", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Create)
+			authed.PUT("/projects/:projectID/services/:serviceID/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Update)
+			authed.DELETE("/projects/:projectID/services/:serviceID/environment/:id", middleware.RateLimit(rdb, "env-write", 30, time.Minute), envH.Delete)
+			authed.POST("/projects/:projectID/services/:serviceID/environment/:id/reveal", middleware.RateLimit(rdb, "env-reveal", 10, time.Minute), envH.Reveal)
+			authed.GET("/projects/:projectID/services/:serviceID/environment/audit", envH.ListAudit)
 			authed.GET("/sites", siteH.List)
 			authed.POST("/sites", middleware.RateLimit(rdb, "site-write", 30, time.Minute), siteH.Create)
 			authed.GET("/sites/:id", siteH.Get)
@@ -270,7 +270,7 @@ func New(
 			)
 
 			// Database console routes
-			console := authed.Group("/databases/:databaseId/console")
+			console := authed.Group("/databases/:id/console")
 			{
 				console.POST("/sessions", middleware.RateLimit(rdb, "console-session", 10, time.Minute), consoleSessionH.CreateSession)
 				console.DELETE("/sessions/:sessionId", middleware.RateLimit(rdb, "console-session", 30, time.Minute), consoleSessionH.RevokeSession)

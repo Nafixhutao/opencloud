@@ -66,7 +66,7 @@ export function LoginForm({
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-3">
         <p className="label-meta text-muted-foreground">Account Access</p>
-        <h1 className="heading-auth max-w-[12ch] text-balance">Sign In to Cevra</h1>
+        <h1 className="heading-auth max-w-[12ch] text-balance gradient-text">Sign In to Cevra</h1>
         <p className="max-w-md text-sm leading-6 text-muted-foreground">
           Manage sites, domains, databases, and certificates from one workspace.
         </p>
@@ -78,6 +78,15 @@ export function LoginForm({
         errorCallbackURL={`/login?error=social&next=${encodeURIComponent(callbackURL)}`}
         onError={setFormError}
       />
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border"></span>
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+        </div>
+      </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup className="gap-4">
@@ -136,7 +145,7 @@ export function LoginForm({
 
       <p className="text-sm text-muted-foreground">
         New to Cevra?{' '}
-        <Link className="text-link-signal hover:underline" href="/register">
+        <Link className="font-semibold text-primary hover:text-primary-hover transition-colors duration-200 underline" href="/register">
           Create an Account
         </Link>
       </p>

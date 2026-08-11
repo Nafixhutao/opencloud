@@ -96,21 +96,25 @@ export default async function DashboardPage() {
   return (
     <main
       id="dashboard-content"
-      className="mx-auto flex w-full max-w-[1200px] scroll-mt-20 flex-col gap-16 px-6 py-12 sm:px-8 sm:py-16"
+      className="mx-auto flex w-full max-w-[1400px] scroll-mt-20 flex-col gap-16 px-6 py-12 sm:px-8 sm:py-16"
     >
-      <section className="flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex max-w-3xl flex-col gap-3">
-          <p className="label-meta text-muted-foreground">Workspace Overview</p>
-          <h1 className="heading-page text-balance">Good to see you, {firstName}.</h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Your control plane is ready. Start with one site, then connect the services
-            that keep it available.
-          </p>
+      <section className="relative overflow-hidden rounded-xl border border-border bg-card/50 p-8 shadow-lg backdrop-blur-sm sm:p-12 lg:p-16">
+        <div className="absolute -left-1/4 -top-1/4 h-64 w-64 rounded-full bg-primary/10 blur-3xl"></div>
+        <div className="absolute -right-1/4 -bottom-1/4 h-64 w-64 rounded-full bg-info/10 blur-3xl"></div>
+        <div className="relative z-10 flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex max-w-3xl flex-col gap-3">
+            <p className="label-meta text-muted-foreground">Workspace Overview</p>
+            <h1 className="heading-page text-balance">Good to see you, {firstName}.</h1>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Your control plane is ready. Start with one site, then connect the services
+              that keep it available.
+            </p>
+          </div>
+          <a href="#workspace" className={buttonVariants({ size: 'lg' })}>
+            Open Setup Guide
+            <ArrowRight data-icon="inline-end" />
+          </a>
         </div>
-        <a href="#workspace" className={buttonVariants({ size: 'lg' })}>
-          Open Setup Guide
-          <ArrowRight data-icon="inline-end" />
-        </a>
       </section>
 
       <section aria-labelledby="overview-heading" className="flex flex-col gap-4">
@@ -122,12 +126,12 @@ export default async function DashboardPage() {
             Live Workspace State
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative z-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {metrics.map(({ label, value, detail, icon: Icon }) => (
-            <Card key={label} size="sm">
+            <Card key={label} size="sm" className="group hover:border-primary/50 transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]">
               <CardHeader>
                 <CardDescription>{label}</CardDescription>
-                <CardAction className="text-muted-foreground">
+                <CardAction className="text-muted-foreground group-hover:text-primary transition-colors duration-300">
                   <Icon className="size-4" aria-hidden="true" />
                 </CardAction>
               </CardHeader>
@@ -147,7 +151,7 @@ export default async function DashboardPage() {
         aria-labelledby="workspace-heading"
         className="grid scroll-mt-24 gap-4 lg:grid-cols-12"
       >
-        <Card className="lg:col-span-8">
+        <Card className="lg:col-span-8 group hover:border-primary/30 transition-all duration-300">
           <CardHeader>
             <p className="label-meta text-info">Setup Guide</p>
             <CardTitle>
@@ -166,17 +170,17 @@ export default async function DashboardPage() {
                 <li key={title} className="relative flex gap-4 py-5 first:pt-0 last:pb-0">
                   <span
                     className={cn(
-                      'relative flex size-10 shrink-0 items-center justify-center rounded-full border',
+                      'relative flex size-10 shrink-0 items-center justify-center rounded-full border transition-all duration-300 group-hover:border-primary/50',
                       index === 0
-                        ? 'border-info bg-info text-white'
-                        : 'border-border bg-background text-muted-foreground'
+                        ? 'border-info bg-info text-white shadow-lg'
+                        : 'border-border bg-background text-muted-foreground hover:border-primary/30'
                     )}
                   >
                     <Icon className="size-4" aria-hidden="true" />
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col gap-1 pt-1">
                     <div className="flex items-center justify-between gap-4">
-                      <h3 className="text-sm font-semibold">{title}</h3>
+                      <h3 className="text-sm font-semibold group-hover:text-primary transition-colors duration-300">{title}</h3>
                       <span className="label-meta text-muted-foreground">
                         {String(index + 1).padStart(2, '0')}
                       </span>
@@ -198,7 +202,7 @@ export default async function DashboardPage() {
           </CardFooter>
         </Card>
 
-        <Card className="lg:col-span-4">
+        <Card className="lg:col-span-4 group hover:border-primary/30 transition-all duration-300">
           <CardHeader>
             <p className="label-meta text-muted-foreground">Account</p>
             <CardTitle>
@@ -209,7 +213,7 @@ export default async function DashboardPage() {
           <CardContent className="mt-auto">
             <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-5">
               <dt className="text-muted-foreground">Name</dt>
-              <dd className="min-w-0 truncate text-right font-medium">{session.user.name}</dd>
+              <dd className="min-w-0 truncate text-right font-medium text-primary">{session.user.name}</dd>
               <dt className="text-muted-foreground">Email</dt>
               <dd className="min-w-0 truncate text-right">{session.user.email}</dd>
               <dt className="text-muted-foreground">Member Since</dt>

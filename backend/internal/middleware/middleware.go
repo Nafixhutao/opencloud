@@ -41,10 +41,10 @@ func validRequestID(id string) bool {
 	if id == "" || len(id) > maxRequestIDLength {
 		return false
 	}
-	for i := 0; i < len(id); i++ {
-		b := id[i]
-		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') ||
-			(b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.' || b == ':' {
+	for _, b := range id {
+		ch := byte(b) // Convert rune to byte for comparison
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.' || ch == ':' {
 			continue
 		}
 		return false

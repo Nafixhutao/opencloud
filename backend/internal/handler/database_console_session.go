@@ -23,7 +23,7 @@ func NewDatabaseConsoleSessionHandler(sessionService *service.DatabaseConsoleSes
 // CreateSession generates a new database console session.
 // POST /api/v1/databases/:databaseId/console/sessions
 func (h *DatabaseConsoleSessionHandler) CreateSession(c *gin.Context) {
-	databaseID := c.Param("databaseId")
+	databaseID := c.Param("id")
 	accountID := middleware.AccountID(c)
 	userID := middleware.UserID(c)
 

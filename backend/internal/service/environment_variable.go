@@ -288,7 +288,7 @@ func (s *EnvironmentVariableService) validateKey(key string) error {
 	upperKey := strings.ToUpper(key)
 	for _, prefix := range reservedPrefixes {
 		if strings.HasPrefix(upperKey, prefix) {
-			return apperr.Validation(fmt.Sprintf("key cannot start with reserved prefix %s", prefix))
+			return apperr.Validation(fmt.Sprintf("key cannot start with reserved prefix %q", prefix))
 		}
 	}
 	return nil

@@ -16,7 +16,10 @@ export default async function BucketDetailPage({ params }: PageProps) {
   const { projectId, bucketId } = await params;
   const envelope = await apiJSON<BucketEnvelope>(
     `/api/v1/projects/${projectId}/storage/buckets/${bucketId}`,
-  ).catch(() => null);
+  ).catch((err) => {
+    console.error('Failed to load bucket details:', err);
+    return null;
+  });
 
   if (!envelope?.data) {
     return (

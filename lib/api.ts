@@ -2,6 +2,40 @@ import { headers } from 'next/headers';
 
 import { auth } from '@/lib/auth';
 
+interface ApiErrorBody {
+  error: {
+    code: string;
+    message: string;
+    details?: { field: string; issue: string }[];
+  };
+}
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  details?: { field: string; issue: string }[];
+
+  constructor(
+    message: string,
+    status: number,
+    code: string,
+    details?: { field: string; issue: string }[],
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+
+  static fromResponse(res: Response, body: unknown): ApiError {
+    const errBody = body as ApiErrorBody | null;
+    const message = errBody?.error?.message ?? `API ${res.status}`;
+    const details = errBody?.error?.details;
+    return new ApiError(message, res.status, errBody?.error?.code ?? 'unknown', details);
+  }
+}
+
 /**
  * Server-side helper: exchange the better-auth session cookie for a JWT
  * carrying trusted account_id + role claims, then call the Go API.
@@ -13,8 +47,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   const tokenRes = await auth.api.getToken({ headers: h });
   const token = tokenRes?.token;
-  if (!token) {
-    throw new Error('UNAUTHENTICATED');
+  if (!token || typeof token !== 'string') {
+    throw new ApiError('UNAUTHENTICATED', 401, 'unauthorized');
   }
 
   const hdrs = new Headers(init.headers);
@@ -23,27 +57,29 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     hdrs.set('Content-Type', 'application/json');
   }
 
-  return fetch(`${apiURL}${path}`, {
+  const response = await fetch(`${apiURL}${path}`, {
     ...init,
     headers: hdrs,
     cache: 'no-store',
   });
-}
 
-export type ApiErrorBody = {
-  error: { code: string; message: string; details?: { field: string; issue: string }[] };
-};
+  if (!response.ok) {
+    try {
+      const body = await response.json().catch(() => null);
+      throw ApiError.fromResponse(response, body);
+    } catch {
+      throw new ApiError(`API ${response.status}`, response.status, 'unknown');
+    }
+  }
+
+  return response;
+}
 
 export async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(path, init);
   const body = (await res.json().catch(() => null)) as T | ApiErrorBody | null;
   if (!res.ok) {
-    const err = body as ApiErrorBody | null;
-    const message = err?.error?.message ?? `API ${res.status}`;
-    const error = new Error(message) as Error & { status?: number; code?: string };
-    error.status = res.status;
-    error.code = err?.error?.code;
-    throw error;
+    throw ApiError.fromResponse(res, body);
   }
   return body as T;
 }

@@ -6,7 +6,7 @@ CREATE TABLE storage_buckets (
     name                    TEXT NOT NULL CONSTRAINT buckets_name_valid CHECK (
         btrim(name) = name AND
         length(btrim(name)) BETWEEN 1 AND 63 AND
-        name ~ '^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+        name ~ '^[a-z][a-z0-9-]{0,62}$'
     ),
     physical_name           TEXT NOT NULL UNIQUE,  -- server-generated: ocb-<uuidhex>, implicit btree index
     visibility              TEXT NOT NULL DEFAULT 'private'

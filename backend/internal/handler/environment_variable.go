@@ -31,7 +31,7 @@ func NewEnvironmentVariableHandler(log *zap.Logger, envSvc *service.EnvironmentV
 }
 
 // Create adds a new environment variable or secret.
-// POST /api/v1/projects/:projectId/services/:serviceId/environment
+// POST /api/v1/projects/:projectID/services/:serviceID/environment
 func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 	var req dto.CreateEnvironmentVariableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,12 +41,12 @@ func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 
 	accountID := middleware.AccountID(c)
 	userID := middleware.UserID(c)
-	projectID, err := uuid.Parse(c.Param("projectId"))
+	projectID, err := uuid.Parse(c.Param("projectID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
 		return
 	}
-	serviceID, err := uuid.Parse(c.Param("serviceId"))
+	serviceID, err := uuid.Parse(c.Param("serviceID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid service id"))
 		return
@@ -74,7 +74,7 @@ func (h *EnvironmentVariableHandler) Create(c *gin.Context) {
 }
 
 // Update modifies an existing environment variable or secret.
-// PUT /api/v1/projects/:projectId/services/:serviceId/environment/:id
+// PUT /api/v1/projects/:projectID/services/:serviceID/environment/:id
 func (h *EnvironmentVariableHandler) Update(c *gin.Context) {
 	var req dto.UpdateEnvironmentVariableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -107,7 +107,7 @@ func (h *EnvironmentVariableHandler) Update(c *gin.Context) {
 }
 
 // Delete removes an environment variable.
-// DELETE /api/v1/projects/:projectId/services/:serviceId/environment/:id
+// DELETE /api/v1/projects/:projectID/services/:serviceID/environment/:id
 func (h *EnvironmentVariableHandler) Delete(c *gin.Context) {
 	accountID := middleware.AccountID(c)
 	userID := middleware.UserID(c)
@@ -126,15 +126,15 @@ func (h *EnvironmentVariableHandler) Delete(c *gin.Context) {
 }
 
 // List retrieves all environment variables for a service and environment.
-// GET /api/v1/projects/:projectId/services/:serviceId/environment
+// GET /api/v1/projects/:projectID/services/:serviceID/environment
 func (h *EnvironmentVariableHandler) List(c *gin.Context) {
 	accountID := middleware.AccountID(c)
-	projectID, err := uuid.Parse(c.Param("projectId"))
+	projectID, err := uuid.Parse(c.Param("projectID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
 		return
 	}
-	serviceID, err := uuid.Parse(c.Param("serviceId"))
+	serviceID, err := uuid.Parse(c.Param("serviceID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid service id"))
 		return
@@ -166,7 +166,7 @@ func (h *EnvironmentVariableHandler) List(c *gin.Context) {
 }
 
 // Reveal decrypts and returns a secret value with audit trail.
-// POST /api/v1/projects/:projectId/services/:serviceId/environment/:id/reveal
+// POST /api/v1/projects/:projectID/services/:serviceID/environment/:id/reveal
 func (h *EnvironmentVariableHandler) Reveal(c *gin.Context) {
 	accountID := middleware.AccountID(c)
 	userID := middleware.UserID(c)
@@ -191,15 +191,15 @@ func (h *EnvironmentVariableHandler) Reveal(c *gin.Context) {
 }
 
 // ListAudit retrieves audit trail for a service.
-// GET /api/v1/projects/:projectId/services/:serviceId/environment/audit
+// GET /api/v1/projects/:projectID/services/:serviceID/environment/audit
 func (h *EnvironmentVariableHandler) ListAudit(c *gin.Context) {
 	accountID := middleware.AccountID(c)
-	projectID, err := uuid.Parse(c.Param("projectId"))
+	projectID, err := uuid.Parse(c.Param("projectID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid project id"))
 		return
 	}
-	serviceID, err := uuid.Parse(c.Param("serviceId"))
+	serviceID, err := uuid.Parse(c.Param("serviceID"))
 	if err != nil {
 		respondError(c, apperr.Validation("invalid service id"))
 		return

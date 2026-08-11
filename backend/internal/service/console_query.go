@@ -229,6 +229,33 @@ func (s *ConsoleQueryService) validateQuerySafety(query string) error {
 	if containsMultipleStatements(query) {
 		return apperr.Validation("multiple SQL statements are not allowed")
 	}
+	// Check for dangerous patterns even in single statements
+	safeQuery := strings.ToUpper(strings.TrimSpace(query))
+	dangerousPatterns := []string{
+		"--",        // SQL comment can bypass filters
+		";",         // Multiple statements
+		"UNION",     // UNION attacks
+		"information_schema",  // PostgreSQL system tables
+		"pg_catalog",          // PostgreSQL system tables
+		"DROP ",     // DDL operations
+		"DELETE ",   // DELETE outside WHERE scope
+		"INSERT INTO ",
+		"TRUNCATE",
+		"ALTER ",
+		"GRANT ",
+		"REVOKE ",
+		"CREATE ",
+		"EXEC ",
+		"XP_",       // Extended stored procedures
+		"LOAD_FILE",
+		"INTO OUTFILE",
+		"INTO DUMPFILE",
+	}
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(safeQuery, pattern) {
+			return apperr.Forbidden(fmt.Sprintf("query contains prohibited keyword: %s", pattern))
+		}
+	}
 	return nil
 }
 
@@ -328,12 +355,13 @@ func executeReadOnlyQuery(
 		}
 		rows, err := tx.QueryContext(runCtx, query)
 		if err != nil {
-			return nil, err
+			// Parse and sanitize error for customer display
+			return nil, safeConsoleAppError(err)
 		}
 		defer func() { _ = rows.Close() }()
 		result, err := collectRows(rows, maxRows)
 		if err != nil {
-			return nil, err
+			return nil, safeConsoleAppError(err)
 		}
 		return result, tx.Commit()
 	}
@@ -352,12 +380,13 @@ func executeReadOnlyQuery(
 	}
 	rows, err := tx.QueryContext(runCtx, query)
 	if err != nil {
-		return nil, err
+		// Parse and sanitize error for customer display
+		return nil, safeConsoleAppError(err)
 	}
 	defer func() { _ = rows.Close() }()
 	result, err := collectRows(rows, maxRows)
 	if err != nil {
-		return nil, err
+		return nil, safeConsoleAppError(err)
 	}
 	return result, tx.Commit()
 }
@@ -402,6 +431,7 @@ func openConsoleConnection(credentials *provisioner.DatabaseCredentials) (*sql.D
 }
 
 // collectRows reads at most maxRows rows and builds the column metadata.
+// Implements defense-in-depth: limit results, escape sensitive data types.
 func collectRows(rows *sql.Rows, maxRows int) (*QueryResult, error) {
 	columns, err := rows.Columns()
 	if err != nil {
@@ -422,6 +452,10 @@ func collectRows(rows *sql.Rows, maxRows int) (*QueryResult, error) {
 	}
 	affected := int64(count)
 	result.RowsAffected = &affected
+	// Truncate to strict max even if loop exits early
+	if count > maxRows {
+		result.Rows = result.Rows[:maxRows]
+	}
 	return result, nil
 }
 
