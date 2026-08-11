@@ -429,7 +429,7 @@ test "$(psql_value "SELECT count(*) FROM domains WHERE id='00000000-0000-4000-80
 # migrate down rolls back only the newest migration group. Slices added after
 # Phase 3 may have appended groups, so roll back until the domains schema is
 # gone before asserting the pre-Phase 3 (databases-slice) state.
-for _ in $(seq 1 12); do
+for _ in $(seq 1 20); do
   if [ "$(psql_value "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='domains'")" = "0" ]; then
     break
   fi
