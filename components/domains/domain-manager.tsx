@@ -68,7 +68,7 @@ import {
 } from '@/lib/domains';
 import type { Site } from '@/lib/sites';
 
-type DomainDashboardProps = {
+type DomainManagerProps = {
   site: Site;
   initialData: DomainsEnvelope;
 };
@@ -112,7 +112,7 @@ const statusContent: Record<Domain['status'], { label: string; detail: string }>
 
 const transientPollBackoffMs = 10_000;
 
-export function DomainDashboard({ site, initialData }: DomainDashboardProps) {
+export function DomainManager({ site, initialData }: DomainManagerProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();

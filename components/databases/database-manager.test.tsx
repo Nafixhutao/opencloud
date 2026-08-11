@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DatabaseDashboard } from '@/components/databases/database-dashboard';
+import { DatabaseManager } from '@/components/databases/database-manager';
 import type {
   DatabaseCredentials,
   DatabasesEnvelope,
@@ -30,7 +30,7 @@ function renderDashboard(initialData: DatabasesEnvelope = emptyDatabases) {
   });
   return render(
     <QueryClientProvider client={client}>
-      <DatabaseDashboard initialData={initialData} />
+      <DatabaseManager initialData={initialData} />
     </QueryClientProvider>,
   );
 }
@@ -40,7 +40,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('DatabaseDashboard', () => {
+describe('DatabaseManager', () => {
   it('validates a managed database name before sending a request', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     renderDashboard();

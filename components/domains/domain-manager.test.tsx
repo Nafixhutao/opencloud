@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => searchParamsMock,
 }));
 
-import { DomainDashboard } from '@/components/domains/domain-dashboard';
+import { DomainManager } from '@/components/domains/domain-manager';
 import type { Domain, DomainsEnvelope } from '@/lib/domains';
 import type { Site } from '@/lib/sites';
 
@@ -84,7 +84,7 @@ function renderDashboard(initialData: DomainsEnvelope, siteOverride: Site = site
   });
   const rendered = render(
     <QueryClientProvider client={client}>
-      <DomainDashboard site={siteOverride} initialData={initialData} />
+      <DomainManager site={siteOverride} initialData={initialData} />
     </QueryClientProvider>,
   );
   return { ...rendered, client };
@@ -107,7 +107,7 @@ afterEach(() => {
   searchParamsMock.delete('page');
 });
 
-describe('DomainDashboard', () => {
+describe('DomainManager', () => {
   it('validates then attaches a hostname and renders the real pending state', async () => {
     let current: Domain[] = [];
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

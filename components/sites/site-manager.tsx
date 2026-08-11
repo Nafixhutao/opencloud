@@ -69,7 +69,7 @@ import {
 } from '@/lib/sites';
 import { createSiteFormSchema, type CreateSiteValues } from '@/lib/site-validation';
 
-type SiteDashboardProps = {
+type SiteManagerProps = {
   initialData: SitesEnvelope;
 };
 
@@ -86,7 +86,7 @@ const statusLabel: Record<Site['status'], string> = {
   failed: 'Failed',
 };
 
-export function SiteDashboard({ initialData }: SiteDashboardProps) {
+export function SiteManager({ initialData }: SiteManagerProps) {
   const queryClient = useQueryClient();
   const form = useForm<CreateSiteValues>({
     resolver: zodResolver(createSiteFormSchema),

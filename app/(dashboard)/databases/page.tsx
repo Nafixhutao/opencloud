@@ -1,4 +1,4 @@
-import { DatabaseDashboard } from '@/components/databases/database-dashboard';
+import { DatabaseManager } from '@/components/databases/database-manager';
 import { apiJSON } from '@/lib/api';
 import type { DatabasesEnvelope } from '@/lib/databases';
 
@@ -17,7 +17,7 @@ export default async function DatabasesPage() {
           until you reveal them, then permanently removed from the control plane.
         </p>
       </header>
-      <DatabaseDashboard initialData={initialData} />
+      <DatabaseManager initialData={initialData} />
     </main>
   );
 }

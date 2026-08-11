@@ -1,4 +1,4 @@
-import { SiteDashboard } from '@/components/sites/site-dashboard';
+import { SiteManager } from '@/components/sites/site-manager';
 import { apiJSON } from '@/lib/api';
 import type { SitesEnvelope } from '@/lib/sites';
 
@@ -17,7 +17,7 @@ export default async function SitesPage() {
           are durable jobs, so this page stays responsive while the worker acts.
         </p>
       </header>
-      <SiteDashboard initialData={initialData} />
+      <SiteManager initialData={initialData} />
     </main>
   );
 }

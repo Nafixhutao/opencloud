@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/session';
 import { apiJSON } from '@/lib/api';
-import { BucketDashboard } from '@/components/storage/bucket-dashboard';
+import { BucketManager } from '@/components/storage/bucket-manager';
 import type { BucketListEnvelope } from '@/lib/storage';
 
 type PageProps = { params: Promise<{ projectId: string }> };
@@ -25,5 +25,5 @@ export default async function StoragePage({ params }: PageProps) {
     );
   }
 
-  return <BucketDashboard projectId={projectId} initialData={envelope.data} />;
+  return <BucketManager projectId={projectId} initialData={envelope.data} />;
 }

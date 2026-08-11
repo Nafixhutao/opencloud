@@ -2,19 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectDashboard } from '@/components/projects/project-dashboard';
+import { ProjectManager } from '@/components/projects/project-manager';
 import type { ProjectsEnvelope } from '@/lib/projects';
 
 const emptyProjects: ProjectsEnvelope = { data: [], meta: { page: 1, per_page: 25, total: 0 } };
 
 function renderDashboard(initialData: ProjectsEnvelope = emptyProjects) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><ProjectDashboard initialData={initialData} /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ProjectManager initialData={initialData} /></QueryClientProvider>);
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-describe('ProjectDashboard', () => {
+describe('ProjectManager', () => {
   it('validates a project name before sending a create request', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify(emptyProjects), { status: 200, headers: { 'Content-Type': 'application/json' } }),

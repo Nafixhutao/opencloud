@@ -77,7 +77,7 @@ import {
   type CreateDatabaseValues,
 } from '@/lib/database-validation';
 
-type DatabaseDashboardProps = {
+type DatabaseManagerProps = {
   initialData: DatabasesEnvelope;
 };
 
@@ -89,7 +89,7 @@ const statusLabel: Record<ManagedDatabase['status'], string> = {
   failed: 'Failed',
 };
 
-export function DatabaseDashboard({ initialData }: DatabaseDashboardProps) {
+export function DatabaseManager({ initialData }: DatabaseManagerProps) {
   const queryClient = useQueryClient();
   const perPage = initialData.meta.per_page || 25;
   const [page, setPage] = useState(initialData.meta.page || 1);

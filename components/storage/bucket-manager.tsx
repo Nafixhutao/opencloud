@@ -31,7 +31,7 @@ function formatBytes(bytes: number): string {
 
 type Props = { projectId: string; initialData: StorageBucket[] };
 
-export function BucketDashboard({ projectId, initialData }: Props) {
+export function BucketManager({ projectId, initialData }: Props) {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<StorageBucket | null>(null);

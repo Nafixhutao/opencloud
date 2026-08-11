@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-import { DomainDashboard } from '@/components/domains/domain-dashboard';
+import { DomainManager } from '@/components/domains/domain-manager';
 import { Badge } from '@/components/ui/badge';
 import { apiJSON } from '@/lib/api';
 import type { DomainsEnvelope } from '@/lib/domains';
@@ -48,7 +48,7 @@ export default async function SiteDomainPage({ params, searchParams }: SiteDomai
           every customer hostname attached to this site.
         </p>
       </header>
-      <DomainDashboard site={site} initialData={domains} />
+      <DomainManager site={site} initialData={domains} />
     </main>
   );
 }

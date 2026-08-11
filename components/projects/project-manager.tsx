@@ -16,7 +16,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { createProject, listProjects, ProjectAPIError, type ProjectsEnvelope } from '@/lib/projects';
 import { createProjectSchema, type CreateProjectValues } from '@/lib/project-validation';
 
-export function ProjectDashboard({ initialData }: { initialData: ProjectsEnvelope }) {
+export function ProjectManager({ initialData }: { initialData: ProjectsEnvelope }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<CreateProjectValues>({

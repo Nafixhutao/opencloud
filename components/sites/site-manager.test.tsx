@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SiteDashboard } from '@/components/sites/site-dashboard';
+import { SiteManager } from '@/components/sites/site-manager';
 import type { Site, SitesEnvelope } from '@/lib/sites';
 
 const emptySites: SitesEnvelope = {
@@ -19,7 +19,7 @@ function renderDashboard(initialData: SitesEnvelope = emptySites) {
   });
   return render(
     <QueryClientProvider client={client}>
-      <SiteDashboard initialData={initialData} />
+      <SiteManager initialData={initialData} />
     </QueryClientProvider>,
   );
 }
@@ -29,7 +29,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('SiteDashboard', () => {
+describe('SiteManager', () => {
   it('validates a domain before sending a create request', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     renderDashboard();
