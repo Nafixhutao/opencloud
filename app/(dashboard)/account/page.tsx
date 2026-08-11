@@ -47,7 +47,7 @@ export default async function AccountPage() {
   return (
     <main
       id="dashboard-content"
-      className="mx-auto flex w-full max-w-[800px] flex-col gap-10 px-6 py-12 sm:px-8 sm:py-16"
+      className="mx-auto flex w-full max-w-[800px] scroll-mt-20 flex-col gap-10 px-6 py-12 sm:px-8 sm:py-16"
     >
       <header className="flex flex-col gap-2">
         <p className="label-meta text-muted-foreground">Account</p>

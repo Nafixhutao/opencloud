@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,6 @@ export function ProjectManager({ initialData }: { initialData: ProjectsEnvelope 
     resolver: zodResolver(createProjectSchema),
     defaultValues: { name: '' },
   });
-
-  useEffect(() => {
-    // No error state in initialData, just log it if something goes wrong
-    console.log('Projects loaded:', initialData);
-  }, [initialData]);
 
   const projects = useQuery({
     queryKey: ['projects'],

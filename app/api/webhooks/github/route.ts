@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
       // In production, look up matching services by repo URL and trigger builds.
       // For now, acknowledge the webhook.
-      console.log('Webhook received:', { event, repo, branch, sha });
+      console.info('[webhook] push', { repo, branch, sha });
     }
 
     if (event === 'pull_request') {
@@ -28,11 +28,11 @@ export async function POST(request: Request) {
       const sha = body.pull_request?.head?.sha ?? '';
 
       if (action === 'opened' || action === 'synchronize') {
-        console.log('PR webhook — would trigger preview:', { action, repo, branch, sha });
+        console.info('[webhook] PR preview', { action, repo, branch, sha });
       }
 
       if (action === 'closed') {
-        console.log('PR closed — would destroy preview:', { repo, branch });
+        console.info('[webhook] PR destroy', { repo, branch });
       }
     }
 
