@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/app"
+	"github.com/nazxf/opencloud/backend/internal/build"
 	"github.com/nazxf/opencloud/backend/internal/credential"
 	"github.com/nazxf/opencloud/backend/internal/domainverify"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
@@ -161,10 +162,18 @@ func main() {
 	services := repository.NewServiceRepo(deps.DB)
 	previews := repository.NewPreviewDeploymentRepo(deps.DB)
 	gitProvisioner := provisioner.NewLocalGitProvisioner()
+
+	buildPlanner, _ := build.NewPlanner(
+		&build.StaticProvider{},
+		&build.PHPProvider{},
+		&build.RailpackProvider{},
+	)
+
 	buildHandlers := queue.NewBuildJobHandlers(
 		deps.Log, deps.DB,
 		services, previews, jobs, sites,
 		gitProvisioner, siteProvisioner,
+		buildPlanner,
 		deps.Cfg.Provisioner.SiteDomainSuffix,
 	)
 	processor.SetBuildHandlers(buildHandlers)
