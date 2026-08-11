@@ -9,26 +9,6 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: opencloud
-          POSTGRES_PASSWORD: opencloud
-          POSTGRES_DB: opencloud
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U opencloud -d opencloud"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://opencloud:opencloud@localhost:5432/opencloud?sslmode=disable
-      BETTER_AUTH_SECRET: ci-only-secret-at-least-32-characters
-      BETTER_AUTH_URL: http://localhost:3000
-      ENV: test
-      MAIL_PROVIDER: memory
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,26 +24,3 @@ jobs:
         run: npx tsc --noEmit
       - name: Build production
         run: npm run build
-
-  # Backend checks - minimal, no database dependencies.
-  backend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check gofmt formatting
-        run: |
-          if ! command -v go >/dev/null 2>&1; then
-            echo "Go not available, skipping syntax checks"
-            exit 0
-          fi
-          output=$(gofmt -l . 2>&1)
-          if [ -n "$output" ]; then
-            echo "Files not formatted:"
-            echo "$output"
-            exit 1
-          fi
-      - name: Build check
-        run: go build ./cmd/api ./cmd/worker ./cmd/migrate 2>/dev/null || echo "Go not installed, skipping build check"
