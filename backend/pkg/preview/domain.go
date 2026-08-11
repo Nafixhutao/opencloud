@@ -8,5 +8,9 @@ func GenerateDomain(previewID, suffix string) string {
 	if suffix == "" {
 		suffix = "preview.localhost"
 	}
-	return fmt.Sprintf("pr-%s.%s", previewID[:8], suffix)
+	short := previewID
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	return fmt.Sprintf("pr-%s.%s", short, suffix)
 }
