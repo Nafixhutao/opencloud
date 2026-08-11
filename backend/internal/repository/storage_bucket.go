@@ -56,7 +56,7 @@ func (r *StorageBucketRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.S
 	bucket := new(model.StorageBucket)
 	err := r.db.NewSelect().Model(bucket).Where("id = ?", id).Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get storage bucket by id: %w", err)
+		return nil, err
 	}
 	return bucket, nil
 }

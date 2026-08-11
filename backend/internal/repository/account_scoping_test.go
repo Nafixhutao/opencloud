@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 	"time"
@@ -95,7 +96,7 @@ func TestSiteRepo_AccountScoping(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = siteRepo.GetByAccount(ctx, accountB, site.ID)
-		assert.ErrorIs(t, err, bun.ErrEmptyResult)
+		assert.ErrorIs(t, err, sql.ErrNoRows)
 	})
 
 	t.Run("SetStatus_TenantScoped", func(t *testing.T) {
@@ -109,7 +110,7 @@ func TestSiteRepo_AccountScoping(t *testing.T) {
 		require.NoError(t, err)
 
 		err = siteRepo.SetStatus(ctx, accountB, site.ID, model.SiteDeleted)
-		assert.ErrorIs(t, err, bun.ErrEmptyResult)
+		assert.ErrorIs(t, err, sql.ErrNoRows)
 
 		sites, _, _ := siteRepo.ListByAccount(ctx, accountA, 25, 0)
 		assert.Len(t, sites, 1)
@@ -129,7 +130,7 @@ func TestDomainRepo_AccountScoping(t *testing.T) {
 		Status:    model.SiteActive,
 		CreatedAt: time.Now().UTC(),
 	}
-	err := domainRepo.(*SiteRepo).db.NewInsert().Model(siteA).Exec(ctx)
+	_, err := domainRepo.db.NewInsert().Model(siteA).Exec(ctx)
 	require.NoError(t, err)
 
 	siteB := &model.Site{
@@ -138,7 +139,7 @@ func TestDomainRepo_AccountScoping(t *testing.T) {
 		Status:    model.SiteActive,
 		CreatedAt: time.Now().UTC(),
 	}
-	err = domainRepo.(*SiteRepo).db.NewInsert().Model(siteB).Exec(ctx)
+	_, err = domainRepo.db.NewInsert().Model(siteB).Exec(ctx)
 	require.NoError(t, err)
 
 	t.Run("GetByAccount_TenantIsolation", func(t *testing.T) {
@@ -154,7 +155,7 @@ func TestDomainRepo_AccountScoping(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = domainRepo.GetByAccount(ctx, accountB, domain.ID)
-		assert.ErrorIs(t, err, bun.ErrEmptyResult)
+		assert.ErrorIs(t, err, sql.ErrNoRows)
 	})
 
 	t.Run("ListBySite_CrossTenantIsolation", func(t *testing.T) {

@@ -232,13 +232,13 @@ func (s *ConsoleQueryService) validateQuerySafety(query string) error {
 	// Check for dangerous patterns even in single statements
 	safeQuery := strings.ToUpper(strings.TrimSpace(query))
 	dangerousPatterns := []string{
-		"--",        // SQL comment can bypass filters
-		";",         // Multiple statements
-		"UNION",     // UNION attacks
-		"information_schema",  // PostgreSQL system tables
-		"pg_catalog",          // PostgreSQL system tables
-		"DROP ",     // DDL operations
-		"DELETE ",   // DELETE outside WHERE scope
+		"--",                 // SQL comment can bypass filters
+		";",                  // Multiple statements
+		"UNION",              // UNION attacks
+		"information_schema", // PostgreSQL system tables
+		"pg_catalog",         // PostgreSQL system tables
+		"DROP ",              // DDL operations
+		"DELETE ",            // DELETE outside WHERE scope
 		"INSERT INTO ",
 		"TRUNCATE",
 		"ALTER ",
@@ -246,7 +246,7 @@ func (s *ConsoleQueryService) validateQuerySafety(query string) error {
 		"REVOKE ",
 		"CREATE ",
 		"EXEC ",
-		"XP_",       // Extended stored procedures
+		"XP_", // Extended stored procedures
 		"LOAD_FILE",
 		"INTO OUTFILE",
 		"INTO DUMPFILE",

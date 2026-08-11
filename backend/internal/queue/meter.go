@@ -33,7 +33,7 @@ func NewResourceMeter(
 	return &ResourceMeter{
 		log: log, db: db,
 		usageRepo: usageRepo,
-		siteRepo: siteRepo, dbRepo: dbRepo, bucketRepo: bucketRepo,
+		siteRepo:  siteRepo, dbRepo: dbRepo, bucketRepo: bucketRepo,
 	}
 }
 
