@@ -1,173 +1,99 @@
-import { betterAuth } from 'better-auth';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
-import { jwt } from 'better-auth/plugins';
 import { Pool } from 'pg';
 
+import { createIdentity } from './identity';
+import type { Auth } from './identity';
 import { getMailAdapter } from './mail';
-import { createMembershipStore } from './membership';
-import { socialProviders } from './social-providers';
+import { createMembershipStore, type MembershipStore } from './membership';
 
-const databaseUrl = process.env.DATABASE_URL;
-const secret = process.env.BETTER_AUTH_SECRET;
-const baseURL = process.env.BETTER_AUTH_URL;
+/**
+ * Composition root — wires the identity module (ADR 0006: better-auth in the
+ * BFF) with the membership domain store and mail adapter.
+ *
+ * The throw for missing env vars lives behind the lazy <code>getRuntime()</code>
+ * factory, NOT at module load. This lets <code>next build</code> statically
+ * analyse routes that import this module without triggering the DB/env
+ * validation — the CI build failure that motivated this split.
+ *
+ * Consumers that need the live instance call <code>getRuntime()</code> at
+ * request time. Re-exports (<code>auth</code>, <code>memberships</code>,
+ * <code>mail</code>) are lazy getters for backward compatibility with existing
+ * route handlers and pages.
+ */
 
-if (!databaseUrl || !secret || !baseURL) {
-  throw new Error('DATABASE_URL, BETTER_AUTH_SECRET, and BETTER_AUTH_URL are required');
+type AuthRuntime = {
+  auth: Auth['auth'];
+  authPool: Pool;
+  domainPool: Pool;
+  memberships: MembershipStore;
+  mail: ReturnType<typeof getMailAdapter>;
+};
+
+let runtime: AuthRuntime | null = null;
+
+function getRuntime(): AuthRuntime {
+  if (runtime) {
+    return runtime;
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  const secret = process.env.BETTER_AUTH_SECRET;
+  const baseURL = process.env.BETTER_AUTH_URL;
+
+  if (!databaseUrl || !secret || !baseURL) {
+    throw new Error('DATABASE_URL, BETTER_AUTH_SECRET, and BETTER_AUTH_URL are required');
+  }
+
+  const domainPool = new Pool({
+    connectionString: databaseUrl,
+    options: '-c search_path=public',
+  });
+
+  const memberships = createMembershipStore(domainPool);
+  const mail = getMailAdapter();
+  const { auth, authPool } = createIdentity({
+    databaseUrl,
+    secret,
+    baseURL,
+    memberships,
+    mail,
+  });
+
+  runtime = { auth, authPool, domainPool, memberships, mail };
+  return runtime;
 }
 
-/** Auth schema pool — Better Auth identity tables only. */
-export const authPool = new Pool({
-  connectionString: databaseUrl,
-  options: '-c search_path=auth',
-});
+/** Lazy getter — evaluates <code>getRuntime()</code> on first access. */
+export const auth: Auth['auth'] = new Proxy({} as Auth['auth'], {
+  get(_target, prop, receiver) {
+    return Reflect.get(getRuntime().auth, prop, receiver);
+  },
+}) as Auth['auth'];
 
-/** Domain pool — OpenCloud tenant memberships and audit trail. */
-export const domainPool = new Pool({
-  connectionString: databaseUrl,
-  options: '-c search_path=public',
-});
-
-export const memberships = createMembershipStore(domainPool);
-export const mail = getMailAdapter();
-
-export const auth = betterAuth({
-  database: authPool,
-  secret,
-  baseURL,
-  emailVerification: {
-    expiresIn: 3600,
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: false,
-    sendVerificationEmail: async ({ user, url }) => {
-      await mail.send({
-        to: user.email,
-        subject: 'Verify your OpenCloud email',
-        text: `Verify your email using this one-time link (expires in 1 hour):\n\n${url}\n\nIf you did not create this account, ignore this email.`,
-        tags: { kind: 'email_verification', user_id: user.id },
-      });
-    },
-    afterEmailVerification: async (user) => {
-      await memberships.appendAudit({
-        actorId: user.id,
-        action: 'auth.email.verify',
-        target: user.id,
-      });
+export const memberships: MembershipStore = new Proxy(
+  {} as MembershipStore,
+  {
+    get(_target, prop, receiver) {
+      return Reflect.get(getRuntime().memberships, prop, receiver);
     },
   },
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: true,
-    autoSignIn: false,
-    minPasswordLength: 8,
-    maxPasswordLength: 128,
-    resetPasswordTokenExpiresIn: 3600,
-    revokeSessionsOnPasswordReset: true,
-    sendResetPassword: async ({ user, url }) => {
-      await mail.send({
-        to: user.email,
-        subject: 'Reset your OpenCloud password',
-        text: `Reset your password using this one-time link (expires in 1 hour):\n\n${url}\n\nIf you did not request this, ignore this email.`,
-        tags: { kind: 'password_reset', user_id: user.id },
-      });
-      await memberships.appendAudit({
-        actorId: user.id,
-        action: 'auth.password_reset.request',
-        target: user.id,
-        metadata: { email_domain: user.email.split('@')[1] ?? '' },
-      });
-    },
-    onPasswordReset: async ({ user }) => {
-      await memberships.appendAudit({
-        actorId: user.id,
-        action: 'auth.password_reset.complete',
-        target: user.id,
-      });
-    },
-  },
-  socialProviders,
-  rateLimit: {
-    enabled: true,
-    window: 60,
-    max: 100,
-    storage: 'memory',
-    customRules: {
-      '/sign-in/email': { window: 60, max: 10 },
-      '/sign-up/email': { window: 60, max: 5 },
-      '/request-password-reset': { window: 60, max: 3 },
-      '/reset-password': { window: 60, max: 5 },
-      '/change-password': { window: 60, max: 5 },
-      '/send-verification-email': { window: 60, max: 3 },
-    },
-  },
-  hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== '/sign-up/email') {
-        return;
-      }
+) as MembershipStore;
 
-      const name = typeof ctx.body?.name === 'string' ? ctx.body.name.trim() : '';
-      if (!name) {
-        throw APIError.fromStatus('BAD_REQUEST', { message: 'Name is required' });
-      }
-      if (name.length > 100) {
-        throw APIError.fromStatus('BAD_REQUEST', {
-          message: 'Name must be at most 100 characters',
-        });
-      }
-      ctx.body.name = name;
-    }),
-    after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === '/sign-in/email' && ctx.context.newSession?.user) {
-        const user = ctx.context.newSession.user;
-        await memberships.appendAudit({
-          actorId: user.id,
-          action: 'auth.login.success',
-          target: user.id,
-        });
-      }
-    }),
+export const mail = new Proxy({} as ReturnType<typeof getMailAdapter>, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getRuntime().mail, prop, receiver);
   },
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          // Membership creation and its audit row commit together. Admin remains
-          // an explicit bootstrap-only platform role.
-          await memberships.ensureForUserWithAudit(user.id, user.name || 'Workspace', {
-            actorId: user.id,
-            action: 'account.membership.ensure',
-            target: user.id,
-            metadata: { role: 'customer', source: 'user.create' },
-          });
-        },
-      },
-    },
-  },
-  plugins: [
-    jwt({
-      jwt: {
-        definePayload: async (session) => {
-          const user = session.user;
-          const membership = await memberships.ensureForUser(
-            user.id,
-            user.name || 'Workspace',
-          );
-          if (membership.status !== 'active') {
-            throw APIError.fromStatus('FORBIDDEN', {
-              message: 'Account is not active',
-            });
-          }
-          return {
-            account_id: membership.account_id,
-            role: membership.role,
-            email: user.email,
-            name: user.name,
-          };
-        },
-      },
-    }),
-  ],
-});
+}) as ReturnType<typeof getMailAdapter>;
 
-export type Session = typeof auth.$Infer.Session;
+/** Pool singletons — lazy via <code>getRuntime()</code>. */
+function lazyPool(key: 'authPool' | 'domainPool'): Pool {
+  return new Proxy({} as Pool, {
+    get(_target, prop, receiver) {
+      return Reflect.get(getRuntime()[key], prop, receiver);
+    },
+  }) as Pool;
+}
+
+export const authPool = lazyPool('authPool');
+export const domainPool = lazyPool('domainPool');
+
+export type Session = Auth['auth']['$Infer']['Session'];
