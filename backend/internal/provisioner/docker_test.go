@@ -34,6 +34,14 @@ func testResponse(status int, body string, headers map[string]string) *http.Resp
 	}
 }
 
+// testCaddyRouter wraps a mock HTTP client (with a custom RoundTripper) into a
+// CaddyRouter, matching the production composition where Docker delegates
+// routing to CaddyRouter instead of holding a raw Caddy client itself.
+func testCaddyRouter(client *http.Client) *CaddyRouter {
+	u, _ := url.Parse("http://caddy.test")
+	return &CaddyRouter{client: client, url: u, serverID: "srv0"}
+}
+
 func TestDockerCreateSiteIsHardenedIdempotentAndCaddySafe(t *testing.T) {
 	spec := SiteSpec{
 		SiteID:       uuid.New(),
@@ -140,15 +148,9 @@ func TestDockerCreateSiteIsHardenedIdempotentAndCaddySafe(t *testing.T) {
 		}
 	})}
 
-	caddyURL, err := url.Parse("http://caddy.test")
-	if err != nil {
-		t.Fatal(err)
-	}
 	adapter := &Docker{
 		engine:       engine,
-		caddy:        caddy,
-		caddyURL:     caddyURL,
-		serverID:     "srv0",
+		caddy:        testCaddyRouter(caddy),
 		allowedImage: spec.Image,
 	}
 
@@ -189,15 +191,12 @@ func TestDockerDeleteRefusesMismatchedOwnership(t *testing.T) {
 		})
 		return testResponse(http.StatusOK, string(raw), nil), nil
 	})}
-	caddyURL, _ := url.Parse("http://caddy.test")
 	adapter := &Docker{
 		engine: engine,
-		caddy: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		caddy: testCaddyRouter(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatal("Caddy must not be touched after ownership mismatch")
 			return nil, nil
-		})},
-		caddyURL:     caddyURL,
-		serverID:     "srv0",
+		})}),
 		allowedImage: "opencloud/site-static:phase2",
 	}
 
@@ -251,11 +250,9 @@ func TestDockerSetSiteDomainsPreservesExactHostsAndOwnership(t *testing.T) {
 				return nil, nil
 			}
 		})}
-		caddyURL, err := url.Parse("http://caddy.test")
-		require.NoError(t, err)
-		adapter := &Docker{engine: engine, caddy: caddy, caddyURL: caddyURL, serverID: "srv0"}
+		adapter := &Docker{engine: engine, caddy: testCaddyRouter(caddy)}
 
-		err = adapter.SetSiteDomains(context.Background(), ref, []string{
+		err := adapter.SetSiteDomains(context.Background(), ref, []string{
 			"www.example.test", "primary.example.test", "api.example.test", "www.example.test",
 		})
 		require.NoError(t, err)
@@ -270,19 +267,15 @@ func TestDockerSetSiteDomainsPreservesExactHostsAndOwnership(t *testing.T) {
 		engine := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return testResponse(http.StatusOK, container(foreign), nil), nil
 		})}
-		caddyURL, err := url.Parse("http://caddy.test")
-		require.NoError(t, err)
 		adapter := &Docker{
 			engine: engine,
-			caddy: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			caddy: testCaddyRouter(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				t.Fatal("Caddy must not be touched after ownership mismatch")
 				return nil, nil
-			})},
-			caddyURL: caddyURL,
-			serverID: "srv0",
+			})}),
 		}
 
-		err = adapter.SetSiteDomains(context.Background(), ref, []string{"primary.example.test"})
+		err := adapter.SetSiteDomains(context.Background(), ref, []string{"primary.example.test"})
 		require.ErrorContains(t, err, "ownership label")
 	})
 
@@ -314,9 +307,7 @@ func TestDockerSetSiteDomainsPreservesExactHostsAndOwnership(t *testing.T) {
 				return nil, nil
 			}
 		})}
-		caddyURL, err := url.Parse("http://caddy.test")
-		require.NoError(t, err)
-		adapter := &Docker{engine: engine, caddy: caddy, caddyURL: caddyURL, serverID: "srv0"}
+		adapter := &Docker{engine: engine, caddy: testCaddyRouter(caddy)}
 
 		require.NoError(t, adapter.SetSiteDomains(context.Background(), ref, nil))
 		require.True(t, deleted)

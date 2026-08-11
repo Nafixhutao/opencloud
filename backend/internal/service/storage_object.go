@@ -40,12 +40,17 @@ func NewStorageObjectService(
 	return &StorageObjectService{log: log, bucketRepo: bucketRepo, objectRepo: objectRepo, provider: provider}
 }
 
-// PutObject stores an object in the bucket and records its metadata.
-func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketID uuid.UUID, key string, body io.Reader, size int64, contentType string) (*model.StorageObject, error) {
-	if err := validateObjectKey(key); err != nil {
-		return nil, err
-	}
+// bucketHandle is the deep module for tenant-owned bucket resolution. It owns
+// the account→physical-name translation and the sql.ErrNoRows→NotFound mapping
+// once, so the seven public methods stop re-deriving it as boilerplate.
+type bucketHandle struct {
+	bucket *model.StorageBucket
+}
 
+// resolveBucket loads a tenant-owned bucket and builds the provider ObjectRef.
+// The tenancy check, not-found translation, and physical-name mapping live here
+// — one tested unit instead of seven copies.
+func (s *StorageObjectService) resolveBucket(ctx context.Context, accountID, bucketID uuid.UUID) (*bucketHandle, error) {
 	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -53,6 +58,22 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		}
 		return nil, apperr.Internal("failed to load bucket").Wrap(err)
 	}
+	return &bucketHandle{
+		bucket: bucket,
+	}, nil
+}
+
+// PutObject stores an object in the bucket and records its metadata.
+func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketID uuid.UUID, key string, body io.Reader, size int64, contentType string) (*model.StorageObject, error) {
+	if err := validateObjectKey(key); err != nil {
+		return nil, err
+	}
+
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
+	if err != nil {
+		return nil, err
+	}
+	bucket := h.bucket
 	if bucket.Status != model.BucketActive {
 		return nil, apperr.Conflict("bucket is not active")
 	}
@@ -104,16 +125,13 @@ func (s *StorageObjectService) GetObject(ctx context.Context, accountID, bucketI
 		return nil, nil, err
 	}
 
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, apperr.NotFound("bucket not found")
-		}
-		return nil, nil, apperr.Internal("failed to load bucket").Wrap(err)
+		return nil, nil, err
 	}
 
 	body, info, err := s.provider.GetObject(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 		Key:                key,
 	})
 	if err != nil {
@@ -130,12 +148,9 @@ func (s *StorageObjectService) GetObject(ctx context.Context, accountID, bucketI
 
 // ListObjects lists objects in a bucket with optional prefix and pagination.
 func (s *StorageObjectService) ListObjects(ctx context.Context, accountID, bucketID uuid.UUID, prefix, continuationToken string, limit int32) ([]ObjectItem, string, error) {
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, "", apperr.NotFound("bucket not found")
-		}
-		return nil, "", apperr.Internal("failed to load bucket").Wrap(err)
+		return nil, "", err
 	}
 
 	if limit <= 0 || limit > 1000 {
@@ -143,7 +158,7 @@ func (s *StorageObjectService) ListObjects(ctx context.Context, accountID, bucke
 	}
 
 	objects, nextToken, err := s.provider.ListObjects(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 	}, provisioner.ListObjectsOptions{
 		Prefix:            prefix,
 		MaxKeys:           limit,
@@ -172,12 +187,9 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 		return err
 	}
 
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return apperr.NotFound("bucket not found")
-		}
-		return apperr.Internal("failed to load bucket").Wrap(err)
+		return err
 	}
 
 	// Fetch object size before deletion for quota tracking.
@@ -188,7 +200,7 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 	}
 
 	if err := s.provider.DeleteObject(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 		Key:                key,
 	}); err != nil {
 		return wrapProviderErr(err)
@@ -216,16 +228,13 @@ func (s *StorageObjectService) HeadObject(ctx context.Context, accountID, bucket
 		return nil, err
 	}
 
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperr.NotFound("bucket not found")
-		}
-		return nil, apperr.Internal("failed to load bucket").Wrap(err)
+		return nil, err
 	}
 
 	info, err := s.provider.HeadObject(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 		Key:                key,
 	})
 	if err != nil {
@@ -247,16 +256,13 @@ func (s *StorageObjectService) PresignedGetURL(ctx context.Context, accountID, b
 		return "", err
 	}
 
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", apperr.NotFound("bucket not found")
-		}
-		return "", apperr.Internal("failed to load bucket").Wrap(err)
+		return "", err
 	}
 
 	url, err := s.provider.PresignedGetURL(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 		Key:                key,
 	}, expiry)
 	if err != nil {
@@ -271,16 +277,13 @@ func (s *StorageObjectService) PresignedPutURL(ctx context.Context, accountID, b
 		return "", err
 	}
 
-	bucket, err := s.bucketRepo.GetByAccount(ctx, accountID, bucketID)
+	h, err := s.resolveBucket(ctx, accountID, bucketID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", apperr.NotFound("bucket not found")
-		}
-		return "", apperr.Internal("failed to load bucket").Wrap(err)
+		return "", err
 	}
 
 	url, err := s.provider.PresignedPutURL(ctx, provisioner.ObjectRef{
-		BucketPhysicalName: bucket.PhysicalName,
+		BucketPhysicalName: h.bucket.PhysicalName,
 		Key:                key,
 	}, expiry)
 	if err != nil {
