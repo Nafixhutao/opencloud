@@ -163,8 +163,9 @@ func main() {
 	gitProvisioner := provisioner.NewLocalGitProvisioner()
 	buildHandlers := queue.NewBuildJobHandlers(
 		deps.Log, deps.DB,
-		services, previews, jobs,
+		services, previews, jobs, sites,
 		gitProvisioner, siteProvisioner,
+		deps.Cfg.Provisioner.SiteDomainSuffix,
 	)
 	processor.SetBuildHandlers(buildHandlers)
 

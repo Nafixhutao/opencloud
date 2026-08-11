@@ -13,18 +13,21 @@ import (
 	"github.com/nazxf/opencloud/backend/internal/model"
 	"github.com/nazxf/opencloud/backend/internal/provisioner"
 	"github.com/nazxf/opencloud/backend/internal/repository"
+	"github.com/nazxf/opencloud/backend/pkg/preview"
 )
 
 // BuildJobHandlers processes git clone, build, and preview deploy jobs.
 type BuildJobHandlers struct {
-	log         *zap.Logger
-	db          *bun.DB
-	serviceRepo *repository.ServiceRepo
-	previewRepo *repository.PreviewDeploymentRepo
-	jobRepo     *repository.JobRepo
-	git         provisioner.GitProvisioner
-	siteProv    provisioner.SiteProvisioner
-	workDir     string
+	log          *zap.Logger
+	db           *bun.DB
+	serviceRepo  *repository.ServiceRepo
+	previewRepo  *repository.PreviewDeploymentRepo
+	jobRepo      *repository.JobRepo
+	siteRepo     *repository.SiteRepo
+	git          provisioner.GitProvisioner
+	siteProv     provisioner.SiteProvisioner
+	workDir      string
+	domainSuffix string
 }
 
 // NewBuildJobHandlers constructs build queue workers.
@@ -34,14 +37,18 @@ func NewBuildJobHandlers(
 	serviceRepo *repository.ServiceRepo,
 	previewRepo *repository.PreviewDeploymentRepo,
 	jobRepo *repository.JobRepo,
+	siteRepo *repository.SiteRepo,
 	git provisioner.GitProvisioner,
 	siteProv provisioner.SiteProvisioner,
+	domainSuffix string,
 ) *BuildJobHandlers {
 	return &BuildJobHandlers{
 		log: log, db: db,
 		serviceRepo: serviceRepo, previewRepo: previewRepo,
-		jobRepo: jobRepo, git: git, siteProv: siteProv,
-		workDir: os.TempDir(),
+		jobRepo: jobRepo, siteRepo: siteRepo,
+		git: git, siteProv: siteProv,
+		workDir:      os.TempDir(),
+		domainSuffix: domainSuffix,
 	}
 }
 
@@ -97,12 +104,11 @@ func (h *BuildJobHandlers) handleClone(ctx context.Context, job *model.Job, work
 		return fmt.Errorf("create target dir: %w", err)
 	}
 
-	_, err = h.git.Clone(ctx, provisioner.GitCloneSpec{
+	if _, err = h.git.Clone(ctx, provisioner.GitCloneSpec{
 		URL:       svc.GitRepoURL,
 		Branch:    svc.GitBranch,
 		TargetDir: targetDir,
-	})
-	if err != nil {
+	}); err != nil {
 		h.log.Warn("git clone failed",
 			zap.String("service_id", svc.ID.String()),
 			zap.Error(err),
@@ -115,21 +121,28 @@ func (h *BuildJobHandlers) handleClone(ctx context.Context, job *model.Job, work
 		zap.String("target_dir", targetDir),
 	)
 
-	err = h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		return h.jobRepo.WithDB(tx).Complete(ctx, job.ID, workerID)
-	})
-	return err
-}
-
-func (h *BuildJobHandlers) handleDeployPreview(ctx context.Context, job *model.Job, workerID string) error {
-	h.log.Info("deploying preview", zap.String("job_id", job.ID.String()))
 	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		return h.jobRepo.WithDB(tx).Complete(ctx, job.ID, workerID)
 	})
 }
 
+// handleDeployPreview provisions a temporary site for PR review.
+func (h *BuildJobHandlers) handleDeployPreview(ctx context.Context, job *model.Job, workerID string) error {
+	h.log.Info("deploying preview", zap.String("job_id", job.ID.String()))
+
+	// Future: resolve service, get artifact, provision site with temp domain.
+	_ = preview.GenerateDomain(job.ID.String(), h.domainSuffix)
+
+	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return h.jobRepo.WithDB(tx).Complete(ctx, job.ID, workerID)
+	})
+}
+
+// handleDestroyPreview tears down a temporary preview site.
 func (h *BuildJobHandlers) handleDestroyPreview(ctx context.Context, job *model.Job, workerID string) error {
 	h.log.Info("destroying preview", zap.String("job_id", job.ID.String()))
+
+	// Future: delete site, remove DNS, cleanup resources.
 	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		return h.jobRepo.WithDB(tx).Complete(ctx, job.ID, workerID)
 	})
