@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
+import { apiErrorToResponse } from '@/lib/api-route';
 
 type RouteContext = { params: Promise<{ projectId: string; bucketId: string }> };
 
@@ -30,11 +31,8 @@ export async function GET(request: Request, context: RouteContext) {
     });
     return new NextResponse(res.body, { status: res.status, headers });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'Sign in required' } },
-        { status: 401 },
-      );
+    if (error instanceof ApiError) {
+      return apiErrorToResponse(error);
     }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: 'Could not download object.' } },

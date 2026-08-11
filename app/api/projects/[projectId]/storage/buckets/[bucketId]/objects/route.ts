@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { apiFetch } from '@/lib/api';
-import { proxyAPI } from '@/lib/api-route';
+import { apiFetch, ApiError } from '@/lib/api';
+import { apiErrorToResponse, proxyAPI } from '@/lib/api-route';
 
 type RouteContext = { params: Promise<{ projectId: string; bucketId: string }> };
 
@@ -38,11 +38,8 @@ export async function PUT(request: Request, context: RouteContext) {
     const body = await res.json().catch(() => null);
     return NextResponse.json(body, { status: res.status });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'Sign in required' } },
-        { status: 401 },
-      );
+    if (error instanceof ApiError) {
+      return apiErrorToResponse(error);
     }
     return NextResponse.json(
       { error: { code: 'UPLOAD_FAILED', message: 'Upload failed' } },

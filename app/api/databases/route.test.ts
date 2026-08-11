@@ -4,9 +4,10 @@ const { proxyAPIMock } = vi.hoisted(() => ({
   proxyAPIMock: vi.fn(),
 }));
 
-vi.mock('@/lib/api-route', () => ({
-  proxyAPI: proxyAPIMock,
-}));
+vi.mock('@/lib/api-route', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-route')>('@/lib/api-route');
+  return { ...actual, proxyAPI: proxyAPIMock };
+});
 
 import { GET } from '@/app/api/databases/route';
 

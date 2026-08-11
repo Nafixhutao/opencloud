@@ -64,12 +64,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   });
 
   if (!response.ok) {
-    try {
-      const body = await response.json().catch(() => null);
-      throw ApiError.fromResponse(response, body);
-    } catch {
-      throw new ApiError(`API ${response.status}`, response.status, 'unknown');
-    }
+    const body = await response.json().catch(() => null);
+    throw ApiError.fromResponse(response, body);
   }
 
   return response;

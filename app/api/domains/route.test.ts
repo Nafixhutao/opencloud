@@ -4,9 +4,10 @@ const { proxyAPIMock } = vi.hoisted(() => ({
   proxyAPIMock: vi.fn(),
 }));
 
-vi.mock('@/lib/api-route', () => ({
-  proxyAPI: proxyAPIMock,
-}));
+vi.mock('@/lib/api-route', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-route')>('@/lib/api-route');
+  return { ...actual, proxyAPI: proxyAPIMock };
+});
 
 import { DELETE as detachDomain, GET as getDomain } from '@/app/api/domains/[id]/route';
 import { POST as rotateChallenge } from '@/app/api/domains/[id]/challenge/route';

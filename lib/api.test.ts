@@ -65,16 +65,18 @@ describe('apiFetch', () => {
   it('throws ApiError with details on backend 4xx errors', async () => {
     getTokenMock.mockResolvedValue({ token: 'jwt' });
 
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            code: 'validation',
-            message: 'Invalid hostname',
-            details: [{ field: 'hostname', issue: 'must be FQDN' }],
-          },
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'validation',
+              message: 'Invalid hostname',
+              details: [{ field: 'hostname', issue: 'must be FQDN' }],
+            },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        ),
       ),
     );
 
@@ -92,7 +94,7 @@ describe('apiFetch', () => {
         expect(error.details?.[0]).toEqual({ field: 'hostname', issue: 'must be FQDN' });
       }
     }
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('strips Authorization from client-facing responses', async () => {
@@ -131,10 +133,12 @@ describe('apiJSON', () => {
     vi.mocked(headersMock).mockImplementation(headersMockInstance);
     getTokenMock.mockResolvedValue({ token: 'jwt' });
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { code: 'not_found', message: 'Site missing' } }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } },
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ error: { code: 'not_found', message: 'Site missing' } }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } },
+        ),
       ),
     );
 

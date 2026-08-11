@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
+import { apiErrorToResponse } from '@/lib/api-route';
 
 type RouteContext = { params: Promise<{ projectId: string; bucketId: string }> };
 
@@ -20,7 +21,10 @@ export async function HEAD(request: Request, context: RouteContext) {
     );
     const body = await res.json().catch(() => null);
     return NextResponse.json(body, { status: res.status });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return apiErrorToResponse(error);
+    }
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: 'Could not fetch object metadata.' } },
       { status: 502 },

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { proxyAPI } from '@/lib/api-route';
+import { proxyAPI, withValidatedBody } from '@/lib/api-route';
 
 /**
  * BFF policy gate for SQL console execution (ADR 0006: BFF owns frontend-
@@ -23,43 +23,30 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const body = await request.json().catch(() => null);
-
-  const parsed = consoleQuerySchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      {
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: 'Invalid query execution request',
-          details: parsed.error.issues.map((issue) => ({
-            field: issue.path.join('.'),
-            issue: issue.message,
-          })),
+  return withValidatedBody(
+    request,
+    consoleQuerySchema,
+    (data) => {
+      // Enforce safe defaults at the BFF seam — the client type promises these,
+      // now the BFF makes them load-bearing.
+      const payload = {
+        sessionId: data.sessionId,
+        query: data.query,
+        maxRows: data.maxRows ?? 1000,
+        timeoutSeconds: data.timeoutSeconds ?? 30,
+        disallowMultiStatement: data.disallowMultiStatement ?? true,
+      };
+      return proxyAPI(
+        `/api/v1/databases/${id}/console/execute`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         },
-      },
-      { status: 422 },
-    );
-  }
-
-  // Enforce safe defaults at the BFF seam — the client type promises these,
-  // now the BFF makes them load-bearing.
-  const payload = {
-    sessionId: parsed.data.sessionId,
-    query: parsed.data.query,
-    maxRows: parsed.data.maxRows ?? 1000,
-    timeoutSeconds: parsed.data.timeoutSeconds ?? 30,
-    disallowMultiStatement: parsed.data.disallowMultiStatement ?? true,
-  };
-
-  return proxyAPI(
-    `/api/v1/databases/${id}/console/execute`,
-    {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+        'Could not execute the query.',
+      );
     },
-    'Could not execute the query.',
+    { message: 'Invalid query execution request' },
   );
 }
