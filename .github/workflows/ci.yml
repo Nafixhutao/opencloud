@@ -56,6 +56,11 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          # Build golangci-lint from source with the runner's Go toolchain.
+          # The prebuilt v2.12.2 binary is built with Go 1.24 and cannot load
+          # configs targeting Go 1.26.5 ("Go language version ... is lower than
+          # the targeted Go version"). goinstall recompiles against Go 1.26.5.
+          install-mode: goinstall
           working-directory: backend
       - name: go vet
         run: go vet ./...
