@@ -34,3 +34,30 @@ jobs:
           BETTER_AUTH_URL: http://localhost:3000
           ENV: development
         run: npm run build
+
+  # Backend checks — gofmt, golangci-lint, vet, and unit tests. Integration tests
+  # (those needing DATABASE_URL / Docker / S3) auto-skip when their env vars are
+  # absent, so go test ./... runs cleanly without service containers. See
+  # docs/CONTRIBUTING.md §6 and docs/TESTING.md for the documented gate set.
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+          cache-dependency-path: backend/go.sum
+      - name: Check gofmt formatting
+        run: test -z "$(gofmt -l .)" || { echo "Files not gofmt-formatted:"; gofmt -l .; exit 1; }
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
