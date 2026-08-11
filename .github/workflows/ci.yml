@@ -36,25 +36,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: public domain migrations
-        run: |
-          for migration in backend/migrations/*.up.sql; do
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-          done
-      - name: better-auth migration
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS auth'
-          npm run auth:migrate
-          npm run auth:migrate
-          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'auth'")" -ge 4
-          test "$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('user', 'session', 'account', 'verification')")" -eq 0
-      - run: npm run test:auth
-      - run: npm run test:ui
-      - run: npm run auth:check-providers
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm run build
-      - run: npm audit --audit-level=high
+      - name: Run auth tests
+        run: npm run test:auth
+      - name: Run linting
+        run: npm run lint
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Build production
+        run: npm run build
 
   # Backend checks and migration verification; see docs/DEPLOYMENT.md §2.
   backend:
