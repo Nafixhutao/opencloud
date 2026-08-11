@@ -23,4 +23,14 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Build production
+        # Build-time only placeholders. Next.js evaluates API route modules during
+        # "Collecting page data", which imports lib/auth and lib/mail — those modules
+        # validate required env vars. ENV=development keeps lib/mail's production guard
+        # satisfied (defaults MAIL_PROVIDER to "log"). No DB/SMTP connection is made
+        # during the build; these values are never used at runtime.
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+          BETTER_AUTH_SECRET: ci-build-placeholder-secret-32-chars-long
+          BETTER_AUTH_URL: http://localhost:3000
+          ENV: development
         run: npm run build
