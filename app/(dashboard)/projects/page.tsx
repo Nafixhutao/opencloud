@@ -2,6 +2,8 @@ import { ProjectDashboard } from '@/components/projects/project-dashboard';
 import { apiJSON } from '@/lib/api';
 import type { ProjectsEnvelope } from '@/lib/projects';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProjectsPage() {
   let initialData: ProjectsEnvelope = { data: [], meta: { page: 1, per_page: 20, total: 0 } };
   try {
