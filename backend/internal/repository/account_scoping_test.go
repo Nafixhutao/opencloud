@@ -30,7 +30,7 @@ func openSiteRepoTestDB(t *testing.T) *bun.DB {
 	return db
 }
 
-func seedSiteFixtures(t *testing.T, db *bun.DB, ctx context.Context) (accountA, accountB uuid.UUID) {
+func seedSiteFixtures(ctx context.Context, t *testing.T, db *bun.DB) (accountA, accountB uuid.UUID) {
 	t.Helper()
 	accountA = uuid.New()
 	accountB = uuid.New()
@@ -51,7 +51,7 @@ func TestSiteRepo_AccountScoping(t *testing.T) {
 	db := openSiteRepoTestDB(t)
 	siteRepo := NewSiteRepo(db)
 	ctx := context.Background()
-	accountA, accountB := seedSiteFixtures(t, db, ctx)
+	accountA, accountB := seedSiteFixtures(ctx, t, db)
 
 	t.Run("ListByAccount_ScopedCorrectly", func(t *testing.T) {
 		siteA1 := &model.Site{
@@ -122,7 +122,7 @@ func TestDomainRepo_AccountScoping(t *testing.T) {
 	db := openSiteRepoTestDB(t)
 	domainRepo := NewDomainRepo(db)
 	ctx := context.Background()
-	accountA, accountB := seedSiteFixtures(t, db, ctx)
+	accountA, accountB := seedSiteFixtures(ctx, t, db)
 
 	siteA := &model.Site{
 		ID:        uuid.New(),
