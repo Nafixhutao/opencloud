@@ -49,3 +49,6 @@ verify*.png
 .vercel
 # Local AI handoff notes are coordination artifacts, never release source.
 /AI_HANDOFF_PHASE3.md
+
+# ZCode client-local skill symlinks (point to .agents/skills/ which IS committed)
+/.zcode/
