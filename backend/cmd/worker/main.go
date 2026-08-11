@@ -178,6 +178,11 @@ func main() {
 	)
 	processor.SetBuildHandlers(buildHandlers)
 
+	// Resource usage metering (hourly snapshots).
+	usageRepo := repository.NewResourceUsageRepo(deps.DB)
+	meter := queue.NewResourceMeter(deps.Log, deps.DB, usageRepo, sites, databases, buckets)
+	go meter.Run(ctx)
+
 	runner := queue.NewRunner(deps.DB, jobs, processor, deps.Log)
 
 	deps.Log.Info(
