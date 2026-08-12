@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Eraser, Play, ShieldCheck, Square, TriangleAlert } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,13 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [copyLabel, setCopyLabel] = useState<'session' | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const createSession = useMutation({
     mutationFn: () =>
@@ -96,7 +103,8 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
     if (!session) return;
     await navigator.clipboard.writeText(session.id);
     setCopyLabel('session');
-    setTimeout(() => setCopyLabel(null), 1500);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopyLabel(null), 1500);
   }
 
   return (

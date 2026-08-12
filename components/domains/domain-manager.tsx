@@ -679,13 +679,21 @@ function DNSRecordRow({
 }) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   async function copyContent() {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
       setCopyFailed(false);
-      window.setTimeout(() => setCopied(false), 1_500);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1_500);
     } catch {
       setCopied(false);
       setCopyFailed(true);
