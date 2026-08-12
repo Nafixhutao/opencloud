@@ -11,18 +11,35 @@ export default async function StoragePage({ params }: PageProps) {
 
   const envelope = await apiJSON<BucketListEnvelope>(
     `/api/v1/projects/${projectId}/storage/buckets?page=1&per_page=25`,
-  ).catch((err) => {
-    console.error('Failed to load storage buckets:', err);
-    return null;
-  });
+  ).catch(() => null);
 
   if (!envelope) {
     return (
-      <div className="py-8 text-center">
-        <p className="text-sm text-destructive">Could not load storage buckets.</p>
-      </div>
+      <main
+        id="dashboard-content"
+        className="mx-auto flex w-full max-w-[1200px] scroll-mt-20 flex-col gap-8 px-6 py-12 sm:px-8 sm:py-16"
+      >
+        <div className="flex flex-col items-start gap-3 rounded-lg border p-5">
+          <p role="alert" className="text-sm text-destructive">Could not load storage buckets.</p>
+        </div>
+      </main>
     );
   }
 
-  return <BucketManager projectId={projectId} initialData={envelope.data} />;
+  return (
+    <main
+      id="dashboard-content"
+      className="mx-auto flex w-full max-w-[1200px] scroll-mt-20 flex-col gap-8 px-6 py-12 sm:px-8 sm:py-16"
+    >
+      <header className="max-w-2xl">
+        <p className="label-meta text-muted-foreground">Object Storage</p>
+        <h1 className="heading-page mt-2">Buckets</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Create and manage object storage buckets for this project. Upload, download,
+          and organize files with tenant-scoped access controls.
+        </p>
+      </header>
+      <BucketManager projectId={projectId} initialData={envelope.data} />
+    </main>
+  );
 }

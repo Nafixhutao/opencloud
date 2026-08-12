@@ -3,8 +3,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import {
   listEnvironmentVariables,
   createEnvironmentVariable,
@@ -13,7 +27,9 @@ import {
   revealSecret,
   type EnvironmentVariable,
 } from '@/lib/environment-variables';
-import { Eye, EyeOff, Plus, Trash2, Edit2, Copy, Check, X } from 'lucide-react';
+import { Eye, EyeOff, Plus, Trash2, Edit2, Copy, Check, Variable, Trash2 as TrashIcon } from 'lucide-react';
+
+type Environment = 'production' | 'preview' | 'development';
 
 interface EnvironmentVariablesManagerProps {
   projectId: string;
@@ -24,37 +40,42 @@ export function EnvironmentVariablesManager({
   projectId,
   serviceId,
 }: EnvironmentVariablesManagerProps) {
-  const [environment, setEnvironment] = useState<'production' | 'preview' | 'development'>('production');
+  const [environment, setEnvironment] = useState<Environment>('production');
   const [variables, setVariables] = useState<EnvironmentVariable[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingVariable, setEditingVariable] = useState<EnvironmentVariable | null>(null);
+  const [deletingVariable, setDeletingVariable] = useState<EnvironmentVariable | null>(null);
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const loadVariables = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await listEnvironmentVariables(projectId, serviceId, environment);
       setVariables(data);
-    } catch (error) {
-      console.error('Failed to load environment variables:', error);
+    } catch {
+      setLoadError('Failed to load environment variables. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [projectId, serviceId, environment]);
 
   useEffect(() => {
-    loadVariables();
-  }, [projectId, serviceId, environment, loadVariables]);
+    void loadVariables();
+  }, [loadVariables]);
 
   const handleRevealSecret = async (id: string) => {
     try {
+      setActionError(null);
       const value = await revealSecret(projectId, serviceId, id);
       setRevealedSecrets((prev) => ({ ...prev, [id]: value }));
-    } catch (error) {
-      console.error('Failed to reveal secret:', error);
+    } catch {
+      setActionError('Failed to reveal secret. Please try again.');
     }
   };
 
@@ -72,184 +93,266 @@ export function EnvironmentVariablesManager({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this variable?')) return;
+  const handleDelete = async () => {
+    if (!deletingVariable) return;
     try {
-      await deleteEnvironmentVariable(projectId, serviceId, id);
+      setDeletePending(true);
+      await deleteEnvironmentVariable(projectId, serviceId, deletingVariable.id);
+      setDeletingVariable(null);
       await loadVariables();
-    } catch (error) {
-      console.error('Failed to delete variable:', error);
+    } catch {
+      setActionError('Failed to delete variable. Please try again.');
+    } finally {
+      setDeletePending(false);
     }
   };
 
+  const environments: { value: Environment; label: string }[] = [
+    { value: 'production', label: 'Production' },
+    { value: 'preview', label: 'Preview' },
+    { value: 'development', label: 'Development' },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Label>Environment</Label>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <label htmlFor="env-select" className="text-sm font-medium">
+            Environment
+          </label>
           <select
+            id="env-select"
             value={environment}
-            onChange={(e) => setEnvironment(e.target.value as any)}
-            className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+            onChange={(e) => setEnvironment(e.target.value as Environment)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <option value="production">Production</option>
-            <option value="preview">Preview</option>
-            <option value="development">Development</option>
+            {environments.map((env) => (
+              <option key={env.value} value={env.value}>
+                {env.label}
+              </option>
+            ))}
           </select>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button
+          size="sm"
+          onClick={() => {
+            setShowCreateForm(!showCreateForm);
+            setEditingVariable(null);
+          }}
+        >
+          <Plus data-icon="inline-start" />
           Add Variable
         </Button>
       </div>
 
+      {actionError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {actionError}
+        </p>
+      ) : null}
+
+      {showCreateForm ? (
+        <CreateVariableForm
+          projectId={projectId}
+          serviceId={serviceId}
+          environment={environment}
+          onSuccess={() => {
+            void loadVariables();
+            setShowCreateForm(false);
+          }}
+          onCancel={() => setShowCreateForm(false)}
+        />
+      ) : null}
+
+      {editingVariable ? (
+        <EditVariableForm
+          projectId={projectId}
+          serviceId={serviceId}
+          variable={editingVariable}
+          onSuccess={() => {
+            void loadVariables();
+            setEditingVariable(null);
+          }}
+          onCancel={() => setEditingVariable(null)}
+        />
+      ) : null}
+
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading...</div>
+        <div aria-label="Loading environment variables" className="flex flex-col gap-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : loadError ? (
+        <div className="flex flex-col items-start gap-3 rounded-lg border p-5">
+          <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadVariables()}>
+            Retry
+          </Button>
+        </div>
       ) : variables.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          No environment variables configured for {environment}.
-        </Card>
+        <Empty className="min-h-48 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Variable aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle>No environment variables</EmptyTitle>
+            <EmptyDescription>
+              Add your first variable for {environment} to configure this service.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           {variables.map((variable) => (
-            <Card key={variable.id} className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 space-y-1">
-                  <div className="font-mono font-semibold">{variable.key}</div>
-                  <div className="text-sm">
-                    {variable.is_secret ? (
-                      revealedSecrets[variable.id] ? (
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {revealedSecrets[variable.id]}
-                          </code>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleHideSecret(variable.id)}
-                          >
-                            <EyeOff className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleCopy(revealedSecrets[variable.id], variable.id)}
-                          >
-                            {copiedId === variable.id ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">••••••••</span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRevealSecret(variable.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs bg-muted px-2 py-1 rounded">
-                          {variable.value}
+            <div
+              key={variable.id}
+              className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold">{variable.key}</span>
+                  {variable.is_secret ? (
+                    <Badge variant="secondary" className="text-xs">Secret</Badge>
+                  ) : null}
+                </div>
+                <div className="text-sm">
+                  {variable.is_secret ? (
+                    revealedSecrets[variable.id] ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <code className="break-all rounded bg-muted px-2 py-1 text-xs">
+                          {revealedSecrets[variable.id]}
                         </code>
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
-                          onClick={() => handleCopy(variable.value || '', variable.id)}
+                          aria-label="Hide secret"
+                          onClick={() => handleHideSecret(variable.id)}
                         >
-                          {copiedId === variable.id ? (
-                            <Check className="h-4 w-4" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
+                          <EyeOff />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={copiedId === variable.id ? 'Copied' : 'Copy value'}
+                          onClick={() => void handleCopy(revealedSecrets[variable.id], variable.id)}
+                        >
+                          {copiedId === variable.id ? <Check /> : <Copy />}
                         </Button>
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingVariable(variable);
-                      setIsEditOpen(true);
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(variable.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">••••••••</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Reveal secret"
+                          onClick={() => void handleRevealSecret(variable.id)}
+                        >
+                          <Eye />
+                        </Button>
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="break-all rounded bg-muted px-2 py-1 text-xs">
+                        {variable.value}
+                      </code>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={copiedId === variable.id ? 'Copied' : 'Copy value'}
+                        onClick={() => void handleCopy(variable.value || '', variable.id)}
+                      >
+                        {copiedId === variable.id ? <Check /> : <Copy />}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </Card>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Edit ${variable.key}`}
+                  onClick={() => {
+                    setEditingVariable(variable);
+                    setShowCreateForm(false);
+                  }}
+                >
+                  <Edit2 />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Delete ${variable.key}`}
+                  onClick={() => setDeletingVariable(variable)}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {isCreateOpen && (
-        <CreateVariableModal
-          projectId={projectId}
-          serviceId={serviceId}
-          environment={environment}
-          onClose={() => setIsCreateOpen(false)}
-          onSuccess={() => {
-            loadVariables();
-            setIsCreateOpen(false);
-          }}
-        />
-      )}
-
-      {isEditOpen && editingVariable && (
-        <EditVariableModal
-          projectId={projectId}
-          serviceId={serviceId}
-          variable={editingVariable}
-          onClose={() => setIsEditOpen(false)}
-          onSuccess={() => {
-            loadVariables();
-            setIsEditOpen(false);
-          }}
-        />
-      )}
+      <AlertDialog open={deletingVariable !== null} onOpenChange={(open) => { if (!open) setDeletingVariable(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <TrashIcon aria-hidden="true" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete {deletingVariable?.key}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this environment variable from {environment}.
+              Services using it will lose access on next deploy.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deletePending}
+              aria-busy={deletePending}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDelete();
+              }}
+            >
+              {deletePending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
+              {deletePending ? 'Deleting…' : 'Delete Variable'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-interface CreateVariableModalProps {
+interface CreateVariableFormProps {
   projectId: string;
   serviceId: string;
   environment: string;
-  onClose: () => void;
   onSuccess: () => void;
+  onCancel: () => void;
 }
 
-function CreateVariableModal({
+function CreateVariableForm({
   projectId,
   serviceId,
   environment,
-  onClose,
   onSuccess,
-}: CreateVariableModalProps) {
+  onCancel,
+}: CreateVariableFormProps) {
   const [key, setKey] = useState('');
   const [value, setValue] = useState('');
   const [isSecret, setIsSecret] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       setSubmitting(true);
       await createEnvironmentVariable(projectId, serviceId, {
@@ -259,140 +362,130 @@ function CreateVariableModal({
         environment,
       });
       onSuccess();
-    } catch (error) {
-      console.error('Failed to create variable:', error);
-      alert('Failed to create variable');
+    } catch {
+      setError('Failed to create variable. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-full max-w-md p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Add Environment Variable</h2>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Add a new environment variable or secret for {environment}.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="key">Key</Label>
-            <Input
-              id="key"
-              placeholder="MY_VARIABLE"
-              value={key}
-              onChange={(e) => setKey(e.target.value.toUpperCase())}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="value">Value</Label>
-            <Input
-              id="value"
-              type={isSecret ? 'password' : 'text'}
-              placeholder="Enter value"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              required
-            />
-          </div>
-          <div className="flex items-center space-x-2">
+    <form onSubmit={handleSubmit} className="rounded-lg border p-4" noValidate>
+      <FieldGroup className="gap-4">
+        {error ? <FieldError>{error}</FieldError> : null}
+        <Field>
+          <FieldLabel htmlFor="var-key">Key</FieldLabel>
+          <Input
+            id="var-key"
+            placeholder="MY_VARIABLE"
+            value={key}
+            onChange={(e) => setKey(e.target.value.toUpperCase())}
+            required
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <FieldDescription>Use uppercase letters, numbers, and underscores.</FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="var-value">Value</FieldLabel>
+          <Input
+            id="var-value"
+            type={isSecret ? 'password' : 'text'}
+            placeholder="Enter value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            required
+          />
+        </Field>
+        <Field>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
-              id="is-secret"
               checked={isSecret}
               onChange={(e) => setIsSecret(e.target.checked)}
-              className="h-4 w-4"
+              className="h-4 w-4 rounded border-input"
             />
-            <Label htmlFor="is-secret" className="text-sm font-normal cursor-pointer">
-              This is a secret (will be encrypted and hidden)
-            </Label>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create'}
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+            This is a secret (encrypted and hidden by default)
+          </label>
+        </Field>
+      </FieldGroup>
+      <div className="mt-4 flex gap-2">
+        <Button type="submit" size="sm" disabled={submitting} aria-busy={submitting}>
+          {submitting ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+          {submitting ? 'Creating…' : 'Create Variable'}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
-interface EditVariableModalProps {
+interface EditVariableFormProps {
   projectId: string;
   serviceId: string;
   variable: EnvironmentVariable;
-  onClose: () => void;
   onSuccess: () => void;
+  onCancel: () => void;
 }
 
-function EditVariableModal({
+function EditVariableForm({
   projectId,
   serviceId,
   variable,
-  onClose,
   onSuccess,
-}: EditVariableModalProps) {
+  onCancel,
+}: EditVariableFormProps) {
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       setSubmitting(true);
       await updateEnvironmentVariable(projectId, serviceId, variable.id, { value });
       onSuccess();
-    } catch (error) {
-      console.error('Failed to update variable:', error);
-      alert('Failed to update variable');
+    } catch {
+      setError('Failed to update variable. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-full max-w-md p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Update {variable.key}</h2>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+    <form onSubmit={handleSubmit} className="rounded-lg border p-4" noValidate>
+      <FieldGroup className="gap-4">
+        {error ? <FieldError>{error}</FieldError> : null}
         <p className="text-sm text-muted-foreground">
-          {variable.is_secret ? 'Rotate secret value' : 'Update variable value'}
+          {variable.is_secret
+            ? `Rotate the secret value for ${variable.key}.`
+            : `Update the value for ${variable.key}.`}
         </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="edit-value">New Value</Label>
-            <Input
-              id="edit-value"
-              type={variable.is_secret ? 'password' : 'text'}
-              placeholder="Enter new value"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              required
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Updating...' : 'Update'}
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+        <Field>
+          <FieldLabel htmlFor="edit-var-value">New Value</FieldLabel>
+          <Input
+            id="edit-var-value"
+            type={variable.is_secret ? 'password' : 'text'}
+            placeholder="Enter new value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            required
+          />
+        </Field>
+      </FieldGroup>
+      <div className="mt-4 flex gap-2">
+        <Button type="submit" size="sm" disabled={submitting} aria-busy={submitting}>
+          {submitting ? <Spinner data-icon="inline-start" /> : null}
+          {submitting ? 'Updating…' : 'Update'}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -2,13 +2,13 @@
 
 import { useState, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { DownloadIcon, Trash2Icon, UploadIcon, RefreshCwIcon } from 'lucide-react';
+import { DownloadIcon, Trash2Icon, UploadIcon, RefreshCwIcon, FolderOpen } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
-import { Empty, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogMedia, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 
@@ -31,6 +31,7 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
   const [prefix, setPrefix] = useState('');
   const [continuationToken, setContinuationToken] = useState<string | undefined>();
   const [pageTokens, setPageTokens] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['storage-objects', projectId, bucketId, prefix, continuationToken],
@@ -51,11 +52,12 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
     try {
       await uploadObject(projectId, bucketId, file.name, file);
       void refetch();
     } catch {
-      void refetch();
+      setUploadError(`Failed to upload ${file.name}. Please try again.`);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -101,21 +103,32 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
           </Button>
         </div>
 
+        {uploadError ? (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {uploadError}
+          </p>
+        ) : null}
+
         {isLoading ? (
-          <div className="space-y-2">
+          <div aria-label="Loading objects" className="flex flex-col gap-2">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-8 w-full animate-pulse rounded bg-muted" />
             ))}
           </div>
         ) : isError ? (
-          <div className="py-8 text-center">
-            <p className="text-sm text-destructive">Could not load objects.</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>Retry</Button>
+          <div className="flex flex-col items-start gap-3 rounded-lg border p-5">
+            <p role="alert" className="text-sm text-destructive">Could not load objects.</p>
+            <Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button>
           </div>
         ) : objects.length === 0 ? (
-          <Empty>
-            <EmptyTitle>No objects</EmptyTitle>
-            <EmptyDescription>Upload files to start using this bucket.</EmptyDescription>
+          <Empty className="min-h-48 border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <FolderOpen aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>No objects</EmptyTitle>
+              <EmptyDescription>Upload files to start using this bucket.</EmptyDescription>
+            </EmptyHeader>
           </Empty>
         ) : (
           <>

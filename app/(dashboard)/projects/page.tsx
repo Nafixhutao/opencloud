@@ -8,8 +8,8 @@ export default async function ProjectsPage() {
   let initialData: ProjectsEnvelope = { data: [], meta: { page: 1, per_page: 20, total: 0 } };
   try {
     initialData = await apiJSON<ProjectsEnvelope>('/api/v1/projects');
-  } catch (error) {
-    console.error('Failed to load projects:', error);
+  } catch {
+    // Client component will refetch and show its own error state.
   }
   return (
     <main

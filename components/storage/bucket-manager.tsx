@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { FolderPlusIcon } from 'lucide-react';
+import { FolderPlusIcon, HardDrive } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Empty, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogMedia, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { FieldGroup, Field, FieldLabel, FieldError } from '@/components/ui/field';
 
@@ -134,7 +134,7 @@ export function BucketManager({ projectId, initialData }: Props) {
         )}
 
         {isLoading && !initialData ? (
-          <div className="space-y-2">
+          <div aria-label="Loading buckets" className="flex flex-col gap-2">
             {[...Array(3)].map((_, i) => (<Skeleton key={i} className="h-10 w-full" />))}
           </div>
         ) : isError ? (
@@ -143,79 +143,143 @@ export function BucketManager({ projectId, initialData }: Props) {
             <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>Retry</Button>
           </div>
         ) : buckets.length === 0 && !isLoading ? (
-          <Empty>
-            <EmptyTitle>No buckets yet</EmptyTitle>
-            <EmptyDescription>Create your first object storage bucket to get started.</EmptyDescription>
+          <Empty className="min-h-48 border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HardDrive aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>No buckets yet</EmptyTitle>
+              <EmptyDescription>Create your first object storage bucket to get started.</EmptyDescription>
+            </EmptyHeader>
           </Empty>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">Usage</TableHead>
-                  <TableHead className="hidden sm:table-cell">Created</TableHead>
-                  <TableHead className="w-0" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {buckets.map((bucket) => (
-                  <TableRow key={bucket.id}>
-                    <TableCell className="font-medium">
+            {/* Desktop table view */}
+            <div className="hidden overflow-hidden rounded-lg border md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Usage</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="w-0" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {buckets.map((bucket) => (
+                    <TableRow key={bucket.id}>
+                      <TableCell className="font-medium">
+                        <button
+                          type="button"
+                          className="text-left hover:text-link"
+                          onClick={() => router.push(`/projects/${projectId}/storage/${bucket.id}`)}
+                          aria-label={`Open bucket ${bucket.name}`}
+                        >
+                          {bucket.name}
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={bucket.status === 'active' ? 'default' : bucket.status === 'failed' ? 'destructive' : 'secondary'}
+                        >
+                          {bucket.status}
+                          {(bucket.status === 'creating' || bucket.status === 'deleting') && (
+                            <Spinner data-icon="inline-end" />
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all"
+                              style={{ width: `${Math.min(100, (bucket.bytes_used / bucket.storage_limit_bytes) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatBytes(bucket.bytes_used)} / {formatBytes(bucket.storage_limit_bytes)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(bucket.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="destructive"
+                          size="xs"
+                          onClick={() => {
+                            if (bucket.status !== 'active') return;
+                            setDeleteTarget(bucket);
+                            setDeleteConfirmName('');
+                          }}
+                          disabled={bucket.status !== 'active'}
+                        >
+                          Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile card view */}
+            <ul className="flex flex-col gap-3 md:hidden">
+              {buckets.map((bucket) => (
+                <li key={bucket.id} className="flex flex-col gap-3 rounded-lg border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <button
                         type="button"
-                        className="text-left hover:text-link"
+                        className="text-left font-medium hover:text-link"
                         onClick={() => router.push(`/projects/${projectId}/storage/${bucket.id}`)}
                         aria-label={`Open bucket ${bucket.name}`}
                       >
                         {bucket.name}
                       </button>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={bucket.status === 'active' ? 'default' : bucket.status === 'failed' ? 'destructive' : 'secondary'}
-                      >
-                        {bucket.status}
-                        {(bucket.status === 'creating' || bucket.status === 'deleting') && (
-                          <Spinner data-icon="inline-end" />
-                        )}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${Math.min(100, (bucket.bytes_used / bucket.storage_limit_bytes) * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {formatBytes(bucket.bytes_used)} / {formatBytes(bucket.storage_limit_bytes)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {new Date(bucket.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="destructive"
-                        size="xs"
-                        onClick={() => {
-                          if (bucket.status !== 'active') return;
-                          setDeleteTarget(bucket);
-                          setDeleteConfirmName('');
-                        }}
-                        disabled={bucket.status !== 'active'}
-                      >
-                        Delete
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Created {new Date(bucket.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={bucket.status === 'active' ? 'default' : bucket.status === 'failed' ? 'destructive' : 'secondary'}
+                    >
+                      {bucket.status}
+                      {(bucket.status === 'creating' || bucket.status === 'deleting') && (
+                        <Spinner data-icon="inline-end" />
+                      )}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${Math.min(100, (bucket.bytes_used / bucket.storage_limit_bytes) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {formatBytes(bucket.bytes_used)} / {formatBytes(bucket.storage_limit_bytes)}
+                    </span>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      variant="destructive"
+                      size="xs"
+                      onClick={() => {
+                        if (bucket.status !== 'active') return;
+                        setDeleteTarget(bucket);
+                        setDeleteConfirmName('');
+                      }}
+                      disabled={bucket.status !== 'active'}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
 
             {totalPages > 1 && (
               <div className="mt-4 flex items-center justify-between text-sm">
