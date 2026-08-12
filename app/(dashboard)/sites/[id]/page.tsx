@@ -48,7 +48,7 @@ export default async function SiteDomainPage({ params, searchParams }: SiteDomai
           every customer hostname attached to this site.
         </p>
       </header>
-      <DomainManager site={site} initialData={domains} />
+      <DomainManager siteId={site.id} siteStatus={site.status} initialData={domains} />
     </main>
   );
 }

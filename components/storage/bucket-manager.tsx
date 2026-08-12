@@ -43,12 +43,9 @@ export function BucketManager({ projectId, initialData }: Props) {
     queryFn: () => listBuckets(projectId, { page, perPage: 25 }),
     initialData: page === 1 ? { data: initialData, meta: { page: 1, per_page: 25, total: initialData.length } } : undefined,
     staleTime: 3000,
+    refetchInterval: (query) =>
+      query.state.data && hasPendingBuckets(query.state.data.data) ? 2_000 : false,
   });
-
-  const pending = hasPendingBuckets(data?.data ?? []);
-  if (pending) {
-    void refetch({ cancelRefetch: false });
-  }
 
   const form = useForm<CreateBucketValues>({
     resolver: zodResolver(createBucketSchema),

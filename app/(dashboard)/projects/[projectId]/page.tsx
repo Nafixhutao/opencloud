@@ -1,13 +1,18 @@
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { notFound } from 'next/navigation';
 import { GitBranchIcon, FolderIcon, DatabaseIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ProjectLogsViewer } from '@/components/projects/project-logs-viewer';
 import { apiJSON } from '@/lib/api';
 import type { Project, ProjectServicesEnvelope } from '@/lib/projects';
+
+const ProjectLogsViewer = dynamic(
+  () => import('@/components/projects/project-logs-viewer').then((m) => m.ProjectLogsViewer),
+  { loading: () => <div className="h-72 animate-pulse rounded-xl bg-muted" /> },
+);
 
 type ProjectPageProps = { params: Promise<{ projectId: string }> };
 

@@ -13,7 +13,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -143,25 +143,16 @@ export function DatabaseManager({ initialData }: DatabaseManagerProps) {
     Math.ceil(databasesEnvelope.meta.total / databasesEnvelope.meta.per_page),
   );
 
-  useEffect(() => {
-    if (
-      databasesQuery.isFetching ||
-      !databasesQuery.data ||
-      databasesQuery.data.data.length > 0 ||
-      page <= 1
-    ) {
-      return;
-    }
-    const lastPage = Math.max(
-      1,
-      Math.ceil(
-        databasesQuery.data.meta.total / databasesQuery.data.meta.per_page,
-      ),
-    );
-    if (page > lastPage) {
-      setPage(lastPage);
-    }
-  }, [databasesQuery.data, databasesQuery.isFetching, page]);
+  // When the current page is empty but we're past page 1, redirect to the
+  // last valid page. Adjusted during render (React's documented pattern)
+  // instead of useEffect, so the empty state never flashes.
+  if (
+    !databasesQuery.isFetching &&
+    databasesQuery.data?.data.length === 0 &&
+    page > totalPages
+  ) {
+    setPage(totalPages);
+  }
   const revealMutation = useMutation({
     mutationFn: ({
       database,

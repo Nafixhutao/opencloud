@@ -69,7 +69,8 @@ import {
 import type { Site } from '@/lib/sites';
 
 type DomainManagerProps = {
-  site: Site;
+  siteId: string;
+  siteStatus: Site['status'];
   initialData: DomainsEnvelope;
 };
 
@@ -112,7 +113,7 @@ const statusContent: Record<Domain['status'], { label: string; detail: string }>
 
 const transientPollBackoffMs = 10_000;
 
-export function DomainManager({ site, initialData }: DomainManagerProps) {
+export function DomainManager({ siteId, siteStatus, initialData }: DomainManagerProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -128,8 +129,8 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
     defaultValues: { hostname: '' },
   });
   const domainsQuery = useQuery({
-    queryKey: ['domains', site.id, page, perPage],
-    queryFn: () => listDomains(site.id, page, perPage),
+    queryKey: ['domains', siteId, page, perPage],
+    queryFn: () => listDomains(siteId, page, perPage),
     initialData: page === initialData.meta.page ? initialData : undefined,
     refetchInterval: (query) => {
       const error = query.state.error;
@@ -180,12 +181,12 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
 
   const attachMutation = useMutation({
     mutationFn: ({ hostname, key }: { hostname: string; key: string }) =>
-      attachDomain(site.id, hostname, key),
+      attachDomain(siteId, hostname, key),
     onSuccess: async () => {
       attachAttempt.current = null;
       form.reset();
       navigatePage(1, true);
-      await queryClient.invalidateQueries({ queryKey: ['domains', site.id] });
+      await queryClient.invalidateQueries({ queryKey: ['domains', siteId] });
     },
   });
   const actionMutation = useMutation({
@@ -199,7 +200,7 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
       return detachDomain(domain.id);
     },
     onSuccess: async (response: DomainEnvelope, variables) => {
-      queryClient.setQueryData<DomainsEnvelope>(['domains', site.id, page, perPage], (current) =>
+      queryClient.setQueryData<DomainsEnvelope>(['domains', siteId, page, perPage], (current) =>
         current
           ? {
               ...current,
@@ -214,7 +215,7 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
           queryKey: ['domain-instructions', variables.domain.id],
         });
       }
-      await queryClient.invalidateQueries({ queryKey: ['domains', site.id] });
+      await queryClient.invalidateQueries({ queryKey: ['domains', siteId] });
     },
   });
 
@@ -262,7 +263,7 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
     attachMutation.error instanceof DomainAPIError &&
     attachMutation.error.details.some((detail) => detail.field === 'hostname');
   const attachErrorMessage = hasHostnameIssue ? null : domainErrorMessage(attachMutation.error);
-  const canAttach = site.status === 'active';
+  const canAttach = siteStatus === 'active';
 
   return (
     <div className="flex flex-col gap-10">
@@ -295,7 +296,7 @@ export function DomainManager({ site, initialData }: DomainManagerProps) {
                 <FieldDescription id="domain-hostname-description">
                   {canAttach
                     ? 'Enter a hostname only, without https://, a path, wildcard, or port.'
-                    : disabledAttachGuidance(site.status)}
+                    : disabledAttachGuidance(siteStatus)}
                 </FieldDescription>
                 <FieldError id="domain-hostname-error" errors={[form.formState.errors.hostname]} />
               </Field>

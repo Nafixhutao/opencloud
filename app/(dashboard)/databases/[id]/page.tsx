@@ -1,6 +1,12 @@
+import dynamic from 'next/dynamic';
+
 import { apiJSON } from '@/lib/api';
 import type { ManagedDatabase } from '@/lib/databases';
-import { DatabaseConsole } from '@/components/databases/database-console';
+
+const DatabaseConsole = dynamic(
+  () => import('@/components/databases/database-console').then((m) => m.DatabaseConsole),
+  { loading: () => <div className="h-96 animate-pulse rounded-xl bg-muted" /> },
+);
 
 type DatabaseEnvelope = { data: ManagedDatabase };
 

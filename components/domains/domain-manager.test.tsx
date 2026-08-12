@@ -84,7 +84,11 @@ function renderDashboard(initialData: DomainsEnvelope, siteOverride: Site = site
   });
   const rendered = render(
     <QueryClientProvider client={client}>
-      <DomainManager site={siteOverride} initialData={initialData} />
+      <DomainManager
+        siteId={siteOverride.id}
+        siteStatus={siteOverride.status}
+        initialData={initialData}
+      />
     </QueryClientProvider>,
   );
   return { ...rendered, client };

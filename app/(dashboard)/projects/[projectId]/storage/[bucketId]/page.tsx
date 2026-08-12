@@ -10,10 +10,9 @@ import type { BucketEnvelope } from '@/lib/storage';
 type PageProps = { params: Promise<{ projectId: string; bucketId: string }> };
 
 export default async function BucketDetailPage({ params }: PageProps) {
-  const session = await getSession();
+  const [session, { projectId, bucketId }] = await Promise.all([getSession(), params]);
   if (!session) return null;
 
-  const { projectId, bucketId } = await params;
   const envelope = await apiJSON<BucketEnvelope>(
     `/api/v1/projects/${projectId}/storage/buckets/${bucketId}`,
   ).catch((err) => {
