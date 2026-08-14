@@ -36,6 +36,9 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['storage-objects', projectId, bucketId, prefix, continuationToken],
     queryFn: () => listObjects(projectId, bucketId, { prefix: prefix || undefined, continuationToken, limit: 50 }),
+    // Continuation tokens are opaque snapshots — a query for a token that is
+    // no longer the active page would race the real one and clobber it.
+    gcTime: 10 * 60 * 1000,
   });
 
   const objects = data?.data ?? [];
@@ -49,12 +52,20 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
     },
   });
 
+  const uploadMutation = useMutation({
+    mutationFn: ({ key, file }: { key: string; file: File }) =>
+      uploadObject(projectId, bucketId, key, file),
+    onSuccess: () => {
+      void refetch();
+    },
+  });
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadError(null);
     try {
-      await uploadObject(projectId, bucketId, file.name, file);
+      await uploadMutation.mutateAsync({ key: file.name, file });
       void refetch();
     } catch {
       setUploadError(`Failed to upload ${file.name}. Please try again.`);
@@ -70,7 +81,8 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
   };
 
   const handlePrevPage = () => {
-    const prev = pageTokens.length > 0 ? pageTokens[pageTokens.length - 1] : undefined;
+    if (pageTokens.length === 0) return;
+    const prev = pageTokens[pageTokens.length - 1];
     setPageTokens(pageTokens.slice(0, -1));
     setContinuationToken(prev);
   };
@@ -91,10 +103,11 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
           />
           <Button
             size="sm"
+            disabled={uploadMutation.isPending}
             onClick={() => fileInputRef.current?.click()}
           >
-            <UploadIcon data-icon="inline-start" />
-            Upload File
+            {uploadMutation.isPending ? <Spinner data-icon="inline-start" /> : <UploadIcon data-icon="inline-start" />}
+            {uploadMutation.isPending ? 'Uploading…' : 'Upload File'}
           </Button>
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => void handleUpload(e)} />
           <Button variant="outline" size="sm" onClick={() => void refetch()}>
@@ -203,11 +216,11 @@ export function ObjectBrowser({ projectId, bucketId, bucketName }: Props) {
             </Table>
 
             <div className="mt-4 flex items-center justify-between text-sm">
-              <Button variant="outline" size="xs" disabled={pageTokens.length === 0} onClick={handlePrevPage}>
+              <Button variant="outline" size="xs" disabled={pageTokens.length === 0 || isLoading} onClick={handlePrevPage}>
                 Previous
               </Button>
               <span className="text-muted-foreground">{objects.length} objects</span>
-              <Button variant="outline" size="xs" disabled={!nextToken} onClick={handleNextPage}>
+              <Button variant="outline" size="xs" disabled={!nextToken || isLoading} onClick={handleNextPage}>
                 Next
               </Button>
             </div>

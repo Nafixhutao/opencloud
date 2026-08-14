@@ -99,7 +99,10 @@ export function createIdentity(config: IdentityConfig) {
       enabled: true,
       window: 60,
       max: 100,
-      storage: 'memory',
+      // Database-backed counters survive restarts and are shared across
+      // instances — memory storage silently multiplies every limit below by
+      // the replica count and resets on each deploy.
+      storage: 'database',
       customRules: {
         '/sign-in/email': { window: 60, max: 10 },
         '/sign-up/email': { window: 60, max: 5 },

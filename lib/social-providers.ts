@@ -50,7 +50,26 @@ export function resolveSocialProviders(
   };
 }
 
-const resolvedSocialProviders = resolveSocialProviders(process.env);
+/**
+ * Lazy exports: evaluate <code>process.env</code> on first property access
+ * (request time), not at module load (build time) — mirroring the lazy pattern
+ * in <code>auth.ts</code>. OAuth credentials injected at container start or
+ * rotated without a rebuild would otherwise stay invisible forever.
+ */
+export const enabledSocialProviders: readonly SocialProvider[] = new Proxy(
+  [] as SocialProvider[],
+  {
+    get(_target, prop, receiver) {
+      return Reflect.get(resolveSocialProviders(process.env).enabledProviders, prop, receiver);
+    },
+  },
+) as readonly SocialProvider[];
 
-export const enabledSocialProviders = resolvedSocialProviders.enabledProviders;
-export const socialProviders = resolvedSocialProviders.credentials;
+export const socialProviders: Partial<Record<SocialProvider, OAuthCredentials>> = new Proxy(
+  {} as Partial<Record<SocialProvider, OAuthCredentials>>,
+  {
+    get(_target, prop, receiver) {
+      return Reflect.get(resolveSocialProviders(process.env).credentials, prop, receiver);
+    },
+  },
+) as Partial<Record<SocialProvider, OAuthCredentials>>;

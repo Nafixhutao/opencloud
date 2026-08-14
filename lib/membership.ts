@@ -178,6 +178,17 @@ export function createMembershipStore(pool: Pool) {
         [tokenHash],
       );
     },
+
+    /**
+     * Purge expired single-use token claims. Called opportunistically after
+     * successful verification so the table cannot grow unboundedly; rows left
+     * behind by abandoned links are swept by later runs.
+     */
+    async pruneExpiredTokenConsumptions(): Promise<void> {
+      await pool.query(
+        `DELETE FROM public.auth_token_consumptions WHERE expires_at < now()`,
+      );
+    },
   };
 }
 

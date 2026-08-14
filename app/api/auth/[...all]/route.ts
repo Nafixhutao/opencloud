@@ -24,8 +24,11 @@ function tokenExpiry(token: string): Date {
       return new Date(parsed.exp * 1000);
     }
   } catch {
-    // Better Auth performs authoritative signature/expiry validation.
+    // Better Auth performs authoritative signature/expiry validation. Fall
+    // through to the conservative 1-hour cap for malformed payloads.
   }
+  // Clamp garbage tokens to a short expiry instead of a 1970 date, so the
+  // single-use claim row is purged promptly after the authoritative check.
   return new Date(Date.now() + 60 * 60 * 1000);
 }
 
@@ -71,6 +74,10 @@ export async function GET(request: Request): Promise<Response> {
       await memberships.releaseEmailVerificationToken(tokenHash);
     } else if (failedRedirect) {
       await memberships.releaseEmailVerificationToken(tokenHash);
+    } else {
+      // Success: the single-use claim is now spent. Sweep expired claims so
+      // the table stays bounded (success path previously left rows behind).
+      await memberships.pruneExpiredTokenConsumptions();
     }
     return response;
   } catch (error) {

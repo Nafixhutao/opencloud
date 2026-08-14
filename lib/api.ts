@@ -72,10 +72,8 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 export async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  // apiFetch is the single guard: it already throws ApiError for every
+  // !response.ok, so no error branch is needed here.
   const res = await apiFetch(path, init);
-  const body = (await res.json().catch(() => null)) as T | ApiErrorBody | null;
-  if (!res.ok) {
-    throw ApiError.fromResponse(res, body);
-  }
-  return body as T;
+  return (await res.json().catch(() => null)) as T;
 }

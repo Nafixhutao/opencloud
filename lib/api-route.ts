@@ -44,8 +44,16 @@ export async function proxyAPI(
 ): Promise<NextResponse> {
   try {
     const response = await apiFetch(path, init);
-    const body = await response.json().catch(() => null);
-    const proxied = NextResponse.json(body, { status: response.status });
+    let proxied: NextResponse;
+    // 204/304 must not carry a body — NextResponse.json() throws on those
+    // statuses, and forcing a literal `null` body on other empty 2xx responses
+    // corrupts the contract. Pass them through untouched instead.
+    if (response.status === 204 || response.status === 304 || response.body === null) {
+      proxied = new NextResponse(null, { status: response.status });
+    } else {
+      const body = await response.json().catch(() => null);
+      proxied = NextResponse.json(body, { status: response.status });
+    }
     for (const name of ['cache-control', 'pragma', 'retry-after', 'x-ratelimit-limit']) {
       const value = response.headers.get(name);
       if (value) {
