@@ -14,7 +14,6 @@ This folder holds the per-topic depth.
 | [`DATABASE.md`](DATABASE.md) | PostgreSQL schema, migrations, Redis |
 | [`API.md`](API.md) | REST conventions + endpoint reference |
 | [`HOSTING.md`](HOSTING.md) | Docker/Caddy hosting data plane and provider contract |
-| [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md) | Hestia adoption triggers and migration plan |
 | [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md) | Docker, monitoring, environments |
 | [`SECURITY.md`](SECURITY.md) | Auth, secrets, isolation, hardening |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | Build, release, rollback |

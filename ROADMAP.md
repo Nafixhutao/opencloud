@@ -42,7 +42,6 @@ Stand up the skeleton everything else hangs off.
 - ✅ Docker/Caddy integration spike validated constrained container ownership,
   HTTPS routing, idempotent create/retry/delete, recovery, and safe cleanup on
   the target VPS (ADR 0008; `docs/spikes/2026-07-21-docker-caddy-phase0.md`).
-  Hestia requirements and migration triggers remain in `docs/HESTIA_FALLBACK.md`
 - ✅ CI: frontend (oxlint · tsc · build · audit) and backend
   (gofmt · lint · vet · test · vulnerability scan · Docker build)
 
@@ -102,7 +101,7 @@ credential or production deployment is claimed by this roadmap.
 The heart of the platform: drive Docker/Caddy through a provider-neutral boundary.
 
 - ✅ `provisioner` package: idempotent, ownership-checked Docker/Caddy adapter +
-  concurrency-safe fake for tests. Hestia remains an unimplemented optional adapter.
+  concurrency-safe fake for tests.
 - ✅ `nodes` registry + transactionally reserved least-loaded placement
 - ✅ Postgres-backed job queue (`jobs` table + `SKIP LOCKED`) + worker with
   retries/backoff, stale-job recovery, and compensating cleanup

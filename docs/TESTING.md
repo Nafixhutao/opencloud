@@ -70,8 +70,7 @@ func TestSiteService_Create_RollsBackOnEnqueueFailure(t *testing.T) {
 ## 5. Provisioner and hosting backends
 
 - Services are tested against a **fake provider-neutral provisioner** implementing
-  the same interface as Docker/Caddy and fallback Hestia
-  ([`BACKEND.md`](BACKEND.md#8-provisioner)).
+  the same interface as Docker/Caddy.
 - CI never receives a Docker socket, Caddy admin endpoint, or real hosting-node
   credentials. A disposable, explicitly labeled staging target may be used for a
   controlled spike/e2e run only.

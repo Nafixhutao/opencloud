@@ -1,7 +1,7 @@
 # Infrastructure — Docker, Monitoring & Environments
 
 How the OpenCloud **control plane** is packaged, run, configured, and observed.
-The hosting **data plane** (Docker sites + Caddy, with Hestia fallback) is covered in [`HOSTING.md`](HOSTING.md);
+The hosting **data plane** (Docker sites + Caddy) is covered in [`HOSTING.md`](HOSTING.md);
 release process in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 **Stack:** Docker · Docker Compose · Prometheus · Grafana · (host) Fail2ban · UFW.
@@ -13,12 +13,11 @@ release process in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 | Plane | Components | Runtime |
 |---|---|---|
 | **Control plane** | Go API, worker, Next.js frontend, PostgreSQL, Redis, Prometheus, Grafana | Docker containers |
-| **Data plane** | Docker site containers + Caddy ingress; optional Hestia fallback node | Current Linux host for MVP; scale-out nodes later |
+| **Data plane** | Docker site containers + Caddy ingress; scale-out nodes later | Current Linux host for MVP; scale-out nodes later |
 | **Edge** | Customer-managed DNS + direct public Caddy (ADR 0009); optional future Cloudflare tunnel/adapter | Caddy on the hosting host; any customer DNS provider |
 
 The MVP co-locates labeled site containers with the control plane while Caddy
-remains the only public listener. Scale-out nodes use the same provider contract;
-Hestia, if adopted, runs only on a separate clean host.
+remains the only public listener. Scale-out nodes use the same provider contract.
 
 ## 2. Docker Compose topology
 
@@ -84,7 +83,7 @@ Copy `.env.example` → `.env`; **never commit `.env`**.
 | `SMTP_USER` / `SMTP_PASS` | frontend | external SMTP credentials; both required in production |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | frontend | Google social login via better-auth (ADR 0006) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | frontend | GitHub social login via better-auth (ADR 0006) |
-| `PROVISIONER_BACKEND` | worker | `fake` by default; reviewed deployments may select `docker`; `hestia` is not implemented |
+| `PROVISIONER_BACKEND` | worker | `fake` by default; reviewed deployments may select `docker` |
 | `DOCKER_SOCKET` | worker | local Docker Unix socket path; never exposed publicly |
 | `CADDY_API_URL` | worker | private/loopback Caddy admin endpoint |
 | `CADDY_SERVER_ID` | worker | Caddy HTTP server ID whose owned site routes may be changed |

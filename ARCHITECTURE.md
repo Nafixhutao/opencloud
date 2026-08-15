@@ -20,8 +20,7 @@ files. Decisions are recorded as ADRs in [`docs/adr/`](docs/adr/).
 
 **Non-goals:** building our own web server, DNS server, or mail stack. We
 orchestrate Docker Engine and Caddy behind a provider-neutral provisioner;
-customer-managed DNS is the universal domain path, while Cloudflare and Hestia
-remain optional future/fallback adapters (ADRs 0008 and 0009).
+customer-managed DNS is the universal domain path, while Cloudflare remains an optional future adapter (ADR 0009).
 
 ## 2. Control plane vs. data plane
 
@@ -32,7 +31,7 @@ OpenCloud separates **what it owns** from **what it orchestrates**:
   billing, plans, and orchestration state. Containerized with Docker.
 - **Data plane** (we orchestrate): isolated Docker site containers, networks, and
   volumes behind Caddy. It serves customer traffic and holds customer site data;
-  scale-out nodes or a fallback Hestia adapter use the same provisioner contract.
+  scale-out nodes use the same provisioner contract.
 
 The control plane drives the data plane exclusively through the **provisioner**
 (Docker/Caddy for the MVP). Nothing else touches a hosting backend. See
@@ -195,8 +194,7 @@ Isolation is the platform's #1 invariant, enforced at three layers:
 2. **Database** — foreign keys and `account_id` columns make cross-tenant joins
    impossible by accident; admin cross-account access is an explicit, audited path.
 3. **Data plane** — each site gets dedicated Docker network/volume ownership,
-   non-root runtime policy, and CPU/memory/PID limits. Hestia can provide stronger
-   per-customer Linux-user isolation if fallback triggers are met.
+   non-root runtime policy, and CPU/memory/PID limits.
 
 ## 9. Scaling
 

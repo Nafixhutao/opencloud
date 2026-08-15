@@ -1,9 +1,8 @@
-# Hosting stack — Docker, Caddy, and provider fallbacks
+# Hosting stack — Docker and Caddy
 
 OpenCloud owns the customer experience and hosting control plane. For the MVP,
 the data plane runs customer sites as Docker containers and routes domains
-through Caddy (ADR 0008). Hestia is preserved as a fallback adapter rather than
-installed on the live control-plane host.
+through Caddy (ADR 0008).
 
 ## 1. Components
 
@@ -30,8 +29,7 @@ disposable infrastructure, but it is not production-deployed.
 
 ## 2. Provisioner boundary
 
-Only the provisioner talks to Docker, Caddy, a future Cloudflare adapter, or a fallback Hestia
-node. Handlers and services depend on capabilities, never provider payloads.
+Only the provisioner talks to Docker, Caddy, or a future Cloudflare adapter. Handlers and services depend on capabilities, never provider payloads.
 
 ```go
 type SiteProvisioner interface {
@@ -43,10 +41,9 @@ type SiteProvisioner interface {
 }
 ```
 
-The backend is selected with `PROVISIONER_BACKEND=docker|hestia|fake`:
+The backend is selected with `PROVISIONER_BACKEND=docker|fake`:
 
 - `docker` is the MVP default.
-- `hestia` is the documented fallback and requires a dedicated clean node.
 - `fake` is permitted only in development/tests and is rejected in production.
 
 Every operation is idempotent. An already-correct resource is success; deleting
@@ -161,13 +158,6 @@ Phase 2 hardening), and only typed operations are exposed to job handlers.
 Customer input never becomes a shell command, container name, label selector,
 mount path, or raw Caddy JSON. Domains, image/template IDs, resource limits, and
 environment keys are validated before provisioning.
-
-## 8. Hestia fallback
-
-ADR 0001 is retained as historical context. Hestia becomes active only through a
-new/superseding decision after its access-key scope, idempotency, backup, and
-migration checks pass on a dedicated non-production node. The full triggers and
-migration runbook are in [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md).
 
 ## 9. Failure and reconciliation
 

@@ -60,11 +60,11 @@ CREATE TABLE accounts (
 -- reference `auth.user.id` by id (no cross-schema FK). Note: better-auth's
 -- `auth.account` (a provider credential link) is not the tenant `public.accounts`.
 
--- nodes: hosting capacity registered by backend driver (Docker or fallback Hestia)
+-- nodes: hosting capacity registered by Docker backend driver
 CREATE TABLE nodes (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     hostname          TEXT NOT NULL UNIQUE,
-    backend           TEXT NOT NULL CHECK (backend IN ('docker','hestia','fake')),
+    backend           TEXT NOT NULL CHECK (backend IN ('docker','fake')),
     status            TEXT NOT NULL DEFAULT 'online'
                       CHECK (status IN ('online','draining','offline')),
     capacity_sites    INT  NOT NULL CHECK (capacity_sites > 0),

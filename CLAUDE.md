@@ -14,8 +14,7 @@ update the doc, not a copy here.
 
 OpenCloud is a custom **cloud hosting platform** with a bespoke dashboard and a
 Go control plane. The MVP provisions isolated site containers through **Docker
-Engine** and publishes them through **Caddy**; Hestia is a documented fallback
-adapter (ADR 0008). The Go backend remains the system of record and provider
+Engine** and publishes them through **Caddy**. The Go backend remains the system of record and provider
 details are never exposed to customers.
 
 Full context: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
@@ -28,7 +27,7 @@ Full context: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) �
 - **Frontend:** Next.js (App Router) · React · TypeScript · Tailwind CSS · shadcn/ui (dashboard/admin) · Astryx + StyleX (marketing — ADR 0007) · Lucide React · GSAP (marketing animations only)
   — approved libs (dashboard phase): TanStack Query · TanStack Table · react-hook-form + zod · Recharts · Vitest + Testing Library (tests)
 - **Auth:** better-auth in the Next.js BFF (identity provider — ADR 0006); the Go backend validates its JWTs via JWKS and issues none.
-- **Hosting:** Docker Engine · Caddy · PostgreSQL/MariaDB · Cloudflare (DNS + optional Tunnel — ADR 0003); Hestia fallback (ADR 0001/0008)
+- **Hosting:** Docker Engine · Caddy · PostgreSQL/MariaDB · Cloudflare (DNS + optional Tunnel — ADR 0003)
 - **Platform:** Docker · Docker Compose · Prometheus · Grafana · Fail2ban · UFW
 
 Do **not** introduce technologies outside this list without explicit approval.
@@ -73,8 +72,7 @@ handler (Gin) → service (logic, transactions) → repository (Bun) → Postgre
 - Handlers translate HTTP ↔ domain; **no business logic, no DB access**.
 - Services own business rules and transactions; the only layer spanning repos/provisioner.
 - Repositories own all DB access; **every customer query is scoped by `account_id`**.
-- The provisioner is the **only** thing that talks to Docker, Caddy, a fallback
-  hosting node, or the Cloudflare API, and it is idempotent.
+- The provisioner is the **only** thing that talks to Docker, Caddy, or the Cloudflare API, and it is idempotent.
 - Work that can exceed ~1s is **enqueued as a `jobs` row** (same transaction as the
   write that triggered it) and handled by the worker, not run inline.
 

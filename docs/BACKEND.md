@@ -1,8 +1,7 @@
 # Backend — Go Control Plane
 
 The OpenCloud backend is a Go service that acts as the **system of record** and
-orchestrates provider-neutral hosting backends. Docker + Caddy is the MVP backend
-and Hestia is a fallback (ADR 0008). This document is the deep dive; the contract lives in
+orchestrates provider-neutral hosting backends. Docker + Caddy is the MVP backend. This document is the deep dive; the contract lives in
 [`../CLAUDE.md`](../CLAUDE.md) and the system map in [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 **Stack:** Go 1.26+ · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap.
@@ -24,7 +23,7 @@ backend/
 │   ├── service/           # business logic + transactions
 │   ├── repository/        # Bun data access, account-scoped
 │   ├── model/             # domain structs + Bun models
-│   ├── provisioner/       # provider-neutral contract + Docker/Hestia/fake adapters
+│   ├── provisioner/       # provider-neutral contract + Docker/fake adapters
 │   ├── registry/          # private OCI registry contract + fake/test adapters
 │   ├── deployment/        # restricted runtime/Caddy deployment contract
 │   ├── middleware/        # auth, request-id, logging, recovery, ratelimit
@@ -47,7 +46,7 @@ One-directional dependencies. See the diagram in [`../ARCHITECTURE.md`](../ARCHI
 | handler | service | touch Bun, hold business logic |
 | service | repository, provisioner, queue | import Gin, build SQL |
 | repository | Bun / PostgreSQL | call services, ignore `account_id` |
-| provisioner | Docker/Caddy, DNS observation, optional provider adapters, fallback Hestia | be called by anything but a service/worker job |
+| provisioner | Docker/Caddy, DNS observation, optional provider adapters | be called by anything but a service/worker job |
 
 A handler that needs data calls a service; a service that needs persistence calls
 a repository. No shortcuts.
@@ -171,8 +170,7 @@ size is 100.
 
 ## 8. Provisioner
 
-- The **single gateway** to Docker, Caddy, an optional future Cloudflare adapter,
-  or fallback Hestia. The
+- The **single gateway** to Docker, Caddy, or an optional future Cloudflare adapter.
   dashboard and API never receive Docker daemon or Caddy admin access.
 - **Idempotent:** re-running a step on an existing resource succeeds, not errors —
   this makes job retries and reconciliation safe.
@@ -188,7 +186,7 @@ type SiteProvisioner interface {
 }
 ```
 
-- `PROVISIONER_BACKEND` selects `docker`, `hestia`, or `fake`; `fake` is rejected
+- `PROVISIONER_BACKEND` selects `docker` or `fake`; `fake` is rejected
   in production. A fake implements the interface for tests, so CI never reaches a
   live Docker daemon or hosting node. Hosting flows: [`HOSTING.md`](HOSTING.md).
 
@@ -313,7 +311,7 @@ retries from decrementing node usage twice. A delete intent wins over an older
 in-flight provision/suspend/resume result.
 
 The site slice supports only the curated static-site template. Customer site
-volume/database backup, Hestia, automated DNS-provider writes, and a production
+volume/database backup, automated DNS-provider writes, and a production
 Docker authorization boundary are deliberately not claimed.
 
 ## Phase 3 domain lifecycle

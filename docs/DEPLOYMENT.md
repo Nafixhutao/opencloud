@@ -136,7 +136,7 @@ curl -fsS localhost:8080/readyz       # readiness gate
 - Phase 2 worker rollout grants hosting access only after ownership-label,
   idempotency, resource-limit, and backup/restore checks pass in staging.
 - Docker daemon and Caddy admin access are never added to dashboard/API
-  containers. Scale-out or fallback Hestia nodes are drained before maintenance
+  containers. Scale-out nodes are drained before maintenance
   ([`HOSTING.md`](HOSTING.md)).
 - The base Compose file intentionally defaults the worker to `fake` and does not
   mount `/var/run/docker.sock`. Enabling the Docker adapter requires a separately

@@ -8,10 +8,9 @@
 ## Context
 
 OpenCloud's first production host already runs the control plane with Docker and
-Caddy. Hestia requires a fresh operating system and owns web-server, firewall,
+Caddy. This requires a fresh operating system and owns web-server, firewall,
 database, and mail configuration, so installing it beside the live control plane
-would create unsupported conflicts. A second clean node remains possible, but it
-is not required to validate the MVP hosting workflow.
+would create unsupported conflicts.
 
 The product first needs containerized HTTP applications, customer domains,
 automatic HTTPS, resource limits, and retry-safe lifecycle operations. Mail,
@@ -23,11 +22,6 @@ OpenCloud will use **Docker Engine for isolated site workloads** and **Caddy for
 ingress and certificate automation** as its primary MVP provisioning backend.
 Services depend only on the provider-neutral `SiteProvisioner` capability; the
 worker is the sole component allowed to reach the hosting backend.
-
-Hestia is retained as a documented fallback adapter. ADR 0001 remains immutable
-historical context, and [`../HESTIA_FALLBACK.md`](../HESTIA_FALLBACK.md) defines
-the triggers and migration contract for adopting it later on a separate clean
-node.
 
 ## Consequences
 
@@ -44,4 +38,4 @@ launch catalog uses curated non-privileged images before arbitrary Dockerfiles.
 
 Email, webmail, and traditional FTP are deferred. If they become core product
 requirements, or container isolation and operational cost prove inadequate,
-Hestia is reconsidered through the preserved fallback plan.
+the platform can reconsider control panel integration through a new ADR.

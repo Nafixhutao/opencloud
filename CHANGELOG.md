@@ -145,9 +145,8 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   non-root site container with a dedicated network/volume and routes it through
   Caddy over HTTPS without touching unrelated OpenCloud resources. The Go backend
   now exposes a provider-neutral `SiteProvisioner` contract, deterministic site
-  resource names, and validated `docker|hestia|fake` backend selection (`fake` is
-  rejected in production). `docs/HESTIA_FALLBACK.md` preserves the Hestia
-  security spike, adoption triggers, and reversible migration plan.
+  resource names, and validated `docker|fake` backend selection (`fake` is
+  rejected in production).
 - **Geist Light auth and dashboard experience:** responsive `/login` and
   `/register` flows use Better Auth email/password plus conditionally-enabled
   Google/GitHub providers, shared Zod validation, actionable callback errors,
@@ -337,10 +336,9 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   now reports zero known production dependency vulnerabilities.
 
 ### Changed
-- Docker Engine + Caddy are the primary MVP data plane; Hestia is retained as a
-  separate-node fallback behind the same provisioner boundary. Hosting,
+- Docker Engine + Caddy are the primary MVP data plane. Hosting,
   architecture, infrastructure, security, testing, deployment, environment, and
-  roadmap documentation now describe the new decision and its safety limits.
+  roadmap documentation now describe the decision and its safety limits.
 - Version pins refreshed to current stable (greenfield — verified this cycle):
   **PostgreSQL 16 → 18** (`docs/DATABASE.md`, `docs/INFRASTRUCTURE.md`; 18.4 is the
   current series, 16 still supported but a new project should start on 18) and the
@@ -360,9 +358,7 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ### Added
 - `docs/HOSTING.md` now defines the `SiteSpec`/`DBSpec` provisioner inputs that the
   `Provisioner` interface already referenced, closing a blueprint gap flagged in a
-  docs audit. Flags `SiteSpec.HestiaUser` (account→Hestia-user mapping) as the one
-  field still to be settled in the Phase 2 Hestia spike rather than adding a schema
-  column prematurely.
+  docs audit.
 - ADR 0006: **better-auth is the identity provider** (supersedes ADR 0005) — auth
   moves from the Go backend into the Next.js BFF. better-auth owns email/password
   + Google/GitHub social + sessions and four `auth.*` tables (`user`, `session`,
@@ -404,8 +400,7 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `go-redis/redis_rate`, `testify` (`docs/BACKEND.md` §13); frontend (dashboard
   phase) — TanStack Query/Table, react-hook-form + zod, Recharts, Vitest +
   Testing Library (`docs/FRONTEND.md`, `docs/TESTING.md`).
-- Roadmap: Hestia integration spike added to Phase 0; basic `pg_dump` backups
-  moved from Phase 6 into Phase 2's exit criteria; usage metering pipeline made
+- Roadmap: basic `pg_dump` backups moved from Phase 6 into Phase 2's exit criteria; usage metering pipeline made
   an explicit Phase 4 item so Phase 5 billing has historical data.
 - `.env.example` with documented, non-secret defaults (referenced by README and
   `docs/INFRASTRUCTURE.md` but previously missing).
@@ -416,8 +411,6 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   `ROADMAP.md`, `CHANGELOG.md`, and `docs/` (backend, frontend, database, API,
   hosting, infrastructure, security, deployment, coding standards, testing, UI
   guidelines, contributing).
-- Architecture Decision Records: `docs/adr/` with template and ADR 0001
-  (Hestia as a provisioning backend).
 - ADR 0002: the `jobs` table in PostgreSQL **is** the job queue (claimed via
   `FOR UPDATE SKIP LOCKED`); Redis no longer plays a queue role. Fixes the
   dual-write flaw where a Redis enqueue was not transactional with the

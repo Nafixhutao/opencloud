@@ -6,8 +6,8 @@
 OpenCloud lets customers provision and manage websites, domains, databases, DNS,
 and SSL through a fast custom dashboard while operators manage capacity, plans,
 and customers from a dedicated admin panel. The Go backend is the system of
-record and drives provider-neutral provisioning; Docker + Caddy is the MVP
-backend and Hestia is preserved as a fallback (ADR 0008).
+record and drives provider-neutral provisioning; Docker + Caddy is the primary
+backend.
 
 ---
 
@@ -44,7 +44,7 @@ backend and Hestia is preserved as a fallback (ADR 0008).
 |---|---|
 | **Backend** | Go · Gin · Bun ORM · PostgreSQL · Redis · Viper · Zap |
 | **Frontend** | Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Lucide React · GSAP |
-| **Hosting** | Docker Engine · direct Caddy ingress · customer-managed DNS · PostgreSQL/MariaDB; optional Cloudflare/Hestia adapters |
+| **Hosting** | Docker Engine · direct Caddy ingress · customer-managed DNS · PostgreSQL/MariaDB; optional Cloudflare adapters |
 | **Platform** | Docker · Docker Compose |
 | **Monitoring** | Prometheus · Grafana |
 | **Security** | Fail2ban · UFW |
@@ -142,12 +142,11 @@ All configuration is environment-driven and loaded by **Viper**. Copy
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | better-auth (BFF) identity provider config |
 | `MAIL_PROVIDER` / `MAIL_FROM` | `smtp` + sender identity in production; `log`/`memory` are non-delivery dev/test adapters |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Real verification/reset delivery; production fails fast when incomplete |
-| `PROVISIONER_BACKEND` | `docker` (default), `hestia` fallback, or `fake` outside production |
+| `PROVISIONER_BACKEND` | `docker` (default), or `fake` outside production |
 | `DOCKER_SOCKET` / `CADDY_API_URL` | Docker/Caddy worker connection details |
 | `DOMAINS_ENABLED` / `DOMAIN_VERIFICATION_KEY` | Phase 3 feature gate and external HMAC key |
 | `DOMAIN_INGRESS_IPV4` / `DOMAIN_DNS_RESOLVER` | Public A-record target and recursive resolver used for observations |
 | `CLOUDFLARE_API_ENABLED` | Must remain `false`; per-tenant Cloudflare authorization is not implemented |
-| `HESTIA_API_URL` / `HESTIA_ACCESS_KEY` / `HESTIA_SECRET_KEY` | Optional fallback node access |
 | `CONTROL_PLANE_BACKUP_KEY` | External base64 AES-256 key for the opt-in encrypted backup profile |
 | `CONTROL_PLANE_BACKUP_RETENTION_DAYS` / `CONTROL_PLANE_BACKUP_INTERVAL_SECONDS` | Backup retention and schedule |
 | `CUSTOMER_DATABASES_ENABLED` | Opt-in customer database lifecycle; disabled by default |
@@ -191,7 +190,7 @@ docker compose down                 # stop everything
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Schema, migrations, Redis |
 | [`docs/API.md`](docs/API.md) | REST API conventions and reference |
 | [`docs/HOSTING.md`](docs/HOSTING.md) | Docker/Caddy hosting data plane |
-| [`docs/HESTIA_FALLBACK.md`](docs/HESTIA_FALLBACK.md) | Hestia adoption triggers and migration plan |
+| [`docs/HOSTING.md`](docs/HOSTING.md) | Docker/Caddy hosting data plane |
 | [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) | Docker, monitoring, environments |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Security practices |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Build, deploy, rollback |

@@ -10,7 +10,7 @@ rules are not optional and are never "simplified away" (see [`../CLAUDE.md`](../
 
 - **Cross-tenant access** — a customer reaching another's data/files/processes.
   *Mitigation:* `account_id` scoping (app + DB) + per-site Docker
-  network/volume/runtime policy; Hestia remains the stronger OS-user fallback.
+  network/volume/runtime policy.
 - **Credential theft** — stolen tokens, passwords, or node keys.
   *Mitigation:* hashing, short-lived tokens, httpOnly cookies, secret manager.
 - **Injection** — SQL, command, or template injection via customer input.
@@ -93,8 +93,7 @@ error codes before they can reach logs.
   `.env`**; ship `.env.example` with documented, non-secret defaults.
 - No secrets in source, logs, images, or client bundles / `NEXT_PUBLIC_*`.
 - Rotate credentials on exposure; scope each credential to least privilege
-  (permissioned Docker boundary, loopback/private Caddy admin API, scoped fallback
-  Hestia access key, and a DB user that can't `DROP`).
+  (permissioned Docker boundary, loopback/private Caddy admin API).
 - Redact secrets at the logging boundary ([`BACKEND.md`](BACKEND.md#11-logging-zap)).
 - The customer Logs API applies a second fixed redaction pass and strips request
   query strings before delivery. This is defense in depth: applications and
@@ -183,8 +182,6 @@ error codes before they can reach logs.
   becoming a catch-all route. Monitor issuance/renewal failures, expiry windows,
   permission denials, and ACME rate limits without hostname-valued metrics.
 - SSH: key-only, no root login, bastion-restricted. Automatic security updates.
-- Hestia fallback nodes follow [`HESTIA_FALLBACK.md`](HESTIA_FALLBACK.md) and run
-  on separate clean hosts.
 
 ## 11. Dependency & supply-chain security
 

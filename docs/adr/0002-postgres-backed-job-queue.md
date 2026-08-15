@@ -7,8 +7,8 @@
 ## Context
 
 Provisioning work is asynchronous: a request creates a resource row
-(`status=provisioning`) and enqueues a job the worker executes against a Hestia
-node. The original design queued jobs in Redis with a `jobs` table in PostgreSQL
+(`status=provisioning`) and enqueues a job the worker executes against Docker.
+The original design queued jobs in Redis with a `jobs` table in PostgreSQL
 "mirroring" queue state for audit and recovery.
 
 That design has a dual-write flaw: the Redis enqueue is not part of the

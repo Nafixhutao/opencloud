@@ -3,8 +3,7 @@
 - **Date:** 2026-07-21
 - **Target:** existing OpenCloud Ubuntu 24.04 VPS
 - **Result:** passed
-- **Decision:** Docker + Caddy is viable as the MVP provisioning backend; Hestia
-  remains the documented fallback.
+- **Decision:** Docker + Caddy is viable as the MVP provisioning backend.
 
 ## Scope and safety boundary
 
@@ -65,8 +64,7 @@ least-privilege Docker access, quotas, reconciliation, audit events, and restore
 tests as described in [`../HOSTING.md`](../HOSTING.md).
 
 If those controls cannot meet the required isolation or shared-hosting product
-scope, follow [`../HESTIA_FALLBACK.md`](../HESTIA_FALLBACK.md) on a separate,
-clean node; do not install Hestia over the live control-plane host.
+scope, consider alternative control panel integration through a new ADR. Do not install uncontrolled panels over the live control-plane host.
 
 ## Reproduction
 
