@@ -67,6 +67,9 @@ export const auth: Auth['auth'] = new Proxy({} as Auth['auth'], {
   get(_target, prop, receiver) {
     return Reflect.get(getRuntime().auth, prop, receiver);
   },
+  has(_target, prop) {
+    return Reflect.has(getRuntime().auth, prop);
+  },
 }) as Auth['auth'];
 
 export const memberships: MembershipStore = new Proxy(
