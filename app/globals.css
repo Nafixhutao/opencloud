@@ -634,9 +634,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-inter);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains);
+  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -673,125 +673,184 @@
   --color-primary-active: var(--primary-active);
   --color-info: var(--info);
   --color-info-muted: var(--info-muted);
-  /* Buttons/inputs at 6px, cards at 12px — the full radius vocabulary. */
+  --color-warning: var(--warning);
+  /* Geist radii: controls 6px, cards 8px. */
   --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  --radius-2xl: 0.75rem;
   --radius-3xl: 1rem;
   --radius-4xl: 1rem;
 }
 
-/* Linear design tokens — midnight precision instrument. Utility classes
-   (bg-void, text-mist, border-graphite, bg-acid-lime, …) are generated from
-   this palette. Acid lime is the single chromatic action color. */
-@theme {
-  --color-void: #08090a;
-  --color-carbon: #0f1011;
-  --color-obsidian: #161718;
-  --color-graphite: #23252a;
-  --color-smoke: #383b3f;
-  --color-ash: #62666d;
-  --color-fog: #8a8f98;
-  --color-mist: #d0d6e0;
-  --color-bone: #e5e5e6;
-  --color-paper: #ffffff;
-  --color-acid-lime: #e4f222;
-  --color-pulse-green: #27a644;
-  --color-coral-red: #eb5757;
-  --color-signal-teal: #02b8cc;
-  --color-iris-violet: #6366f1;
-  --color-lavender: #8b5cf6;
-
-  --shadow-subtle: rgb(35, 37, 42) 0px 0px 0px 1px inset;
-  --shadow-subtle-2: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
-  --shadow-xl: rgba(8, 9, 10, 0.6) 0px 4px 32px 0px;
+/*
+ * Vercel design system — monochrome Geist foundation with an implicit light
+ * and dark theme (system preference, no visible switcher). Color is reserved
+ * for meaning: blue for primary actions and focus, green/red/amber for state.
+ */
+:root {
+  color-scheme: light dark;
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #0070f3;
+  --primary-foreground: #ffffff;
+  --primary-hover: #0062d6;
+  --primary-active: #0054b8;
+  --secondary: #fafafa;
+  --secondary-foreground: #171717;
+  --muted: #fafafa;
+  --muted-foreground: #666666;
+  --accent: #fafafa;
+  --accent-foreground: #171717;
+  --destructive: #ee0000;
+  --success: #0cce6b;
+  --warning: #f5a623;
+  --info: #0070f3;
+  --info-muted: #f0f7ff;
+  --border: #eaeaea;
+  --input: #eaeaea;
+  --ring: #0070f3;
+  --chart-1: #0070f3;
+  --chart-2: #7928ca;
+  --chart-3: #f5a623;
+  --chart-4: #0cce6b;
+  --chart-5: #ee0000;
+  --radius: 0.375rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #0070f3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efefef;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #eaeaea;
+  --sidebar-ring: #0070f3;
 }
 
-:root {
-  color-scheme: dark;
-  --font-inter: "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-jetbrains: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  /* Surface ladder: void canvas → carbon cards → obsidian elevated → slate tint. */
-  --background: #08090a;
-  --foreground: #d0d6e0;
-  --card: #0f1011;
-  --card-foreground: #d0d6e0;
-  --popover: #0f1011;
-  --popover-foreground: #d0d6e0;
-  --primary: #e4f222;
-  --primary-foreground: #08090a;
-  --primary-hover: #eef75a;
-  --primary-active: #cbda1c;
-  --secondary: #161718;
-  --secondary-foreground: #d0d6e0;
-  --muted: #161718;
-  --muted-foreground: #8a8f98;
-  --accent: #23252a;
-  --accent-foreground: #e5e5e6;
-  --destructive: #eb5757;
-  --success: #27a644;
-  --info: #02b8cc;
-  --info-muted: #0c2124;
-  --border: #23252a;
-  --input: #23252a;
-  --ring: #d0d6e0;
-  --chart-1: #e4f222;
-  --chart-2: #02b8cc;
-  --chart-3: #6366f1;
-  --chart-4: #eb5757;
-  --chart-5: #8b5cf6;
-  --radius: 0.375rem;
-  --sidebar: #0f1011;
-  --sidebar-foreground: #d0d6e0;
-  --sidebar-primary: #e4f222;
-  --sidebar-primary-foreground: #08090a;
-  --sidebar-accent: #161718;
-  --sidebar-accent-foreground: #e5e5e6;
-  --sidebar-border: #23252a;
-  --sidebar-ring: #d0d6e0;
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #000000;
+    --foreground: #ededed;
+    --card: #111111;
+    --card-foreground: #ededed;
+    --popover: #111111;
+    --popover-foreground: #ededed;
+    --primary: #0070f3;
+    --primary-foreground: #ffffff;
+    --primary-hover: #1a84ff;
+    --primary-active: #0062d6;
+    --secondary: #1a1a1a;
+    --secondary-foreground: #ededed;
+    --muted: #1a1a1a;
+    --muted-foreground: #a1a1a1;
+    --accent: #222222;
+    --accent-foreground: #ededed;
+    --destructive: #f31260;
+    --success: #0cce6b;
+    --warning: #f5a623;
+    --info: #0070f3;
+    --info-muted: #0b2e4f;
+    --border: #333333;
+    --input: #333333;
+    --ring: #0070f3;
+    --chart-1: #0070f3;
+    --chart-2: #7928ca;
+    --chart-3: #f5a623;
+    --chart-4: #0cce6b;
+    --chart-5: #ee0000;
+    --sidebar: #0a0a0a;
+    --sidebar-foreground: #ededed;
+    --sidebar-primary: #0070f3;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #1a1a1a;
+    --sidebar-accent-foreground: #ededed;
+    --sidebar-border: #262626;
+    --sidebar-ring: #0070f3;
+  }
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --popover: #111111;
+  --popover-foreground: #ededed;
+  --primary: #0070f3;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1a84ff;
+  --primary-active: #0062d6;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1a1;
+  --accent: #222222;
+  --accent-foreground: #ededed;
+  --destructive: #f31260;
+  --success: #0cce6b;
+  --warning: #f5a623;
+  --info: #0070f3;
+  --info-muted: #0b2e4f;
+  --border: #333333;
+  --input: #333333;
+  --ring: #0070f3;
+  --chart-1: #0070f3;
+  --chart-2: #7928ca;
+  --chart-3: #f5a623;
+  --chart-4: #0cce6b;
+  --chart-5: #ee0000;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #0070f3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #262626;
+  --sidebar-ring: #0070f3;
 }
 
 @utility heading-auth {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: clamp(2.5rem, 6vw, 4rem);
-  font-weight: 510;
-  letter-spacing: -0.022em;
-  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
 @utility heading-page {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: 510;
-  letter-spacing: -0.022em;
-  line-height: 1.1667;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 @utility heading-section {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: 1.5rem;
-  font-weight: 510;
-  letter-spacing: -0.012em;
+  font-weight: 600;
+  letter-spacing: -0.014em;
   line-height: 2rem;
 }
 
 @utility label-meta {
-  font-family: var(--font-jetbrains);
+  font-family: var(--font-geist-mono);
   font-size: 0.75rem;
   font-weight: 400;
-  letter-spacing: -0.013em;
   line-height: 1.4;
 }
 
 @utility text-link-signal {
-  color: #02b8cc;
+  color: #0070f3;
   text-underline-offset: 0.25rem;
 }
 
 @utility surface-raised {
-  box-shadow: rgb(35 37 42) 0 0 0 1px inset;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 }
 
 @layer base {
@@ -805,11 +864,6 @@
 
   body {
     @apply min-h-svh bg-background text-foreground antialiased;
-    /* Inter Variable's alternate glyphs — Linear's typographic identity. */
-    font-feature-settings:
-      "cv01" 1,
-      "ss03" 1,
-      "zero" 1;
     text-rendering: optimizeLegibility;
   }
 
@@ -829,7 +883,7 @@
   }
 
   ::selection {
-    background: #23252a;
+    background: #0070f3;
     color: #ffffff;
   }
 
