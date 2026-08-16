@@ -285,18 +285,7 @@ func (r *StorageBucketRepo) CheckNonEmpty(ctx context.Context, bucketID uuid.UUI
 	return objectCount > 0, nil
 }
 
-// IncrementUsage adds bytes and count for a bucket atomically.
-func (r *StorageBucketRepo) IncrementUsage(ctx context.Context, bucketID uuid.UUID, size int64) (sql.Result, error) {
-	return r.db.NewUpdate().
-		Model((*model.StorageBucket)(nil)).
-		Set("bytes_used = bytes_used + ?", size).
-		Set("object_count = object_count + 1").
-		Set("updated_at = now()").
-		Where("id = ?", bucketID).
-		Exec(ctx)
-}
-
-// DecrementUsage removes bytes and count for a bucket atomically.
+// DecrementUsage removes one object's bytes and count, clamped at zero.
 func (r *StorageBucketRepo) DecrementUsage(ctx context.Context, bucketID uuid.UUID, size int64) (sql.Result, error) {
 	return r.db.NewUpdate().
 		Model((*model.StorageBucket)(nil)).
@@ -305,4 +294,41 @@ func (r *StorageBucketRepo) DecrementUsage(ctx context.Context, bucketID uuid.UU
 		Set("updated_at = now()").
 		Where("id = ?", bucketID).
 		Exec(ctx)
+}
+
+// ReserveUsage atomically adds bytes and objects to a bucket's usage counters
+// only when the byte delta still fits the storage limit. The conditional
+// UPDATE makes the check-and-increment one statement, so concurrent uploads
+// cannot race past the quota. A negative byte delta (an object overwrite that
+// shrank) always satisfies the condition.
+func (r *StorageBucketRepo) ReserveUsage(ctx context.Context, bucketID uuid.UUID, byteDelta int64, objectDelta int) (bool, error) {
+	result, err := r.db.NewUpdate().
+		Model((*model.StorageBucket)(nil)).
+		Set("bytes_used = bytes_used + ?", byteDelta).
+		Set("object_count = object_count + ?", objectDelta).
+		Set("updated_at = now()").
+		Where("id = ?", bucketID).
+		Where("bytes_used + ? <= storage_limit_bytes", byteDelta).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows == 1, nil
+}
+
+// DecrementUsageBy removes an explicit byte/object delta, clamped at zero.
+// It is the compensation path when a reserved upload fails.
+func (r *StorageBucketRepo) DecrementUsageBy(ctx context.Context, bucketID uuid.UUID, byteDelta int64, objectDelta int) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.StorageBucket)(nil)).
+		Set("bytes_used = GREATEST(0, bytes_used - ?)", byteDelta).
+		Set("object_count = GREATEST(0, object_count - ?)", objectDelta).
+		Set("updated_at = now()").
+		Where("id = ?", bucketID).
+		Exec(ctx)
+	return err
 }

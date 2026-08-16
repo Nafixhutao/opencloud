@@ -381,8 +381,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 func cors(origins string) gin.HandlerFunc {
 	allowed := map[string]struct{}{}
+	wildcard := false
 	for _, o := range strings.Split(origins, ",") {
 		o = strings.TrimSpace(o)
+		if o == "*" {
+			wildcard = true
+			continue
+		}
 		if o != "" {
 			allowed[o] = struct{}{}
 		}
@@ -390,10 +395,18 @@ func cors(origins string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		if origin != "" {
-			if _, ok := allowed[origin]; ok || origins == "*" {
-				c.Header("Access-Control-Allow-Origin", origin)
-				c.Header("Vary", "Origin")
-				c.Header("Access-Control-Allow-Credentials", "true")
+			if _, listed := allowed[origin]; listed || wildcard {
+				if wildcard {
+					// Never combine a wildcard with credential echoing:
+					// reflecting an arbitrary Origin while allowing
+					// credentials would let any site make authenticated
+					// cross-origin requests.
+					c.Header("Access-Control-Allow-Origin", "*")
+				} else {
+					c.Header("Access-Control-Allow-Origin", origin)
+					c.Header("Vary", "Origin")
+					c.Header("Access-Control-Allow-Credentials", "true")
+				}
 				c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Request-ID, X-User-Name")
 				c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			}

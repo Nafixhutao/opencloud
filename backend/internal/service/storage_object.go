@@ -5,14 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"io"
 	"mime"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/nazxf/opencloud/backend/internal/apperr"
 	"github.com/nazxf/opencloud/backend/internal/model"
@@ -82,12 +81,40 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		return nil, apperr.Validation("object exceeds maximum size",
 			apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("max %d bytes", bucket.MaxObjectSizeBytes)})
 	}
-	if bucket.BytesUsed+size > bucket.StorageLimitBytes {
-		return nil, apperr.Conflict("bucket storage quota exceeded").
-			WithDetails(apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("limit %d bytes, used %d bytes", bucket.StorageLimitBytes, bucket.BytesUsed)})
-	}
 	if contentType == "" {
 		contentType = detectContentType(key)
+	}
+
+	// An existing object under the same key is replaced, so only the size
+	// delta (and no extra object count) is charged against the quota.
+	existing, existingErr := s.objectRepo.GetByBucketAndKey(ctx, accountID, bucketID, key)
+	if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
+		return nil, apperr.Internal("failed to load object metadata").Wrap(existingErr)
+	}
+	isOverwrite := existingErr == nil
+	byteDelta, objectDelta := size, 1
+	if isOverwrite {
+		byteDelta, objectDelta = size-existing.Size, 0
+	}
+
+	// Reserve quota first with one conditional UPDATE: concurrent uploads
+	// cannot both pass a read-then-check. Compensation releases the
+	// reservation when the provider or metadata write fails.
+	reserved := byteDelta > 0 || objectDelta > 0
+	if reserved {
+		ok, reserveErr := s.bucketRepo.ReserveUsage(ctx, bucketID, byteDelta, objectDelta)
+		if reserveErr != nil {
+			return nil, apperr.Internal("failed to reserve bucket quota").Wrap(reserveErr)
+		}
+		if !ok {
+			return nil, apperr.Conflict("bucket storage quota exceeded").
+				WithDetails(apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("limit %d bytes, used %d bytes", bucket.StorageLimitBytes, bucket.BytesUsed)})
+		}
+	}
+	release := func() {
+		if relErr := s.bucketRepo.DecrementUsageBy(ctx, bucketID, byteDelta, objectDelta); relErr != nil {
+			s.log.Warn("failed to release reserved bucket quota", zap.Error(relErr))
+		}
 	}
 
 	info, err := s.provider.PutObject(ctx, provisioner.PutObjectSpec{
@@ -98,6 +125,9 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		ContentType: contentType,
 	})
 	if err != nil {
+		if reserved {
+			release()
+		}
 		return nil, wrapProviderErr(err)
 	}
 
@@ -111,10 +141,10 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		ETag:        info.ETag,
 	}
 	if err := s.objectRepo.Upsert(ctx, obj); err != nil {
+		if reserved {
+			release()
+		}
 		return nil, apperr.Internal("failed to store object metadata").Wrap(err)
-	}
-	if _, err := s.bucketRepo.IncrementUsage(ctx, bucketID, info.Size); err != nil {
-		s.log.Warn("failed to update bucket usage counter", zap.Error(err))
 	}
 	return obj, nil
 }
@@ -192,10 +222,15 @@ func (s *StorageObjectService) DeleteObject(ctx context.Context, accountID, buck
 		return err
 	}
 
-	// Fetch object size before deletion for quota tracking.
-	objMeta, _ := s.objectRepo.GetByBucketAndKey(ctx, accountID, bucketID, key)
+	// Fetch object size before deletion for quota tracking. A missing
+	// metadata row (e.g. an object uploaded through a presigned URL) simply
+	// means there is no usage to release; other errors fail the delete.
+	objMeta, metaErr := s.objectRepo.GetByBucketAndKey(ctx, accountID, bucketID, key)
+	if metaErr != nil && !errors.Is(metaErr, sql.ErrNoRows) {
+		return apperr.Internal("failed to load object metadata").Wrap(metaErr)
+	}
 	objSize := int64(0)
-	if objMeta != nil {
+	if metaErr == nil && objMeta != nil {
 		objSize = objMeta.Size
 	}
 
