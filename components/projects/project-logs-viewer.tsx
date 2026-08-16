@@ -131,9 +131,9 @@ export function ProjectLogsViewer({ projectId, services }: ProjectLogsViewerProp
         </div>
       </CardHeader>
       <CardContent>
-        <div role="log" aria-live={live ? 'polite' : 'off'} aria-label="Project logs" className="max-h-[520px] min-h-72 overflow-auto rounded-md border bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-200">
-          {error ? <p className="text-red-300">{error}</p> : null}
-          {!error && !loading && entries.length === 0 ? <p className="text-zinc-500">No logs match these filters yet.</p> : null}
+        <div role="log" aria-live={live ? 'polite' : 'off'} aria-label="Project logs" className="max-h-[520px] min-h-72 overflow-auto rounded-md border bg-void p-4 font-mono text-xs leading-5 text-mist">
+          {error ? <p className="text-coral-red">{error}</p> : null}
+          {!error && !loading && entries.length === 0 ? <p className="text-fog">No logs match these filters yet.</p> : null}
           {entries.map((entry) => <LogLine key={logKey(entry)} entry={entry} services={services} timestamps={timestamps} wrap={wrap} />)}
           <div ref={endRef} />
         </div>
@@ -144,7 +144,7 @@ export function ProjectLogsViewer({ projectId, services }: ProjectLogsViewerProp
 
 function LogLine({ entry, services, timestamps, wrap }: { entry: ProjectLogEntry; services: ProjectService[]; timestamps: boolean; wrap: boolean }) {
   const service = services.find((candidate) => candidate.id === entry.service_id)?.name;
-  return <div className={cn('flex min-w-max gap-3 border-b border-white/5 py-1 last:border-0', wrap && 'min-w-0 whitespace-pre-wrap break-words')}><span className="flex shrink-0 gap-2 text-zinc-500">{timestamps ? <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toISOString()}</time> : null}<span className="w-16 uppercase text-purple-300">{entry.source}</span>{entry.level ? <span className={levelColor(entry.level)}>{entry.level}</span> : null}{service ? <span>{service}</span> : null}</span><span className={cn(!wrap && 'whitespace-pre')}>{entry.message}</span>{entry.request ? <span className="text-zinc-500">{[entry.request.method, entry.request.path, entry.request.status].filter((value) => value !== undefined && value !== '').join(' ')}</span> : null}</div>;
+  return <div className={cn('flex min-w-max gap-3 border-b border-white/5 py-1 last:border-0', wrap && 'min-w-0 whitespace-pre-wrap break-words')}><span className="flex shrink-0 gap-2 text-fog">{timestamps ? <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toISOString()}</time> : null}<span className="w-16 uppercase text-iris-violet">{entry.source}</span>{entry.level ? <span className={levelColor(entry.level)}>{entry.level}</span> : null}{service ? <span>{service}</span> : null}</span><span className={cn(!wrap && 'whitespace-pre')}>{entry.message}</span>{entry.request ? <span className="text-fog">{[entry.request.method, entry.request.path, entry.request.status].filter((value) => value !== undefined && value !== '').join(' ')}</span> : null}</div>;
 }
 
 function LogSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
@@ -173,7 +173,7 @@ function connectionLabel(connection: 'connecting' | 'live' | 'paused' | 'retryin
 }
 
 function levelColor(level: LogLevel) {
-  if (level === 'error') return 'text-red-300';
+  if (level === 'error') return 'text-coral-red';
   if (level === 'warn') return 'text-amber-300';
   if (level === 'debug') return 'text-sky-300';
   return 'text-emerald-300';

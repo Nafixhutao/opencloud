@@ -35,16 +35,16 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
   };
 
   const sidebar = (
-    <div className={`flex h-full flex-col bg-zinc-950 text-zinc-300 transition-all ${collapsed ? 'w-16' : 'w-56'}`}>
+    <div className={`flex h-full flex-col bg-sidebar text-mist transition-all ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Logo */}
-      <div className="flex h-14 items-center gap-3 border-b border-zinc-800 px-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold text-white">
+      <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-acid-lime text-sm font-medium tracking-tight text-void">
           OC
         </div>
-        {!collapsed && <span className="text-sm font-semibold text-white">OpenCloud</span>}
+        {!collapsed && <span className="text-sm font-medium tracking-tight text-paper">OpenCloud</span>}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto hidden rounded p-1 text-zinc-500 hover:text-zinc-300 lg:block"
+          className="ml-auto hidden rounded p-1 text-fog hover:text-mist lg:block"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <ChevronLeft size={16} className={`transition-transform ${collapsed ? 'rotate-180' : ''}`} />
@@ -58,10 +58,10 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
             key={href}
             href={href}
             onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
               isActive(href)
-                ? 'bg-violet-600/20 text-violet-400'
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                ? 'bg-acid-lime/10 text-acid-lime'
+                : 'text-fog hover:bg-slate hover:text-bone'
             }`}
           >
             <Icon size={18} className="shrink-0" />
@@ -71,14 +71,14 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
       </nav>
 
       {/* User */}
-      <div className="border-t border-zinc-800 p-3">
+      <div className="border-t border-sidebar-border p-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs text-zinc-300">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-smoke text-xs text-mist">
             {email[0]?.toUpperCase()}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs text-zinc-400">{email}</p>
+              <p className="truncate text-xs text-fog">{email}</p>
             </div>
           )}
           <SignOutButton />
@@ -92,7 +92,7 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed left-3 top-3 z-50 rounded-lg bg-zinc-900 p-2 text-zinc-300 lg:hidden"
+        className="fixed left-3 top-3 z-50 rounded-md bg-carbon p-2 text-mist ring-1 ring-graphite lg:hidden"
         aria-label="Toggle menu"
       >
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}
