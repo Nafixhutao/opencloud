@@ -634,9 +634,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-geist);
-  --font-sans: var(--font-geist);
-  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-inter);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -673,97 +673,125 @@
   --color-primary-active: var(--primary-active);
   --color-info: var(--info);
   --color-info-muted: var(--info-muted);
+  /* Buttons/inputs at 6px, cards at 12px — the full radius vocabulary. */
   --radius-sm: 0.375rem;
   --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
   --radius-3xl: 1rem;
   --radius-4xl: 1rem;
 }
 
+/* Linear design tokens — midnight precision instrument. Utility classes
+   (bg-void, text-mist, border-graphite, bg-acid-lime, …) are generated from
+   this palette. Acid lime is the single chromatic action color. */
+@theme {
+  --color-void: #08090a;
+  --color-carbon: #0f1011;
+  --color-obsidian: #161718;
+  --color-graphite: #23252a;
+  --color-smoke: #383b3f;
+  --color-ash: #62666d;
+  --color-fog: #8a8f98;
+  --color-mist: #d0d6e0;
+  --color-bone: #e5e5e6;
+  --color-paper: #ffffff;
+  --color-acid-lime: #e4f222;
+  --color-pulse-green: #27a644;
+  --color-coral-red: #eb5757;
+  --color-signal-teal: #02b8cc;
+  --color-iris-violet: #6366f1;
+  --color-lavender: #8b5cf6;
+
+  --shadow-subtle: rgb(35, 37, 42) 0px 0px 0px 1px inset;
+  --shadow-subtle-2: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
+  --shadow-xl: rgba(8, 9, 10, 0.6) 0px 4px 32px 0px;
+}
+
 :root {
   color-scheme: dark;
-  --font-geist: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  --background: #0a0a0b;
-  --foreground: #e4e4e7;
-  --card: #131316;
-  --card-foreground: #e4e4e7;
-  --popover: #131316;
-  --popover-foreground: #e4e4e7;
-  --primary: #a78bfa;
-  --primary-foreground: #0a0a0b;
-  --primary-hover: #c4b5fd;
-  --primary-active: #8b5cf6;
-  --secondary: #18181b;
-  --secondary-foreground: #e4e4e7;
-  --muted: #18181b;
-  --muted-foreground: #71717a;
-  --accent: #27272a;
-  --accent-foreground: #e4e4e7;
-  --destructive: #ef4444;
-  --success: #22c55e;
-  --info: #818cf8;
-  --info-muted: #1e1b4b;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #a78bfa;
-  --chart-1: #a78bfa;
-  --chart-2: #22d3ee;
-  --chart-3: #f472b6;
-  --chart-4: #fbbf24;
-  --chart-5: #fb923c;
-  --radius: 0.5rem;
-  --sidebar: #09090b;
-  --sidebar-foreground: #e4e4e7;
-  --sidebar-primary: #a78bfa;
-  --sidebar-primary-foreground: #0a0a0b;
-  --sidebar-accent: #18181b;
-  --sidebar-accent-foreground: #e4e4e7;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #a78bfa;
+  --font-inter: "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-jetbrains: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Surface ladder: void canvas → carbon cards → obsidian elevated → slate tint. */
+  --background: #08090a;
+  --foreground: #d0d6e0;
+  --card: #0f1011;
+  --card-foreground: #d0d6e0;
+  --popover: #0f1011;
+  --popover-foreground: #d0d6e0;
+  --primary: #e4f222;
+  --primary-foreground: #08090a;
+  --primary-hover: #eef75a;
+  --primary-active: #cbda1c;
+  --secondary: #161718;
+  --secondary-foreground: #d0d6e0;
+  --muted: #161718;
+  --muted-foreground: #8a8f98;
+  --accent: #23252a;
+  --accent-foreground: #e5e5e6;
+  --destructive: #eb5757;
+  --success: #27a644;
+  --info: #02b8cc;
+  --info-muted: #0c2124;
+  --border: #23252a;
+  --input: #23252a;
+  --ring: #d0d6e0;
+  --chart-1: #e4f222;
+  --chart-2: #02b8cc;
+  --chart-3: #6366f1;
+  --chart-4: #eb5757;
+  --chart-5: #8b5cf6;
+  --radius: 0.375rem;
+  --sidebar: #0f1011;
+  --sidebar-foreground: #d0d6e0;
+  --sidebar-primary: #e4f222;
+  --sidebar-primary-foreground: #08090a;
+  --sidebar-accent: #161718;
+  --sidebar-accent-foreground: #e5e5e6;
+  --sidebar-border: #23252a;
+  --sidebar-ring: #d0d6e0;
 }
 
 @utility heading-auth {
-  font-family: var(--font-geist);
+  font-family: var(--font-inter);
   font-size: clamp(2.5rem, 6vw, 4rem);
-  font-weight: 600;
-  letter-spacing: -0.06em;
+  font-weight: 510;
+  letter-spacing: -0.022em;
   line-height: 1;
 }
 
 @utility heading-page {
-  font-family: var(--font-geist);
+  font-family: var(--font-inter);
   font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: 600;
-  letter-spacing: -0.06em;
+  font-weight: 510;
+  letter-spacing: -0.022em;
   line-height: 1.1667;
 }
 
 @utility heading-section {
-  font-family: var(--font-geist);
+  font-family: var(--font-inter);
   font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.04em;
+  font-weight: 510;
+  letter-spacing: -0.012em;
   line-height: 2rem;
 }
 
 @utility label-meta {
-  font-family: var(--font-geist-mono);
+  font-family: var(--font-jetbrains);
   font-size: 0.75rem;
   font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1rem;
+  letter-spacing: -0.013em;
+  line-height: 1.4;
 }
 
 @utility text-link-signal {
-  color: #818cf8;
+  color: #02b8cc;
   text-underline-offset: 0.25rem;
 }
 
 @utility surface-raised {
-  box-shadow: 0 2px 2px rgb(0 0 0 / 4%);
+  box-shadow: rgb(35 37 42) 0 0 0 1px inset;
 }
 
 @layer base {
@@ -777,14 +805,12 @@
 
   body {
     @apply min-h-svh bg-background text-foreground antialiased;
+    /* Inter Variable's alternate glyphs — Linear's typographic identity. */
     font-feature-settings:
       "cv01" 1,
-      "cv05" 1,
-      "cv09" 1,
-      "cv11" 1,
       "ss03" 1,
-      "ss07" 1,
-      "dlig" 1;
+      "zero" 1;
+    text-rendering: optimizeLegibility;
   }
 
   html,
@@ -803,8 +829,8 @@
   }
 
   ::selection {
-    background: #cae7ff;
-    color: #002359;
+    background: #23252a;
+    color: #ffffff;
   }
 
   :focus-visible {

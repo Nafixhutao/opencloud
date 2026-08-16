@@ -23,9 +23,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-900">
+    <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar email={session.user.email} isAdmin={isAdmin} />
-      <main className="flex-1 overflow-y-auto bg-zinc-900">
+      <main className="flex-1 overflow-y-auto bg-background">
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
           <QueryProvider>{children}</QueryProvider>
         </div>
