@@ -122,7 +122,9 @@ func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bo
 // endpoints SigV4 must hash the payload before sending, which requires a
 // seekable stream; HTTP request bodies are not. Spool to a temp file instead
 // of buffering in memory so large uploads stay bounded by disk, not RAM.
-func seekableBody(body io.Reader) (io.ReadSeeker, func(), error) {
+// maxBytes > 0 caps the spool: one byte more than the cap is rejected before
+// the disk fills, so an oversized or length-less body cannot exhaust /tmp.
+func seekableBody(body io.Reader, maxBytes int64) (io.ReadSeeker, func(), error) {
 	if rs, ok := body.(io.ReadSeeker); ok {
 		return rs, func() {}, nil
 	}
@@ -134,9 +136,19 @@ func seekableBody(body io.Reader) (io.ReadSeeker, func(), error) {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 	}
-	if _, err := io.Copy(f, body); err != nil {
+	var src io.Reader = body
+	if maxBytes > 0 {
+		// Read at most maxBytes+1 so an over-cap body is detectable.
+		src = io.LimitReader(body, maxBytes+1)
+	}
+	written, err := io.Copy(f, src)
+	if err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("buffer upload body: %w", err)
+	}
+	if maxBytes > 0 && written > maxBytes {
+		cleanup()
+		return nil, nil, ErrObjectTooLarge
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		cleanup()
@@ -146,7 +158,7 @@ func seekableBody(body io.Reader) (io.ReadSeeker, func(), error) {
 }
 
 func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
-	body, cleanup, err := seekableBody(spec.Body)
+	body, cleanup, err := seekableBody(spec.Body, spec.MaxObjectSizeBytes)
 	if err != nil {
 		return nil, err
 	}
