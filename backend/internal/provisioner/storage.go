@@ -89,6 +89,9 @@ type PutObjectSpec struct {
 	Body        io.Reader
 	Size        int64
 	ContentType string
+	// MaxObjectSizeBytes bounds the body before any provider buffering.
+	// Zero disables the cap (tests only).
+	MaxObjectSizeBytes int64
 }
 
 // ListObjectsOptions holds options for listing objects.
