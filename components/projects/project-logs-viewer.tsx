@@ -144,7 +144,7 @@ export function ProjectLogsViewer({ projectId, services }: ProjectLogsViewerProp
 
 function LogLine({ entry, services, timestamps, wrap }: { entry: ProjectLogEntry; services: ProjectService[]; timestamps: boolean; wrap: boolean }) {
   const service = services.find((candidate) => candidate.id === entry.service_id)?.name;
-  return <div className={cn('flex min-w-max gap-3 border-b border-white/5 py-1 last:border-0', wrap && 'min-w-0 whitespace-pre-wrap break-words')}><span className="flex shrink-0 gap-2 text-muted-foreground">{timestamps ? <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toISOString()}</time> : null}<span className="w-16 uppercase text-info">{entry.source}</span>{entry.level ? <span className={levelColor(entry.level)}>{entry.level}</span> : null}{service ? <span>{service}</span> : null}</span><span className={cn(!wrap && 'whitespace-pre')}>{entry.message}</span>{entry.request ? <span className="text-muted-foreground">{[entry.request.method, entry.request.path, entry.request.status].filter((value) => value !== undefined && value !== '').join(' ')}</span> : null}</div>;
+  return <div className={cn('flex min-w-max gap-3 border-b border-white/5 py-1 last:border-0', wrap && 'min-w-0 whitespace-pre-wrap break-words')}><span className="flex shrink-0 gap-2 text-muted-foreground">{timestamps ? <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toISOString()}</time> : null}<span className="w-16 uppercase text-muted-foreground">{entry.source}</span>{entry.level ? <span className={levelColor(entry.level)}>{entry.level}</span> : null}{service ? <span>{service}</span> : null}</span><span className={cn(!wrap && 'whitespace-pre')}>{entry.message}</span>{entry.request ? <span className="text-muted-foreground">{[entry.request.method, entry.request.path, entry.request.status].filter((value) => value !== undefined && value !== '').join(' ')}</span> : null}</div>;
 }
 
 function LogSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
@@ -174,7 +174,7 @@ function connectionLabel(connection: 'connecting' | 'live' | 'paused' | 'retryin
 
 function levelColor(level: LogLevel) {
   if (level === 'error') return 'text-destructive';
-  if (level === 'warn') return 'text-amber-300';
-  if (level === 'debug') return 'text-sky-300';
-  return 'text-emerald-300';
+  if (level === 'warn') return 'text-warning';
+  if (level === 'debug') return 'text-muted-foreground';
+  return 'text-muted-foreground';
 }
