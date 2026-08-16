@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -59,6 +60,12 @@ func NewS3StorageProvider(ctx context.Context, cfg S3StorageConfig) (*S3StorageP
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		),
+		// Default checksum behavior (WhenSupported) makes PutObject compute a
+		// CRC checksum for every upload; for unseekable request bodies over a
+		// plain-HTTP internal endpoint that fails with "unseekable stream is
+		// not supported". Compute checksums only when an operation requires
+		// one.
+		awsconfig.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
@@ -111,11 +118,55 @@ func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bo
 // --- Object operations ---
 
 // PutObject uploads an object to the S3 bucket.
+// seekableBody returns a body the S3 signer can rewind. Over plain-HTTP
+// endpoints SigV4 must hash the payload before sending, which requires a
+// seekable stream; HTTP request bodies are not. Spool to a temp file instead
+// of buffering in memory so large uploads stay bounded by disk, not RAM.
+// maxBytes > 0 caps the spool: one byte more than the cap is rejected before
+// the disk fills, so an oversized or length-less body cannot exhaust /tmp.
+func seekableBody(body io.Reader, maxBytes int64) (io.ReadSeeker, func(), error) {
+	if rs, ok := body.(io.ReadSeeker); ok {
+		return rs, func() {}, nil
+	}
+	f, err := os.CreateTemp("", "oc-s3-spool-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("spool upload body: %w", err)
+	}
+	cleanup := func() {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}
+	var src = body
+	if maxBytes > 0 {
+		// Read at most maxBytes+1 so an over-cap body is detectable.
+		src = io.LimitReader(body, maxBytes+1)
+	}
+	written, err := io.Copy(f, src)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("buffer upload body: %w", err)
+	}
+	if maxBytes > 0 && written > maxBytes {
+		cleanup()
+		return nil, nil, ErrObjectTooLarge
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("rewind upload body: %w", err)
+	}
+	return f, cleanup, nil
+}
+
 func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
+	body, cleanup, err := seekableBody(spec.Body, spec.MaxObjectSizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(spec.Bucket),
 		Key:         aws.String(spec.Key),
-		Body:        spec.Body,
+		Body:        body,
 		ContentType: aws.String(spec.ContentType),
 	}
 	if spec.Size > 0 {

@@ -77,6 +77,15 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		return nil, apperr.Conflict("bucket is not active")
 	}
 
+	// A missing Content-Length arrives as -1; without a known size neither
+	// the per-object cap nor the quota reservation is meaningful, and the
+	// provider would spool an unbounded body to disk. Clients must send
+	// Content-Length (browser uploads always do); programs with streaming
+	// bodies should use the presigned upload URL instead.
+	if size < 0 {
+		return nil, apperr.Validation("content-length is required for uploads",
+			apperr.FieldIssue{Field: "size", Issue: "send a Content-Length header"})
+	}
 	if size > bucket.MaxObjectSizeBytes {
 		return nil, apperr.Validation("object exceeds maximum size",
 			apperr.FieldIssue{Field: "size", Issue: fmt.Sprintf("max %d bytes", bucket.MaxObjectSizeBytes)})
@@ -123,8 +132,14 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		Body:        body,
 		Size:        size,
 		ContentType: contentType,
+		// Defense in depth: the provider caps its spool even if a length
+		// lies about the declared Content-Length.
+		MaxObjectSizeBytes: bucket.MaxObjectSizeBytes,
 	})
 	if err != nil {
+		// The customer error is generic by design; the provider detail stays
+		// in server logs for operators.
+		s.log.Warn("storage provider rejected put", zap.Error(err), zap.Stringer("bucket_id", bucketID), zap.String("key", key))
 		if reserved {
 			release()
 		}
