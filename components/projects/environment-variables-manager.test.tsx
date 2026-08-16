@@ -183,4 +183,30 @@ describe('EnvironmentVariablesManager', () => {
     // Values never appear in the trail — only the key and action.
     expect(screen.queryByText('postgres://hunter2')).not.toBeInTheDocument();
   });
+
+  it('refreshes an open activity panel after a secret reveal', async () => {
+    let auditCalls = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.includes('/environment/audit')) {
+        auditCalls += 1;
+        return jsonResponse({ data: [] });
+      }
+      if (method === 'POST' && url.endsWith('/reveal')) {
+        return jsonResponse({ data: { value: 'postgres://hunter2' } });
+      }
+      return jsonResponse({ data: [secretVariable] });
+    });
+    renderManager();
+    expect(await screen.findByText('DATABASE_URL')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    await screen.findByText('No recorded variable activity for this service yet.');
+    expect(auditCalls).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal value of DATABASE_URL' }));
+    expect(await screen.findByText('postgres://hunter2')).toBeInTheDocument();
+
+    await waitFor(() => expect(auditCalls).toBe(2));
+  });
 });

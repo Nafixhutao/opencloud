@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckIcon,
@@ -80,6 +80,13 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
   const [deleteConfirmKey, setDeleteConfirmKey] = useState('');
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
   const [showAudit, setShowAudit] = useState(false);
 
   const hasServices = services.length > 0 && serviceId !== '';
@@ -149,13 +156,18 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
 
   const revealMutation = useMutation({
     mutationFn: (id: string) => revealSecret(projectId, serviceId, id),
-    onSuccess: (value, id) => setRevealed((current) => ({ ...current, [id]: value })),
+    onSuccess: (value, id) => {
+      setRevealed((current) => ({ ...current, [id]: value }));
+      // Reveals are audited server-side, so an open activity panel must refresh.
+      void queryClient.invalidateQueries({ queryKey: ['environment-variable-audit', projectId, serviceId] });
+    },
   });
 
   const handleCopy = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
-    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
   };
 
   const list = variables ?? [];
