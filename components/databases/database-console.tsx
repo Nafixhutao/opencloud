@@ -175,7 +175,7 @@ export function DatabaseConsole({ database }: DatabaseConsoleProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TriangleAlert className="size-5 text-amber-600" aria-hidden="true" />
+            <TriangleAlert className="size-5 text-warning" aria-hidden="true" />
             SQL console
           </CardTitle>
           <CardDescription>

@@ -172,7 +172,7 @@ export function BucketManager({ projectId, initialData }: Props) {
                       <TableCell className="font-medium">
                         <button
                           type="button"
-                          className="text-left hover:text-link"
+                          className="text-left hover:text-foreground"
                           onClick={() => router.push(`/projects/${projectId}/storage/${bucket.id}`)}
                           aria-label={`Open bucket ${bucket.name}`}
                         >
@@ -233,7 +233,7 @@ export function BucketManager({ projectId, initialData }: Props) {
                     <div className="min-w-0">
                       <button
                         type="button"
-                        className="text-left font-medium hover:text-link"
+                        className="text-left font-medium hover:text-foreground"
                         onClick={() => router.push(`/projects/${projectId}/storage/${bucket.id}`)}
                         aria-label={`Open bucket ${bucket.name}`}
                       >

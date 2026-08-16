@@ -79,7 +79,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                       <span className="inline-flex items-center gap-1"><FolderIcon size={12} />{service.source_root}</span>
                     ) : null}
                     {service.git_repo_url ? (
-                      <span className="inline-flex items-center gap-1 text-link">
+                      <span className="inline-flex items-center gap-1 text-foreground">
                         <GitBranchIcon size={12} />
                         {service.git_repo_url.replace('https://github.com/', '')} ({service.git_branch})
                       </span>

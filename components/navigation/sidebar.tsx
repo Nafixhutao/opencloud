@@ -38,7 +38,7 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
     <div className={`flex h-full flex-col bg-sidebar text-sidebar-foreground transition-all ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Logo */}
       <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md gradient-accent text-sm font-medium tracking-tight text-[#151515]">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-medium tracking-tight text-primary-foreground">
           OC
         </div>
         {!collapsed && <span className="text-sm font-medium tracking-tight text-sidebar-foreground">OpenCloud</span>}
@@ -60,7 +60,7 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
             onClick={() => setMobileOpen(false)}
             className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
               isActive(href)
-                ? 'bg-brand/10 text-brand'
+                ? 'bg-foreground/10 text-foreground'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
             }`}
           >

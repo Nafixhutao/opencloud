@@ -100,7 +100,7 @@ export default async function DashboardPage() {
     >
       <section className="relative overflow-hidden rounded-xl border border-border bg-card/50 p-8 shadow-lg backdrop-blur-sm sm:p-12 lg:p-16">
         <div className="absolute -left-1/4 -top-1/4 h-64 w-64 rounded-full bg-primary/10 blur-3xl"></div>
-        <div className="absolute -right-1/4 -bottom-1/4 h-64 w-64 rounded-full bg-info/10 blur-3xl"></div>
+        <div className="absolute -right-1/4 -bottom-1/4 h-64 w-64 rounded-full bg-foreground/5 blur-3xl"></div>
         <div className="relative z-10 flex flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex max-w-3xl flex-col gap-3">
             <p className="label-meta text-muted-foreground">Workspace Overview</p>
@@ -153,7 +153,7 @@ export default async function DashboardPage() {
       >
         <Card className="lg:col-span-8 group hover:border-primary/30 transition-all duration-300">
           <CardHeader>
-            <p className="label-meta text-info">Setup Guide</p>
+            <p className="label-meta text-muted-foreground">Setup Guide</p>
             <CardTitle>
               <h2 id="workspace-heading" className="heading-section">
                 Bring Your First Site Online
@@ -172,7 +172,7 @@ export default async function DashboardPage() {
                     className={cn(
                       'relative flex size-10 shrink-0 items-center justify-center rounded-full border transition-all duration-300 group-hover:border-primary/50',
                       index === 0
-                        ? 'border-info bg-info text-white shadow-lg'
+                        ? 'border-border bg-foreground text-background shadow-lg'
                         : 'border-border bg-background text-muted-foreground hover:border-primary/30'
                     )}
                   >
@@ -193,7 +193,7 @@ export default async function DashboardPage() {
             </ol>
           </CardContent>
           <CardFooter className="gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="size-4 text-info" aria-hidden="true" />
+            <CheckCircle2 className="size-4 text-muted-foreground" aria-hidden="true" />
             {overview === null
               ? 'Site state is temporarily unavailable.'
               : overview.sites_active > 0

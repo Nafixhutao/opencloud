@@ -15,7 +15,7 @@ export function BrandLogo({ className, priority = false }: BrandLogoProps) {
       width={136}
       height={40}
       priority={priority}
-      className={cn('h-7 w-auto', className)}
+      className={cn('h-7 w-auto grayscale', className)}
     />
   );
 }

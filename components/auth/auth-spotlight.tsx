@@ -56,10 +56,10 @@ export function AuthSpotlight() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            <ol className="relative flex flex-col before:absolute before:bottom-8 before:left-[1.0625rem] before:top-8 before:w-px before:bg-info">
+            <ol className="relative flex flex-col before:absolute before:bottom-8 before:left-[1.0625rem] before:top-8 before:w-px before:bg-foreground/20">
               {deploySteps.map(({ title, detail, icon: Icon }) => (
                 <li key={title} className="relative flex gap-4 py-4 first:pt-0 last:pb-0">
-                  <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full border border-info bg-background text-info">
+                  <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full border border-foreground/20 bg-background text-success">
                     <Icon className="size-4" aria-hidden="true" />
                   </span>
                   <div className="flex min-w-0 flex-col gap-1 pt-1.5">
@@ -72,7 +72,7 @@ export function AuthSpotlight() {
           </CardContent>
           <CardFooter className="justify-between gap-4">
             <span className="label-meta text-muted-foreground">Build 00:42</span>
-            <span className="label-meta text-info">Healthy</span>
+            <span className="label-meta text-success">Healthy</span>
           </CardFooter>
         </Card>
 
