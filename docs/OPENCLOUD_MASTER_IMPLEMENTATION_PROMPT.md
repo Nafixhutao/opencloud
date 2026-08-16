@@ -1,15 +1,17 @@
-> **Implementation status — 9 August 2026:** This is the user's original OpenCloud master implementation prompt, preserved below. Only this status section and the Slice headings have been annotated. “Complete” means the documented slice is implemented and verified in the uncommitted working tree; it does **not** mean that deferred production adapters or public deployment controls are enabled.
+> **Implementation status — 16 August 2026:** This is the user's original OpenCloud master implementation prompt, preserved below. Only this status section and the Slice headings have been annotated. “Complete” means the documented slice is implemented and verified; it does **not** mean that deferred production adapters or public deployment controls are enabled.
 >
 > | Slice | Status | Delivered scope |
 > | --- | --- | --- |
 > | 1 — Project Domain Model | ✅ Complete | Tenant-scoped projects, services, deployments/events, compatibility with existing sites, APIs, and dashboard screens. |
-> | 2 — Build Abstraction | ✅ Complete | Build-provider contracts plus static, Railpack-planning, and fake providers; unsafe builds remain disabled. |
+> | 2 — Build Abstraction | ✅ Complete | Build-provider contracts plus static, Railpack-planning, PHP, and fake providers; unsafe builds remain disabled. |
 > | 3 — Isolated Builder | ✅ Complete (safe foundation) | Builder contracts, state/log abstractions, BuildKit boundary, resource-limit model, and fakes; no production build executor is enabled. |
 > | 4 — Registry + Deployments | ✅ Complete (safe foundation) | Digest-only registry/revision model, lifecycle protection, health-before-traffic-switch workflow, rollback, and PostgreSQL integration coverage; no live registry/Docker/Caddy adapter or public deployment endpoint is enabled. |
 > | 5 — Logs | ✅ Complete (safe foundation) | Tenant-safe Loki contract, collector configuration, Go query/SSE APIs, authenticated BFF, and Logs Viewer; production emitters remain disabled. |
-> | 6 — Env/Secrets | ⬜ Not started | Next planned slice. |
-> | 7 — Database Manager | ⬜ Not started | Deferred. |
-> | 8 — Object Storage | ⬜ Not started | Deferred. |
+> | 6 — Env/Secrets | ✅ Complete | Tenant/service/environment-scoped variables and AES-256-GCM encrypted secrets with rotation, boundary redaction, reveal auditing; authenticated BFF routes and the per-service Environment Variables manager UI. |
+> | 7 — Database Manager | ✅ Complete (safe foundation) | Short-lived database console sessions, audited SQL Console execution, phpMyAdmin redirect for MariaDB, and dashboard manager UI; no public `db.<platform-domain>` gateway is deployed. |
+> | 8 — Object Storage | ✅ Complete (safe foundation) | Bucket/object models with quotas, S3-compatible provider (plus fake), presigned GET/PUT, async storage jobs, bucket manager and object browser UI; production storage backend is opt-in via configuration. |
+>
+> Beyond the slices: Git source fields on services with a GitHub webhook route, preview-deployment records wired into build job handlers, persistent-storage quotas on services, and a resource-usage metering table. The end-to-end deployment path (source acquisition → build execution → registry transport → runtime rollout) remains intentionally disabled per its fail-closed design.
 >
 > For implementation details and validation evidence, see [ROADMAP.md](../ROADMAP.md), [docs/BACKEND.md](BACKEND.md), and [CHANGELOG.md](../CHANGELOG.md).
 
@@ -2235,13 +2237,13 @@ Tests.
 
 STOP and report.
 
-SLICE 6 — ENV/SECRETS ⬜ NOT STARTED
+SLICE 6 — ENV/SECRETS ✅ COMPLETE
 
 Add safe environment variables and secret delivery.
 
 STOP and report.
 
-SLICE 7 — DATABASE MANAGER ⬜ NOT STARTED
+SLICE 7 — DATABASE MANAGER ✅ COMPLETE (SAFE FOUNDATION)
 
 Add:
 
@@ -2253,7 +2255,7 @@ SQL Console read-only first
 
 STOP and report.
 
-SLICE 8 — OBJECT STORAGE ⬜ NOT STARTED
+SLICE 8 — OBJECT STORAGE ✅ COMPLETE (SAFE FOUNDATION)
 
 Add:
 

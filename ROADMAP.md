@@ -176,14 +176,21 @@ production because no public DNS, certificate, or deployment has been activated.
   collector configuration, historical Go API, SSE live tail, authenticated BFF,
   and interactive project Logs Viewer. Runtime/build/source adapters remain
   disabled, so production log emission is not claimed yet.
-- ⏳ **4I–4M:** PHP storage, persistent PHP storage, database manager,
 - ✅ **4H ENV/SECRETS:** tenant-scoped, service-scoped, environment-scoped
   (production/preview/development) environment variables and secrets. Secrets
   encrypted at rest (AES-256-GCM), never logged, redacted at boundaries,
   explicit rotation, and access audit. No NEXT_PUBLIC exposure unless
   explicitly configured. Frontend UI for managing env/secrets per
-  project/service/environment.
-  monorepos, object storage, and previews.
+  project/service/environment (an earlier unused UI was removed; the manager
+  was rebuilt wired through authenticated BFF routes).
+- 🚧 **4I–4M foundations (not production-deployed):** per-service persistent
+  storage quotas; short-lived database console sessions with an audited SQL
+  Console and a phpMyAdmin redirect for MariaDB (no public
+  `db.<platform-domain>` gateway yet); Git source fields plus a GitHub webhook
+  route as the start of source acquisition/monorepo support; S3-compatible
+  object storage with buckets/objects, quotas, presigned URLs, async storage
+  jobs, and a bucket/object browser UI; and preview-deployment records wired
+  into the build job handlers. None of these claim a live production backend.
 
 ## Later platform work — Email, FTP/SSH & cron ⏳
 
