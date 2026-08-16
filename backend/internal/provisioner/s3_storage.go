@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -59,6 +60,12 @@ func NewS3StorageProvider(ctx context.Context, cfg S3StorageConfig) (*S3StorageP
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		),
+		// Default checksum behavior (WhenSupported) makes PutObject compute a
+		// CRC checksum for every upload; for unseekable request bodies over a
+		// plain-HTTP internal endpoint that fails with "unseekable stream is
+		// not supported". Compute checksums only when an operation requires
+		// one.
+		awsconfig.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
@@ -111,11 +118,43 @@ func (p *S3StorageProvider) BucketExists(ctx context.Context, ref BucketRef) (bo
 // --- Object operations ---
 
 // PutObject uploads an object to the S3 bucket.
+// seekableBody returns a body the S3 signer can rewind. Over plain-HTTP
+// endpoints SigV4 must hash the payload before sending, which requires a
+// seekable stream; HTTP request bodies are not. Spool to a temp file instead
+// of buffering in memory so large uploads stay bounded by disk, not RAM.
+func seekableBody(body io.Reader) (io.ReadSeeker, func(), error) {
+	if rs, ok := body.(io.ReadSeeker); ok {
+		return rs, func() {}, nil
+	}
+	f, err := os.CreateTemp("", "oc-s3-spool-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("spool upload body: %w", err)
+	}
+	cleanup := func() {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}
+	if _, err := io.Copy(f, body); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("buffer upload body: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("rewind upload body: %w", err)
+	}
+	return f, cleanup, nil
+}
+
 func (p *S3StorageProvider) PutObject(ctx context.Context, spec PutObjectSpec) (*ObjectInfo, error) {
+	body, cleanup, err := seekableBody(spec.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(spec.Bucket),
 		Key:         aws.String(spec.Key),
-		Body:        spec.Body,
+		Body:        body,
 		ContentType: aws.String(spec.ContentType),
 	}
 	if spec.Size > 0 {
