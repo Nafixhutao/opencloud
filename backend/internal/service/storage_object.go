@@ -125,6 +125,9 @@ func (s *StorageObjectService) PutObject(ctx context.Context, accountID, bucketI
 		ContentType: contentType,
 	})
 	if err != nil {
+		// The customer error is generic by design; the provider detail stays
+		// in server logs for operators.
+		s.log.Warn("storage provider rejected put", zap.Error(err), zap.Stringer("bucket_id", bucketID), zap.String("key", key))
 		if reserved {
 			release()
 		}
