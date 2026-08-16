@@ -50,12 +50,16 @@ function getRuntime(): AuthRuntime {
 
   const memberships = createMembershipStore(domainPool);
   const mail = getMailAdapter();
+  // A log provider never delivers mail, so requiring verification would lock
+  // out every new account. Any real provider (smtp) keeps verification on.
+  const mailProvider = (process.env.MAIL_PROVIDER ?? 'log').toLowerCase();
   const { auth, authPool } = createIdentity({
     databaseUrl,
     secret,
     baseURL,
     memberships,
     mail,
+    verifyEmails: mailProvider !== 'log',
   });
 
   runtime = { auth, authPool, domainPool, memberships, mail };

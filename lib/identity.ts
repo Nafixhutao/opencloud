@@ -26,6 +26,13 @@ export type IdentityConfig = {
   baseURL: string;
   memberships: MembershipStore;
   mail: Pick<MailAdapter, 'send'>;
+  /**
+   * Whether email/password sign-in requires a verified email address. The
+   * composition root sets this from the mail provider: with a log provider no
+   * real email is ever delivered, so verification would lock every new
+   * account out until an operator flips the flag in the database.
+   */
+  verifyEmails: boolean;
 };
 
 export type Auth = ReturnType<typeof createIdentity>;
@@ -66,7 +73,7 @@ export function createIdentity(config: IdentityConfig) {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification: config.verifyEmails,
       autoSignIn: false,
       minPasswordLength: 8,
       maxPasswordLength: 128,
