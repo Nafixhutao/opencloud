@@ -35,16 +35,16 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
   };
 
   const sidebar = (
-    <div className={`flex h-full flex-col bg-sidebar text-mist transition-all ${collapsed ? 'w-16' : 'w-56'}`}>
+    <div className={`flex h-full flex-col bg-sidebar text-sidebar-foreground transition-all ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Logo */}
       <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-acid-lime text-sm font-medium tracking-tight text-void">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md gradient-accent text-sm font-medium tracking-tight text-[#151515]">
           OC
         </div>
-        {!collapsed && <span className="text-sm font-medium tracking-tight text-paper">OpenCloud</span>}
+        {!collapsed && <span className="text-sm font-medium tracking-tight text-sidebar-foreground">OpenCloud</span>}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto hidden rounded p-1 text-fog hover:text-mist lg:block"
+          className="ml-auto hidden rounded p-1 text-muted-foreground hover:text-sidebar-foreground lg:block"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <ChevronLeft size={16} className={`transition-transform ${collapsed ? 'rotate-180' : ''}`} />
@@ -60,8 +60,8 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
             onClick={() => setMobileOpen(false)}
             className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
               isActive(href)
-                ? 'bg-acid-lime/10 text-acid-lime'
-                : 'text-fog hover:bg-slate hover:text-bone'
+                ? 'bg-brand/10 text-brand'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
             }`}
           >
             <Icon size={18} className="shrink-0" />
@@ -73,12 +73,12 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
       {/* User */}
       <div className="border-t border-sidebar-border p-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-smoke text-xs text-mist">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
             {email[0]?.toUpperCase()}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs text-fog">{email}</p>
+              <p className="truncate text-xs text-muted-foreground">{email}</p>
             </div>
           )}
           <SignOutButton />
@@ -92,7 +92,7 @@ export function Sidebar({ email, isAdmin }: SidebarProps) {
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed left-3 top-3 z-50 rounded-md bg-carbon p-2 text-mist ring-1 ring-graphite lg:hidden"
+        className="fixed left-3 top-3 z-50 rounded-md bg-popover p-2 text-popover-foreground ring-1 ring-border lg:hidden"
         aria-label="Toggle menu"
       >
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}

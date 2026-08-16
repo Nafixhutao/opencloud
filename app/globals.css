@@ -634,9 +634,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-inter);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains);
+  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -673,125 +673,220 @@
   --color-primary-active: var(--primary-active);
   --color-info: var(--info);
   --color-info-muted: var(--info-muted);
-  /* Buttons/inputs at 6px, cards at 12px — the full radius vocabulary. */
+  --color-warning: var(--warning);
+  /* beUI brand tokens: cyan accent, violet partner, neon, glass, hairlines */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-neon: var(--neon);
+  --color-accent-violet: var(--violet);
+  --color-border-strong: var(--border-strong);
+  --color-glass: var(--glass-bg);
+  --color-glass-strong: var(--glass-strong-bg);
+  --color-glass-thin: var(--glass-thin-bg);
+  --color-glass-border: var(--glass-border);
+  /* Geist radii: controls 6px, cards 8px. */
   --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  --radius-2xl: 0.75rem;
   --radius-3xl: 1rem;
   --radius-4xl: 1rem;
 }
 
-/* Linear design tokens — midnight precision instrument. Utility classes
-   (bg-void, text-mist, border-graphite, bg-acid-lime, …) are generated from
-   this palette. Acid lime is the single chromatic action color. */
-@theme {
-  --color-void: #08090a;
-  --color-carbon: #0f1011;
-  --color-obsidian: #161718;
-  --color-graphite: #23252a;
-  --color-smoke: #383b3f;
-  --color-ash: #62666d;
-  --color-fog: #8a8f98;
-  --color-mist: #d0d6e0;
-  --color-bone: #e5e5e6;
-  --color-paper: #ffffff;
-  --color-acid-lime: #e4f222;
-  --color-pulse-green: #27a644;
-  --color-coral-red: #eb5757;
-  --color-signal-teal: #02b8cc;
-  --color-iris-violet: #6366f1;
-  --color-lavender: #8b5cf6;
-
-  --shadow-subtle: rgb(35, 37, 42) 0px 0px 0px 1px inset;
-  --shadow-subtle-2: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
-  --shadow-xl: rgba(8, 9, 10, 0.6) 0px 4px 32px 0px;
-}
-
+/*
+ * beUI design system (beui.dev) — dark-first. Tokens are taken from beUI's
+ * own stylesheet: #151515 canvas, #1c1c1c cards, hairline white-alpha
+ * borders, monochrome primary buttons (primary = foreground), one cyan
+ * accent (#00dadb) reserved for brand moments, glass surfaces, and the
+ * signature cyan-to-violet gradient. Light theme is applied only when the
+ * system explicitly prefers it.
+ */
 :root {
   color-scheme: dark;
-  --font-inter: "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-jetbrains: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  /* Surface ladder: void canvas → carbon cards → obsidian elevated → slate tint. */
-  --background: #08090a;
-  --foreground: #d0d6e0;
-  --card: #0f1011;
-  --card-foreground: #d0d6e0;
-  --popover: #0f1011;
-  --popover-foreground: #d0d6e0;
-  --primary: #e4f222;
-  --primary-foreground: #08090a;
-  --primary-hover: #eef75a;
-  --primary-active: #cbda1c;
-  --secondary: #161718;
-  --secondary-foreground: #d0d6e0;
-  --muted: #161718;
-  --muted-foreground: #8a8f98;
-  --accent: #23252a;
-  --accent-foreground: #e5e5e6;
-  --destructive: #eb5757;
-  --success: #27a644;
-  --info: #02b8cc;
-  --info-muted: #0c2124;
-  --border: #23252a;
-  --input: #23252a;
-  --ring: #d0d6e0;
-  --chart-1: #e4f222;
-  --chart-2: #02b8cc;
-  --chart-3: #6366f1;
-  --chart-4: #eb5757;
-  --chart-5: #8b5cf6;
-  --radius: 0.375rem;
-  --sidebar: #0f1011;
-  --sidebar-foreground: #d0d6e0;
-  --sidebar-primary: #e4f222;
-  --sidebar-primary-foreground: #08090a;
-  --sidebar-accent: #161718;
-  --sidebar-accent-foreground: #e5e5e6;
-  --sidebar-border: #23252a;
-  --sidebar-ring: #d0d6e0;
+  --background: #151515;
+  --foreground: #f2f2f2;
+  --card: #1c1c1c;
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --primary-hover: #ffffff;
+  --primary-active: #d9d9d9;
+  --secondary: var(--card);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--card);
+  --muted-foreground: #868686;
+  --accent: var(--card);
+  --accent-foreground: var(--foreground);
+  --destructive: #ee343b;
+  --success: #00bd6c;
+  --warning: #f5a500;
+  --info: #00dadb;
+  --info-muted: #0c2d2e;
+  --border: #ffffff0d;
+  --border-strong: #ffffff1a;
+  --input: var(--border);
+  --ring: #00dadb;
+  --brand: #00dadb;
+  --brand-foreground: #151515;
+  --neon: #45e059;
+  --violet: #ad8cff;
+  --glass-bg: #1c1c1c8c;
+  --glass-border: #ffffff14;
+  --glass-strong-bg: #1c1c1c99;
+  --glass-thin-bg: #15151573;
+  --gradient-bg: linear-gradient(135deg, #141414 0%, #161c1d 100%);
+  --gradient-accent: linear-gradient(to right, #00dadb 0%, #ad8cff 100%);
+  --chart-1: #00dadb;
+  --chart-2: #ad8cff;
+  --chart-3: #45e059;
+  --chart-4: #f5a500;
+  --chart-5: #ee343b;
+  --radius: 0.5rem;
+  --sidebar: #161616;
+  --sidebar-foreground: #f2f2f2;
+  --sidebar-primary: #00dadb;
+  --sidebar-primary-foreground: #151515;
+  --sidebar-accent: #242424;
+  --sidebar-accent-foreground: #f2f2f2;
+  --sidebar-border: #ffffff0d;
+  --sidebar-ring: #00dadb;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not(.dark) {
+    color-scheme: light;
+    --background: #fcfcfc;
+    --foreground: #0b0b0b;
+    --card: #f5f5f5;
+    --card-foreground: var(--foreground);
+    --popover: var(--card);
+    --popover-foreground: var(--foreground);
+    --primary: var(--foreground);
+    --primary-foreground: var(--background);
+    --primary-hover: #303030;
+    --primary-active: #4a4a4a;
+    --secondary: var(--card);
+    --secondary-foreground: var(--foreground);
+    --muted: var(--card);
+    --muted-foreground: #636363;
+    --accent: var(--card);
+    --accent-foreground: var(--foreground);
+    --destructive: #ee343b;
+    --success: #00bd6c;
+    --warning: #f5a500;
+    --info: #00bebf;
+    --info-muted: #e6f7f7;
+    --border: #0b0b0b0f;
+    --border-strong: #0b0b0b1f;
+    --input: var(--border);
+    --ring: #00bebf;
+    --brand: #00bebf;
+    --brand-foreground: #0b0b0b;
+    --neon: #45e059;
+    --violet: #a37aff;
+    --glass-bg: #fcfcfc8c;
+    --glass-border: #0b0b0b14;
+    --glass-strong-bg: #ffffffb3;
+    --glass-thin-bg: #ffffff73;
+    --gradient-bg: linear-gradient(135deg, #fcfcfc 0%, #ecf3f5 100%);
+    --gradient-accent: linear-gradient(to right, #00bebf 0%, #a37aff 100%);
+    --chart-1: #00bebf;
+    --chart-2: #a37aff;
+    --chart-3: #45e059;
+    --chart-4: #f5a500;
+    --chart-5: #ee343b;
+    --sidebar: #f5f5f5;
+    --sidebar-foreground: #0b0b0b;
+    --sidebar-primary: #00bebf;
+    --sidebar-primary-foreground: #0b0b0b;
+    --sidebar-accent: #ebebeb;
+    --sidebar-accent-foreground: #0b0b0b;
+    --sidebar-border: #0b0b0b0f;
+    --sidebar-ring: #00bebf;
+  }
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #151515;
+  --foreground: #f2f2f2;
+  --card: #1c1c1c;
+  --muted-foreground: #868686;
+  --border: #ffffff0d;
+  --border-strong: #ffffff1a;
+  --ring: #00dadb;
+  --brand: #00dadb;
+  --brand-foreground: #151515;
+  --violet: #ad8cff;
+  --glass-bg: #1c1c1c8c;
+  --glass-border: #ffffff14;
+  --glass-strong-bg: #1c1c1c99;
+  --glass-thin-bg: #15151573;
+  --gradient-bg: linear-gradient(135deg, #141414 0%, #161c1d 100%);
+  --gradient-accent: linear-gradient(to right, #00dadb 0%, #ad8cff 100%);
+}
+
+@utility gradient-page {
+  background-image: var(--gradient-bg);
+}
+
+@utility gradient-accent {
+  background-image: var(--gradient-accent);
+}
+
+@utility text-gradient-accent {
+  background-image: var(--gradient-accent);
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glass {
+  background-color: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
 }
 
 @utility heading-auth {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: clamp(2.5rem, 6vw, 4rem);
-  font-weight: 510;
-  letter-spacing: -0.022em;
-  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
 @utility heading-page {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: 510;
-  letter-spacing: -0.022em;
-  line-height: 1.1667;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 @utility heading-section {
-  font-family: var(--font-inter);
+  font-family: var(--font-geist-sans);
   font-size: 1.5rem;
-  font-weight: 510;
-  letter-spacing: -0.012em;
+  font-weight: 600;
+  letter-spacing: -0.014em;
   line-height: 2rem;
 }
 
 @utility label-meta {
-  font-family: var(--font-jetbrains);
+  font-family: var(--font-geist-mono);
   font-size: 0.75rem;
   font-weight: 400;
-  letter-spacing: -0.013em;
   line-height: 1.4;
 }
 
 @utility text-link-signal {
-  color: #02b8cc;
+  color: var(--brand);
   text-underline-offset: 0.25rem;
 }
 
 @utility surface-raised {
-  box-shadow: rgb(35 37 42) 0 0 0 1px inset;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 }
 
 @layer base {
@@ -801,15 +896,12 @@
 
   html {
     @apply bg-background font-sans;
+    background-image: var(--gradient-bg);
+    background-attachment: fixed;
   }
 
   body {
     @apply min-h-svh bg-background text-foreground antialiased;
-    /* Inter Variable's alternate glyphs — Linear's typographic identity. */
-    font-feature-settings:
-      "cv01" 1,
-      "ss03" 1,
-      "zero" 1;
     text-rendering: optimizeLegibility;
   }
 
@@ -829,8 +921,8 @@
   }
 
   ::selection {
-    background: #23252a;
-    color: #ffffff;
+    background: var(--brand);
+    color: var(--brand-foreground);
   }
 
   :focus-visible {
