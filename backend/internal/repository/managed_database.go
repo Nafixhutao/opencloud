@@ -143,6 +143,11 @@ func (r *ManagedDatabaseRepo) GetByAccount(
 			"d.created_at",
 			"d.updated_at",
 			"d.deleted_at",
+			// The console verifies the decrypted credential against the row's
+			// physical identifiers; omitting them leaves both empty and every
+			// console query fails the payload check.
+			"d.physical_database_name",
+			"d.physical_username",
 		).
 		ColumnExpr(`EXISTS (
 			SELECT 1 FROM database_credentials AS dc
