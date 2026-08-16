@@ -6,6 +6,7 @@ import { GitBranchIcon, FolderIcon, DatabaseIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { EnvironmentVariablesManager } from '@/components/projects/environment-variables-manager';
 import { apiJSON } from '@/lib/api';
 import type { Project, ProjectServicesEnvelope } from '@/lib/projects';
 
@@ -95,6 +96,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </CardContent>
       ) : null}
     </Card>
+
+    <EnvironmentVariablesManager projectId={project.id} services={services} />
 
     <ProjectLogsViewer projectId={project.id} services={services} />
   </main>;
