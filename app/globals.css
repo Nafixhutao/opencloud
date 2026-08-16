@@ -672,18 +672,10 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-info: var(--info);
-  --color-info-muted: var(--info-muted);
   --color-warning: var(--warning);
-  /* beUI brand tokens: cyan accent, violet partner, neon, glass, hairlines */
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
-  --color-neon: var(--neon);
-  --color-accent-violet: var(--violet);
   --color-border-strong: var(--border-strong);
-  --color-glass: var(--glass-bg);
-  --color-glass-strong: var(--glass-strong-bg);
-  --color-glass-thin: var(--glass-thin-bg);
-  --color-glass-border: var(--glass-border);
   /* Geist radii: controls 6px, cards 8px. */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -695,12 +687,13 @@
 }
 
 /*
- * beUI design system (beui.dev) — dark-first. Tokens are taken from beUI's
- * own stylesheet: #151515 canvas, #1c1c1c cards, hairline white-alpha
- * borders, monochrome primary buttons (primary = foreground), one cyan
- * accent (#00dadb) reserved for brand moments, glass surfaces, and the
- * signature cyan-to-violet gradient. Light theme is applied only when the
- * system explicitly prefers it.
+ * beUI foundation, Vercel monochrome palette — dark-first. Surfaces keep
+ * beUI's values (#151515 canvas, #1c1c1c cards, hairline white-alpha
+ * borders) but every brand accent is grayscale, in the spirit of vercel.com:
+ * primary actions, focus, selection, links, and the sidebar mark are all
+ * foreground-on-background. Color survives only as status meaning: red for
+ * errors, green for success, amber for warnings. Light theme is applied
+ * only when the system explicitly prefers it.
  */
 :root {
   color-scheme: dark;
@@ -723,36 +716,29 @@
   --destructive: #ee343b;
   --success: #00bd6c;
   --warning: #f5a500;
-  --info: #00dadb;
-  --info-muted: #0c2d2e;
+  --info: #a3a3a3;
   --border: #ffffff0d;
   --border-strong: #ffffff1a;
   --input: var(--border);
-  --ring: #00dadb;
-  --brand: #00dadb;
+  --ring: #f2f2f2;
+  --brand: #f2f2f2;
   --brand-foreground: #151515;
-  --neon: #45e059;
-  --violet: #ad8cff;
-  --glass-bg: #1c1c1c8c;
-  --glass-border: #ffffff14;
-  --glass-strong-bg: #1c1c1c99;
-  --glass-thin-bg: #15151573;
-  --gradient-bg: linear-gradient(135deg, #141414 0%, #161c1d 100%);
-  --gradient-accent: linear-gradient(to right, #00dadb 0%, #ad8cff 100%);
-  --chart-1: #00dadb;
-  --chart-2: #ad8cff;
-  --chart-3: #45e059;
-  --chart-4: #f5a500;
-  --chart-5: #ee343b;
+  --gradient-bg: linear-gradient(135deg, #141414 0%, #181818 100%);
+  --gradient-accent: linear-gradient(to right, #f2f2f2 0%, #a3a3a3 100%);
+  --chart-1: #f2f2f2;
+  --chart-2: #c9c9c9;
+  --chart-3: #a3a3a3;
+  --chart-4: #6b6b6b;
+  --chart-5: #474747;
   --radius: 0.5rem;
   --sidebar: #161616;
   --sidebar-foreground: #f2f2f2;
-  --sidebar-primary: #00dadb;
+  --sidebar-primary: #f2f2f2;
   --sidebar-primary-foreground: #151515;
   --sidebar-accent: #242424;
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #ffffff0d;
-  --sidebar-ring: #00dadb;
+  --sidebar-ring: #f2f2f2;
 }
 
 @media (prefers-color-scheme: light) {
@@ -777,35 +763,28 @@
     --destructive: #ee343b;
     --success: #00bd6c;
     --warning: #f5a500;
-    --info: #00bebf;
-    --info-muted: #e6f7f7;
+    --info: #636363;
     --border: #0b0b0b0f;
     --border-strong: #0b0b0b1f;
     --input: var(--border);
-    --ring: #00bebf;
-    --brand: #00bebf;
-    --brand-foreground: #0b0b0b;
-    --neon: #45e059;
-    --violet: #a37aff;
-    --glass-bg: #fcfcfc8c;
-    --glass-border: #0b0b0b14;
-    --glass-strong-bg: #ffffffb3;
-    --glass-thin-bg: #ffffff73;
-    --gradient-bg: linear-gradient(135deg, #fcfcfc 0%, #ecf3f5 100%);
-    --gradient-accent: linear-gradient(to right, #00bebf 0%, #a37aff 100%);
-    --chart-1: #00bebf;
-    --chart-2: #a37aff;
-    --chart-3: #45e059;
-    --chart-4: #f5a500;
-    --chart-5: #ee343b;
+    --ring: #0b0b0b;
+    --brand: #0b0b0b;
+    --brand-foreground: #fcfcfc;
+    --gradient-bg: linear-gradient(135deg, #fcfcfc 0%, #f7f7f7 100%);
+    --gradient-accent: linear-gradient(to right, #0b0b0b 0%, #636363 100%);
+    --chart-1: #0b0b0b;
+    --chart-2: #3a3a3a;
+    --chart-3: #636363;
+    --chart-4: #8f8f8f;
+    --chart-5: #b5b5b5;
     --sidebar: #f5f5f5;
     --sidebar-foreground: #0b0b0b;
-    --sidebar-primary: #00bebf;
-    --sidebar-primary-foreground: #0b0b0b;
+    --sidebar-primary: #0b0b0b;
+    --sidebar-primary-foreground: #fcfcfc;
     --sidebar-accent: #ebebeb;
     --sidebar-accent-foreground: #0b0b0b;
     --sidebar-border: #0b0b0b0f;
-    --sidebar-ring: #00bebf;
+    --sidebar-ring: #0b0b0b;
   }
 }
 
@@ -817,16 +796,11 @@
   --muted-foreground: #868686;
   --border: #ffffff0d;
   --border-strong: #ffffff1a;
-  --ring: #00dadb;
-  --brand: #00dadb;
+  --ring: #f2f2f2;
+  --brand: #f2f2f2;
   --brand-foreground: #151515;
-  --violet: #ad8cff;
-  --glass-bg: #1c1c1c8c;
-  --glass-border: #ffffff14;
-  --glass-strong-bg: #1c1c1c99;
-  --glass-thin-bg: #15151573;
-  --gradient-bg: linear-gradient(135deg, #141414 0%, #161c1d 100%);
-  --gradient-accent: linear-gradient(to right, #00dadb 0%, #ad8cff 100%);
+  --gradient-bg: linear-gradient(135deg, #141414 0%, #181818 100%);
+  --gradient-accent: linear-gradient(to right, #f2f2f2 0%, #a3a3a3 100%);
 }
 
 @utility gradient-page {
@@ -835,18 +809,6 @@
 
 @utility gradient-accent {
   background-image: var(--gradient-accent);
-}
-
-@utility text-gradient-accent {
-  background-image: var(--gradient-accent);
-  background-clip: text;
-  color: transparent;
-}
-
-@utility glass {
-  background-color: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px);
 }
 
 @utility heading-auth {
@@ -881,7 +843,7 @@
 }
 
 @utility text-link-signal {
-  color: var(--brand);
+  color: var(--foreground);
   text-underline-offset: 0.25rem;
 }
 

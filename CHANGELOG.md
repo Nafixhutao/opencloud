@@ -14,6 +14,31 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Phase 4 env/secrets UI (backend previously shipped):** authenticated BFF
+  routes for list/create/update/delete/reveal/audit plus a per-service
+  Environment Variables manager (service and environment scoping, zod key/value
+  validation mirroring the Go service, audited secret reveal with copy/hide,
+  and type-the-key delete confirmation). An earlier standalone UI was removed
+  as unused because it called BFF routes that never existed; this rebuild is
+  wired end to end and covered by interaction tests.
+- **Phase 4 env/secrets backend (not production-deployed, previously
+  undocumented):** tenant/service/environment-scoped variables and secrets with
+  AES-256-GCM encryption, reserved-prefix and key-pattern validation, audited
+  reveal, rotation, and boundary redaction, exposed through rate-limited Go
+  APIs.
+- **Phase 4 database console foundation (not production-deployed, previously
+  undocumented):** short-lived database console sessions with revoke, an
+  audited SQL Console execute path with per-database scoped credentials, a
+  phpMyAdmin redirect for MariaDB, and a dashboard database manager/console UI.
+- **Phase 4 object storage foundation (not production-deployed, previously
+  undocumented):** tenant/project-scoped bucket and object models with quotas,
+  an S3-compatible provider plus a fake, presigned GET/PUT URLs, asynchronous
+  storage jobs with cleanup, usage metering hooks, and a bucket manager/object
+  browser UI.
+- **Phase 4 source/preview foundations (not production-deployed, previously
+  undocumented):** Git source fields on services with a GitHub webhook route,
+  preview-deployment records wired into build job handlers, and per-service
+  persistent storage quotas.
 - **Phase 4 customer logs foundation (not production-deployed):** tenant-safe
   build/runtime/request/platform log contracts; a bounded Loki HTTP adapter;
   ownership checks and API-boundary redaction; historical and SSE Go endpoints;

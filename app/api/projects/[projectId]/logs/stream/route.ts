@@ -39,6 +39,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (error instanceof ApiError) {
       return apiErrorToResponse(error);
     }
+    console.error('[logs/stream] proxy failed', error);
     return NextResponse.json(
       { error: { code: 'INTERNAL', message: 'Log stream is unavailable.' } },
       { status: 502 },

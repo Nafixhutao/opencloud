@@ -47,6 +47,9 @@ verify*.png
 .env.local
 .env.*.local
 
+# VPS-local Compose overrides (see the file header: not committed upstream)
+docker-compose.override.yml
+
 # Vercel
 .vercel
 # Local AI handoff notes are coordination artifacts, never release source.
