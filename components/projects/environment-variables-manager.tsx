@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, VariableIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -63,6 +63,13 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
   const [deleteConfirmKey, setDeleteConfirmKey] = useState('');
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const hasServices = services.length > 0 && serviceId !== '';
 
@@ -128,7 +135,8 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
   const handleCopy = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
-    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
   };
 
   const list = variables ?? [];
