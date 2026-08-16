@@ -6,6 +6,8 @@ yarn-debug.log*
 pnpm-debug.log*
 !backend/internal/logs/
 !backend/internal/logs/**
+!app/api/projects/\[projectId\]/logs/
+!app/api/projects/\[projectId\]/logs/**
 
 # Dependencies
 node_modules/
