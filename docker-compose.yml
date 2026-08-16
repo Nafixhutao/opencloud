@@ -28,6 +28,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:8-alpine
@@ -38,6 +39,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -199,6 +201,7 @@ services:
         condition: service_started
       dashboard:
         condition: service_started
+    restart: unless-stopped
     # No container healthcheck: the distroless image has no shell/curl. Liveness
     # and readiness are exposed at /healthz and /readyz for orchestrators and
     # load balancers to probe directly (docs/INFRASTRUCTURE.md §7).
@@ -213,7 +216,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       PROVISIONER_BACKEND: ${PROVISIONER_BACKEND:-fake}
       DOCKER_SOCKET: ${DOCKER_SOCKET:-/var/run/docker.sock}
-      CADDY_API_URL: ${CADDY_API_URL:-http://127.0.0.1:2019}
+      CADDY_API_URL: ${CADDY_API_URL:-http://caddy:2019}
       CADDY_SERVER_ID: ${CADDY_SERVER_ID:-srv0}
       SITE_DEFAULT_IMAGE: ${SITE_DEFAULT_IMAGE:-opencloud/site-static:phase2}
       SITE_DOMAIN_SUFFIX: ${SITE_DOMAIN_SUFFIX:-}
@@ -241,11 +244,37 @@ services:
       STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID:-rustfsadmin}
       STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY:-rustfsadmin}
       STORAGE_S3_USE_PATH_STYLE: ${STORAGE_S3_USE_PATH_STYLE:-true}
+    volumes:
+      # Required when PROVISIONER_BACKEND=docker: the worker provisions site
+      # containers directly on the host daemon. Keep it detached from the
+      # public network; the fake backend never touches it.
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+
+  # Ingress for site traffic and on-demand TLS. Routes are programmed by the
+  # worker through the admin API; certificate issuance asks the control plane
+  # first (deploy/caddy/Caddyfile). Admin :2019 stays on the compose network.
+  caddy:
+    image: caddy:2-alpine
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    environment:
+      CADDY_PERMISSION_ENDPOINT: ${CADDY_PERMISSION_ENDPOINT:-http://api:9090/caddy/permission}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
 
   # Opt-in encrypted control-plane backups. Start explicitly with:
   # docker compose --profile backup up -d control-plane-backup
@@ -305,6 +334,7 @@ services:
     depends_on:
       auth-migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   pgdata:
@@ -312,3 +342,5 @@ volumes:
   loki_data:
   alloy_data:
   rustfs_data:
+  caddy_data:
+  caddy_config:

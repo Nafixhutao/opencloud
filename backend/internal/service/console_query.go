@@ -110,7 +110,7 @@ func (s *ConsoleQueryService) ExecuteQuery(ctx context.Context, opts ExecuteOpti
 	_ = s.sessionRepo.UpdateLastActivity(ctx, opts.AccountID, opts.SessionID)
 
 	// 2. Safety checks (UX layer; the read-only transaction is the boundary).
-	if err := s.validateQuerySafety(opts.Query); err != nil {
+	if err := s.validateQuerySafety(opts.Query, opts.DisallowMultiStmt); err != nil {
 		return nil, err
 	}
 	statementType := detectStatementType(opts.Query)
@@ -222,24 +222,33 @@ func (s *ConsoleQueryService) consoleCredentials(ctx context.Context, accountID,
 	return &credentials, nil
 }
 
-func (s *ConsoleQueryService) validateQuerySafety(query string) error {
+func (s *ConsoleQueryService) validateQuerySafety(query string, disallowMultiStmt bool) error {
 	if len(query) > consoleQueryMaxLength {
 		return apperr.Validation("query exceeds the 10,000 character limit")
 	}
-	if containsMultipleStatements(query) {
+	semicolonCount, hasSeparator := analyzeSemicolons(query)
+	if hasSeparator {
 		return apperr.Validation("multiple SQL statements are not allowed")
 	}
-	// Check for dangerous patterns even in single statements
-	safeQuery := strings.ToUpper(strings.TrimSpace(query))
+	if disallowMultiStmt && semicolonCount > 0 {
+		return apperr.Validation("statement separators are not allowed")
+	}
+	// Check for dangerous patterns even in single statements. String literals
+	// are stripped first so values like 'a;b' or 'CREATE thing' do not trip
+	// the keyword scan.
+	safeQuery := strings.ToUpper(strings.TrimSpace(stripStringLiterals(query)))
 	dangerousPatterns := []string{
 		"--",                 // SQL comment can bypass filters
-		";",                  // Multiple statements
 		"UNION",              // UNION attacks
-		"information_schema", // PostgreSQL system tables
-		"pg_catalog",         // PostgreSQL system tables
+		"INFORMATION_SCHEMA", // PostgreSQL/MySQL system tables
+		"PG_CATALOG",         // PostgreSQL system tables
 		"DROP ",              // DDL operations
 		"DELETE ",            // DELETE outside WHERE scope
 		"INSERT INTO ",
+		"UPDATE ",
+		"REPLACE ",
+		"MERGE ",
+		"CALL ",
 		"TRUNCATE",
 		"ALTER ",
 		"GRANT ",
@@ -294,24 +303,94 @@ func detectStatementType(query string) string {
 	return model.StatementUnknown
 }
 
+// containsMultipleStatements reports whether the query separates two
+// statements. A separator is a semicolon outside a string literal that is
+// followed by more statement text; a single trailing semicolon is fine.
 func containsMultipleStatements(query string) bool {
-	semicolonCount := 0
+	semicolonCount, hasSeparator := analyzeSemicolons(query)
+	return hasSeparator || semicolonCount > 1
+}
+
+// analyzeSemicolons walks the query honoring single-quoted literals (with ”
+// doubling and backslash escapes) and reports how many semicolons appear
+// outside literals and whether one acts as a statement separator.
+func analyzeSemicolons(query string) (count int, hasSeparator bool) {
 	inString := false
-	for i := 0; i < len(query); i++ {
-		if query[i] == '\'' {
-			inString = !inString
-		} else if query[i] == ';' && !inString {
-			semicolonCount++
+	i := 0
+	for i < len(query) {
+		c := query[i]
+		if inString {
+			if c == '\\' && i+1 < len(query) {
+				i += 2
+				continue
+			}
+			if c == '\'' {
+				if i+1 < len(query) && query[i+1] == '\'' {
+					i += 2
+					continue
+				}
+				inString = false
+			}
+			i++
+			continue
 		}
+		if c == '\'' {
+			inString = true
+			i++
+			continue
+		}
+		if c == ';' {
+			count++
+			if strings.TrimSpace(query[i+1:]) != "" {
+				hasSeparator = true
+			}
+		}
+		i++
 	}
-	return semicolonCount > 1
+	return count, hasSeparator
+}
+
+// stripStringLiterals removes single-quoted literal bodies (honoring ”
+// doubling and backslash escapes) so keyword scanning only sees SQL syntax.
+func stripStringLiterals(query string) string {
+	var b strings.Builder
+	b.Grow(len(query))
+	inString := false
+	i := 0
+	for i < len(query) {
+		c := query[i]
+		if inString {
+			if c == '\\' && i+1 < len(query) {
+				i += 2
+				continue
+			}
+			if c == '\'' {
+				if i+1 < len(query) && query[i+1] == '\'' {
+					i += 2
+					continue
+				}
+				inString = false
+			}
+			i++
+			continue
+		}
+		if c == '\'' {
+			inString = true
+			i++
+			continue
+		}
+		b.WriteByte(c)
+		i++
+	}
+	return b.String()
 }
 
 // safeConsoleError redacts the raw database error for audit storage.
 func safeConsoleError(err error) string {
 	message := err.Error()
-	if len(message) > 200 {
-		message = message[:200] + "..."
+	runes := []rune(message)
+	if len(runes) > 200 {
+		return string(runes[:200]) + "..."
 	}
 	return message
 }
@@ -366,17 +445,26 @@ func executeReadOnlyQuery(
 		return result, tx.Commit()
 	}
 
-	// MariaDB/MySQL: read-only session + bounded execution.
-	tx, err = db.BeginTx(runCtx, nil)
+	// MariaDB/MySQL: read-only session + bounded execution. The session
+	// characteristic must be set BEFORE the transaction opens — `SET SESSION
+	// TRANSACTION READ ONLY` inside an open transaction only affects
+	// subsequent transactions. A dedicated connection pins the SET and the
+	// BEGIN to the same server session.
+	conn, err := db.Conn(runCtx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(runCtx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
+		return nil, safeConsoleAppError(err)
+	}
+	tx, err = conn.BeginTx(runCtx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(runCtx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
-		return nil, err
-	}
 	if _, err := tx.ExecContext(runCtx, "SET SESSION MAX_EXECUTION_TIME=30000"); err != nil {
-		return nil, err
+		return nil, safeConsoleAppError(err)
 	}
 	rows, err := tx.QueryContext(runCtx, query)
 	if err != nil {
@@ -452,10 +540,6 @@ func collectRows(rows *sql.Rows, maxRows int) (*QueryResult, error) {
 	}
 	affected := int64(count)
 	result.RowsAffected = &affected
-	// Truncate to strict max even if loop exits early
-	if count > maxRows {
-		result.Rows = result.Rows[:maxRows]
-	}
 	return result, nil
 }
 

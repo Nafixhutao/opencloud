@@ -42,12 +42,53 @@ func TestContainsMultipleStatements(t *testing.T) {
 		{name: "multiple", query: "SELECT 1; SELECT 2;", want: true},
 		{name: "semicolon in string", query: "SELECT 'a;b'", want: false},
 		{name: "no semicolon", query: "SELECT 1", want: false},
+		{name: "separator without trailing semicolon", query: "SELECT 1; SELECT 2", want: true},
+		{name: "escaped quote then separator", query: `SELECT 'it''s; fine'; DROP`, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, containsMultipleStatements(tt.query))
 		})
 	}
+}
+
+func TestValidateQuerySafety(t *testing.T) {
+	s := &ConsoleQueryService{}
+
+	t.Run("accepts plain select", func(t *testing.T) {
+		require.NoError(t, s.validateQuerySafety("SELECT * FROM orders WHERE id = 1", false))
+	})
+	t.Run("accepts semicolon inside string literal", func(t *testing.T) {
+		require.NoError(t, s.validateQuerySafety("SELECT * FROM notes WHERE body = 'a;b'", false))
+	})
+	t.Run("accepts keyword-looking value inside string literal", func(t *testing.T) {
+		require.NoError(t, s.validateQuerySafety("SELECT * FROM notes WHERE body = 'CREATE TABLE demo'", false))
+	})
+	t.Run("rejects separator mid-query", func(t *testing.T) {
+		err := s.validateQuerySafety("SELECT 1; SELECT 2", false)
+		require.Error(t, err)
+	})
+	t.Run("rejects update", func(t *testing.T) {
+		require.Error(t, s.validateQuerySafety("UPDATE orders SET paid = true", false))
+	})
+	t.Run("rejects replace and call", func(t *testing.T) {
+		require.Error(t, s.validateQuerySafety("REPLACE INTO t VALUES (1)", false))
+		require.Error(t, s.validateQuerySafety("CALL do_stuff()", false))
+	})
+	t.Run("trailing semicolon allowed by default", func(t *testing.T) {
+		require.NoError(t, s.validateQuerySafety("SELECT 1;", false))
+	})
+	t.Run("trailing semicolon rejected in strict mode", func(t *testing.T) {
+		require.Error(t, s.validateQuerySafety("SELECT 1;", true))
+	})
+	t.Run("keyword outside literal still rejected", func(t *testing.T) {
+		require.Error(t, s.validateQuerySafety("SELECT * FROM information_schema.tables", false))
+	})
+}
+
+func TestStripStringLiterals(t *testing.T) {
+	require.Equal(t, "SELECT  FROM t WHERE x = ", stripStringLiterals(`SELECT 'a;b' FROM t WHERE x = 'DROP ''TABLE'`))
+	require.Equal(t, "SELECT  1", stripStringLiterals(`SELECT 'it\'s' 1`))
 }
 
 func TestCalculateExpirationBounds(t *testing.T) {

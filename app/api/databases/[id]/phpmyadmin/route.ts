@@ -4,7 +4,7 @@ import { getSession } from '@/lib/session';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(_request: Request, _context: RouteContext) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json(
@@ -12,7 +12,6 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 401 },
     );
   }
-  await context.params;
 
   const phpMyAdminURL = process.env.PHPMYADMIN_URL ?? 'http://localhost:8081';
   return NextResponse.redirect(phpMyAdminURL);
