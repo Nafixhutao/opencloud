@@ -136,7 +136,7 @@ func seekableBody(body io.Reader, maxBytes int64) (io.ReadSeeker, func(), error)
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 	}
-	var src io.Reader = body
+	var src = body
 	if maxBytes > 0 {
 		// Read at most maxBytes+1 so an over-cap body is detectable.
 		src = io.LimitReader(body, maxBytes+1)
