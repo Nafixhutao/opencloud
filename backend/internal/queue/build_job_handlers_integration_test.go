@@ -30,7 +30,7 @@ func TestEnqueueDestroySchedulesOnlyItsOwnJob(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "destroy-scheduling-test")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	handlers := queue.NewBuildJobHandlers(
 		zap.NewNop(), db,

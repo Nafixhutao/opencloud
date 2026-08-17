@@ -33,7 +33,7 @@ func TestS3StorageQueueLifecycle(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "s3-lifecycle-test")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),

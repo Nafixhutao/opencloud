@@ -29,7 +29,7 @@ func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
 
 	account, err := repository.NewAccountRepo(db).CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	payload := model.ProvisionStorageBucketPayload{BucketID: uuid.New()}
 	job, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobProvisionStorageBucket, payload, 5)
@@ -78,7 +78,7 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -114,7 +114,7 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	// First claim+handle: fails
-	claimed := claimSpecificJob(t, db, ctx, enqueued.ID)
+	claimed := claimSpecificJob(ctx, t, db, enqueued.ID)
 	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.Error(t, err)
 
@@ -124,7 +124,7 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second claim+handle: fails again
-	claimed = claimSpecificJob(t, db, ctx, enqueued.ID)
+	claimed = claimSpecificJob(ctx, t, db, enqueued.ID)
 	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.Error(t, err)
 
@@ -161,7 +161,7 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -205,7 +205,7 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 
 	// Handle must receive a claimed job exactly as the production runner
 	// provides it; claim this specific job so foreign residue cannot steal it.
-	job := claimSpecificJob(t, db, ctx, enqueued.ID)
+	job := claimSpecificJob(ctx, t, db, enqueued.ID)
 	require.Equal(t, model.JobDeleteStorageBucket, job.Kind)
 
 	err = handlers.Handle(ctx, job, "worker-1")
@@ -238,7 +238,7 @@ func TestIdempotentPhysicalNameStability(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer cleanupAccount(t, db, ctx, account)
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
