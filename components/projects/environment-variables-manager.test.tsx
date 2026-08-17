@@ -153,4 +153,60 @@ describe('EnvironmentVariablesManager', () => {
     );
     await screen.findByText('No variables in production');
   });
+
+  it('loads the audit trail only when activity is expanded', async () => {
+    const auditEntry = {
+      id: '44444444-4444-4444-4444-444444444444',
+      action: 'revealed' as const,
+      key: 'DATABASE_URL',
+      is_secret: true,
+      environment: 'production',
+      actor_id: 'actor-1',
+      created_at: '2026-08-16T00:00:00Z',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/environment/audit')) {
+        return jsonResponse({ data: [auditEntry] });
+      }
+      return jsonResponse({ data: [secretVariable] });
+    });
+    renderManager();
+    expect(await screen.findByText('DATABASE_URL')).toBeInTheDocument();
+    // Collapsed by default: the audit endpoint is untouched.
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/environment/audit'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+
+    expect(await screen.findByText('revealed')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/environment/audit?limit=20'))).toBe(true);
+    // Values never appear in the trail — only the key and action.
+    expect(screen.queryByText('postgres://hunter2')).not.toBeInTheDocument();
+  });
+
+  it('refreshes an open activity panel after a secret reveal', async () => {
+    let auditCalls = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.includes('/environment/audit')) {
+        auditCalls += 1;
+        return jsonResponse({ data: [] });
+      }
+      if (method === 'POST' && url.endsWith('/reveal')) {
+        return jsonResponse({ data: { value: 'postgres://hunter2' } });
+      }
+      return jsonResponse({ data: [secretVariable] });
+    });
+    renderManager();
+    expect(await screen.findByText('DATABASE_URL')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    await screen.findByText('No recorded variable activity for this service yet.');
+    expect(auditCalls).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal value of DATABASE_URL' }));
+    expect(await screen.findByText('postgres://hunter2')).toBeInTheDocument();
+
+    await waitFor(() => expect(auditCalls).toBe(2));
+  });
 });
