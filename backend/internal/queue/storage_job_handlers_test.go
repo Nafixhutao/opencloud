@@ -3,8 +3,8 @@ package queue_test
 import (
 	"context"
 	"encoding/json"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -65,14 +65,12 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AccountID:   &account.ID,
 			Kind:        model.JobProvisionStorageBucket,
 			MaxAttempts: 5,
-			Status:    model.JobQueued,
-			Payload:   provisionPayload,
-			RunAt:     time.Now().UTC(),
+			Status:      model.JobQueued,
+			Payload:     provisionPayload,
+			RunAt:       time.Now().UTC(),
 		}
 		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
 		require.NoError(t, err)
-
-
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
@@ -111,14 +109,12 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AccountID:   &account.ID,
 			Kind:        model.JobProvisionStorageBucket,
 			MaxAttempts: 5,
-			Status:    model.JobRunning,
-			Payload:   provisionPayload,
-			RunAt:     time.Now().UTC(),
+			Status:      model.JobRunning,
+			Payload:     provisionPayload,
+			RunAt:       time.Now().UTC(),
 		}
 		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
 		require.NoError(t, err)
-
-
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
@@ -187,14 +183,12 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AccountID:   &account.ID,
 			Kind:        model.JobProvisionStorageBucket,
 			MaxAttempts: 5,
-			Status:    model.JobQueued,
-			Payload:   provisionPayload,
-			RunAt:     time.Now().UTC().Add(time.Minute),
+			Status:      model.JobQueued,
+			Payload:     provisionPayload,
+			RunAt:       time.Now().UTC().Add(time.Minute),
 		}
 		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
 		require.NoError(t, err)
-
-
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
