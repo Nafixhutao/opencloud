@@ -21,7 +21,6 @@ import (
 // TestStorageJobClaimIncrementsAttemptsExactlyOnce verifies that Claim atomically
 // increments attempts count exactly once when leasing a queued job.
 func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -30,7 +29,7 @@ func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
 
 	account, err := repository.NewAccountRepo(db).CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(ctx, t, db, account)
 
 	payload := model.ProvisionStorageBucketPayload{BucketID: uuid.New()}
 	job, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobProvisionStorageBucket, payload, 5)
@@ -42,7 +41,7 @@ func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
 	err = db.NewSelect().Model((*model.Job)(nil)).Where("id = ?", job.ID).Scan(ctx, &claims)
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
-	require.Equal(t, int64(0), claims[0].Attempts)
+	require.Equal(t, 0, claims[0].Attempts)
 
 	// Claim the job
 	claimed, err := jobsRepo.Claim(ctx, "worker-1")
@@ -50,7 +49,7 @@ func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
 	require.NotNil(t, claimed)
 	require.Equal(t, job.ID, claimed.ID)
 	require.Equal(t, model.JobRunning, claimed.Status)
-	require.Equal(t, int64(1), claimed.Attempts)
+	require.Equal(t, 1, claimed.Attempts)
 
 	// Claim again with different worker - should get no rows since job is already claimed
 	claimed2, err := jobsRepo.Claim(ctx, "worker-2")
@@ -61,13 +60,12 @@ func TestStorageJobClaimIncrementsAttemptsExactlyOnce(t *testing.T) {
 	err = db.NewSelect().Model((*model.Job)(nil)).Where("id = ?", job.ID).Where("status = ?", model.JobRunning).Column("attempts").Scan(ctx, &claims)
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
-	require.Equal(t, int64(1), claims[0].Attempts)
+	require.Equal(t, 1, claims[0].Attempts)
 }
 
 // TestStorageJobExhaustedRetriesTerminalFailure verifies that max retry exhaustion
 // results in terminal failure state for both job and resource.
 func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -80,7 +78,7 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -112,30 +110,34 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, alwaysFailProvider)
 
 	payload := model.ProvisionStorageBucketPayload{BucketID: bucketID}
-	_, err = jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobProvisionStorageBucket, payload, 2)
+	enqueued, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobProvisionStorageBucket, payload, 2)
 	require.NoError(t, err)
 
 	// First claim+handle: fails
-	claimed, err := jobsRepo.Claim(ctx, "worker-1")
-	require.NoError(t, err)
+	claimed := claimSpecificJob(ctx, t, db, enqueued.ID)
 	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.Error(t, err)
 
 	// Trigger Retry manually (simulating Runner behavior on transient error)
-	runAt := time.Now().UTC().Add(1 * time.Second)
+	runAt := time.Now().UTC().Add(-1 * time.Second) // immediately reclaimable; the runner backoff is simulated separately
 	err = jobsRepo.Retry(ctx, claimed.ID, "worker-1", "provision failure", runAt)
 	require.NoError(t, err)
 
 	// Second claim+handle: fails again
-	claimed, err = jobsRepo.Claim(ctx, "worker-1")
-	require.NoError(t, err)
+	claimed = claimSpecificJob(ctx, t, db, enqueued.ID)
 	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.Error(t, err)
+
+	// Simulate the runner's exhausted-retry branch: Attempts (2) reached
+	// MaxAttempts (2), so the processor terminates the job and the bucket.
+	processor := queue.NewProcessor(db, nil, nil, nil, jobsRepo, auditRepo, nil, nil, nil, nil)
+	require.NoError(t, processor.Exhaust(ctx, claimed, "worker-1", "provision failure"))
 
 	// After max attempts exhausted, bucket should be FAILED
 	result, err := bucketRepo.GetByAccount(ctx, account.ID, bucketID)
 	require.NoError(t, err)
 	require.Equal(t, model.BucketFailed, result.Status)
+	require.NotNil(t, result.LastError)
 
 	// Verify job status is also FAILED
 	var jobStatus string
@@ -147,7 +149,6 @@ func TestStorageJobExhaustedRetriesTerminalFailure(t *testing.T) {
 // TestBucketNotEmptyNilCount verifies that BucketNotEmptyError{Count:nil} still
 // blocks deletion and returns safe last_error message.
 func TestBucketNotEmptyNilCount(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -160,7 +161,7 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -199,15 +200,13 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, fakeProvider)
 
 	payload := model.DeleteStorageBucketPayload{BucketID: bucketID}
-	_, err = jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobDeleteStorageBucket, payload, 5)
+	enqueued, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobDeleteStorageBucket, payload, 5)
 	require.NoError(t, err)
 
-	// Get the job we enqueued
-	allJobs := make([]*model.Job, 0)
-	err = db.NewSelect().Model((*model.Job)(nil)).Where("account_id = ? AND kind = ?", account.ID, model.JobDeleteStorageBucket).Order("id ASC").Limit(1).Scan(ctx, &allJobs)
-	require.NoError(t, err)
-	require.Len(t, allJobs, 1)
-	job := allJobs[0]
+	// Handle must receive a claimed job exactly as the production runner
+	// provides it; claim this specific job so foreign residue cannot steal it.
+	job := claimSpecificJob(ctx, t, db, enqueued.ID)
+	require.Equal(t, model.JobDeleteStorageBucket, job.Kind)
 
 	err = handlers.Handle(ctx, job, "worker-1")
 	require.NoError(t, err)
@@ -229,7 +228,6 @@ func TestBucketNotEmptyNilCount(t *testing.T) {
 // TestIdempotentPhysicalNameStability verifies that same project-scoped idempotency key
 // returns existing bucket with unchanged physical_name on replay.
 func TestIdempotentPhysicalNameStability(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -240,7 +238,7 @@ func TestIdempotentPhysicalNameStability(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -280,7 +278,8 @@ func TestIdempotentPhysicalNameStability(t *testing.T) {
 	}
 	err = bucketRepo.Create(ctx, secondBucket)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "UNIQUE constraint")
+	// PostgreSQL: "duplicate key value violates unique constraint"; MySQL: "Duplicate entry". SQLSTATE 23505 holds on both.
+	require.Contains(t, err.Error(), "23505")
 
 	// Verify physical_name remained stable
 	retrieved, err := bucketRepo.GetByIDempotencyKey(ctx, account.ID, project.ID, idempotencyKey)

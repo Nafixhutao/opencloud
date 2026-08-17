@@ -377,8 +377,24 @@ func (h *StorageJobHandlers) handleReconcile(ctx context.Context, job *model.Job
 		}
 
 		if b.Status == model.BucketCreating && !hasActiveJob {
-			// Transition creating -> failed if no running provision job
-			if err := h.transitionCreateToFailed(ctx, b); err != nil {
+			// The provider may already hold the bucket — e.g. the provision
+			// job died between the provider call and the control-plane
+			// update. Converge to active instead of failing a live bucket.
+			exists, existsErr := h.provider.BucketExists(ctx, provisioner.BucketRef{
+				BucketID:     b.ID,
+				AccountID:    b.AccountID,
+				PhysicalName: b.PhysicalName,
+			})
+			if existsErr != nil {
+				h.log.Warn("provider existence check failed", zap.Stringer("bucket_id", b.ID), zap.Error(existsErr))
+				exists = false
+			}
+			if exists {
+				if err := h.convergeCreateToActive(ctx, b); err != nil {
+					h.log.Warn("converge create->active failed", zap.Stringer("bucket_id", b.ID), zap.Error(err))
+				}
+			} else if err := h.transitionCreateToFailed(ctx, b); err != nil {
+				// Transition creating -> failed if no running provision job
 				h.log.Warn("transition create->failed failed", zap.Stringer("bucket_id", b.ID), zap.Error(err))
 			}
 		} else if (b.Status == model.BucketFailed || b.Status == model.BucketDeleting) && hasActiveJob {
@@ -429,6 +445,31 @@ func (h *StorageJobHandlers) transitionCreateToFailed(ctx context.Context, bucke
 		aid := bucket.AccountID
 		return auditRepo.Append(ctx, repository.Entry{
 			AccountID: &aid, Action: model.AuditStorageBucketProvisionFailed, Target: strPtr(bucket.ID.String()),
+		})
+	})
+}
+
+// convergeCreateToActive finishes a creating bucket that the provider
+// already holds: control-plane state catches up to the provider instead of
+// marking a live bucket failed.
+func (h *StorageJobHandlers) convergeCreateToActive(ctx context.Context, bucket model.StorageBucket) error {
+	now := time.Now().UTC()
+	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		bucketRepo := h.bucketRepo.WithDB(tx)
+		auditRepo := h.audit.WithDB(tx)
+
+		result, err := bucketRepo.UpdateStatusCompleted(ctx, bucket.ID, model.BucketActive, now, nil)
+		if err != nil {
+			return err
+		}
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return errors.New("no rows updated")
+		}
+
+		aid := bucket.AccountID
+		return auditRepo.Append(ctx, repository.Entry{
+			AccountID: &aid, Action: model.AuditStorageBucketProvisioned, Target: strPtr(bucket.ID.String()),
 		})
 	})
 }

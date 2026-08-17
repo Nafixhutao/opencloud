@@ -122,6 +122,9 @@ func (h *BuildJobHandlers) handleClone(ctx context.Context, job *model.Job, work
 			zap.String("service_id", svc.ID.String()),
 			zap.Error(err),
 		)
+		// Remove the partial checkout so retries (and the next clone) start
+		// from a clean directory instead of stacking on stale content.
+		_ = os.RemoveAll(targetDir)
 		return fmt.Errorf("clone failed: %w", err)
 	}
 
@@ -148,6 +151,11 @@ func (h *BuildJobHandlers) handleBuild(ctx context.Context, job *model.Job, work
 	}
 
 	targetDir := fmt.Sprintf("%s/opencloud-clone-%s", h.workDir, svc.ID.String())
+
+	// The build job is the terminal consumer of the clone checkout; the
+	// source tree must not linger on disk after planning (master prompt §4:
+	// cleanup after build).
+	defer func() { _ = os.RemoveAll(targetDir) }()
 
 	h.log.Info("detecting build type",
 		zap.String("service_id", svc.ID.String()),
@@ -198,22 +206,47 @@ func (h *BuildJobHandlers) handleDeployPreview(ctx context.Context, job *model.J
 		zap.Int("ttl_hours", 24),
 	)
 
-	// Enqueue auto-destroy after 24h
-	destroyJob, err := h.jobRepo.Enqueue(ctx, &accountID, model.JobDestroyPreview,
-		map[string]string{"job_id": job.ID.String()})
-	if err != nil {
-		h.log.Warn("failed to enqueue auto-destroy", zap.Error(err))
+	// Schedule auto-destroy with a real delay scoped to this preview only.
+	if _, err := h.scheduleDestroy(ctx, accountID, map[string]string{"deploy_job_id": job.ID.String()}, previewTTL); err != nil {
+		h.log.Warn("failed to schedule preview auto-destroy", zap.Error(err))
 	} else {
 		h.log.Info("preview will auto-destroy",
-			zap.String("destroy_job_id", destroyJob.ID.String()),
+			zap.String("domain", domain),
+			zap.Duration("ttl", previewTTL),
 		)
 	}
-
-	_ = destroyJob
 
 	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		return h.jobRepo.WithDB(tx).Complete(ctx, job.ID, workerID)
 	})
+}
+
+// previewTTL is how long a preview deployment lives before its destroy job
+// becomes runnable.
+const previewTTL = 24 * time.Hour
+
+// scheduleDestroy enqueues a destroy job and delays exactly that job by
+// delay. The run_at update must be scoped to the returned job id — updating
+// by kind would reschedule every queued preview destroy.
+func (h *BuildJobHandlers) scheduleDestroy(ctx context.Context, accountID uuid.UUID, payload map[string]string, delay time.Duration) (*model.Job, error) {
+	var scheduled *model.Job
+	err := h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		destroyJob, err := h.jobRepo.WithDB(tx).Enqueue(ctx, &accountID, model.JobDestroyPreview, payload)
+		if err != nil {
+			return err
+		}
+		scheduled = destroyJob
+		_, err = tx.NewUpdate().
+			Model((*model.Job)(nil)).
+			Set("run_at = ?", time.Now().UTC().Add(delay)).
+			Where("id = ?", destroyJob.ID).
+			Exec(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return scheduled, nil
 }
 
 // handleDestroyPreview tears down a temporary preview site.
@@ -251,20 +284,6 @@ func scanSourceFiles(root string) ([]build.SourceFile, error) {
 }
 
 // EnqueueDestroy schedules a delayed preview cleanup job.
-func (h *BuildJobHandlers) EnqueueDestroy(ctx context.Context, accountID uuid.UUID, previewID string) error {
-	payload, _ := json.Marshal(map[string]string{"preview_id": previewID})
-	delay := time.Now().UTC().Add(24 * time.Hour)
-	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := h.jobRepo.WithDB(tx).Enqueue(ctx, &accountID, model.JobDestroyPreview, payload)
-		if err != nil {
-			return err
-		}
-		_, err = tx.NewUpdate().
-			Model((*model.Job)(nil)).
-			Set("run_at = ?", delay).
-			Where("kind = ?", model.JobDestroyPreview).
-			Where("status = ?", model.JobQueued).
-			Exec(ctx)
-		return err
-	})
+func (h *BuildJobHandlers) EnqueueDestroy(ctx context.Context, accountID uuid.UUID, previewID string) (*model.Job, error) {
+	return h.scheduleDestroy(ctx, accountID, map[string]string{"preview_id": previewID}, previewTTL)
 }

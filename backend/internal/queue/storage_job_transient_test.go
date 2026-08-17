@@ -22,7 +22,6 @@ import (
 // TestStorageJobTransientFailureRetries verifies the complete retry lifecycle
 // when a storage provider returns a transient error.
 func TestStorageJobTransientFailureRetries(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -35,7 +34,7 @@ func TestStorageJobTransientFailureRetries(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(ctx, t, db, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -92,15 +91,16 @@ func TestStorageJobTransientFailureRetries(t *testing.T) {
 	require.NotNil(t, claimed)
 	require.Equal(t, job.ID, claimed.ID)
 	require.Equal(t, model.JobRunning, claimed.Status)
-	require.Equal(t, int64(1), claimed.Attempts)
+	require.Equal(t, 1, claimed.Attempts)
 	require.NotNil(t, claimed.LockedAt)
-	require.Equal(t, "worker-1", claimed.LockedBy)
+	require.NotNil(t, claimed.LockedBy)
+	require.Equal(t, "worker-1", *claimed.LockedBy)
 
 	// Verify in DB
-	var checkAttempt int64
+	var checkAttempt int
 	err = db.NewSelect().Model((*model.Job)(nil)).Where("id = ?", job.ID).Column("attempts").Scan(ctx, &checkAttempt)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), checkAttempt)
+	require.Equal(t, 1, checkAttempt)
 
 	// ========== STEP 2: Provider returns transient error ==========
 	err = handlers.Handle(ctx, claimed, "worker-1")
@@ -116,7 +116,7 @@ func TestStorageJobTransientFailureRetries(t *testing.T) {
 	// Verify attempts still = 1 (not incremented during handle)
 	err = db.NewSelect().Model((*model.Job)(nil)).Where("id = ?", job.ID).Column("attempts").Scan(ctx, &checkAttempt)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), checkAttempt, "attempts should still be 1 after handle returns error")
+	require.Equal(t, 1, checkAttempt, "attempts should still be 1 after handle returns error")
 
 	// ========== STEP 3-9: Runner calls Retry, job transitions properly ==========
 	// Simulate Runner's retry logic
@@ -165,9 +165,17 @@ func TestStorageJobTransientFailureRetries(t *testing.T) {
 	// ========== STEP 11: Attempts not incremented a second time ==========
 	err = db.NewSelect().Model((*model.Job)(nil)).Where("id = ?", job.ID).Column("attempts").Scan(ctx, &checkAttempt)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), checkAttempt)
+	require.Equal(t, 1, checkAttempt)
 
 	// ========== Verify can claim again ==========
+	// The retry backoff put run_at in the future; simulate the backoff
+	// elapsing before claiming again, exactly as the runner would.
+	_, err = db.NewUpdate().Model((*model.Job)(nil)).
+		Set("run_at = ?", time.Now().UTC().Add(-time.Second)).
+		Where("id = ?", job.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
 	claimed2, err := jobsRepo.Claim(ctx, "worker-1")
 	require.NoError(t, err)
 	require.NotNil(t, claimed2)

@@ -208,7 +208,7 @@ func (r *DomainRepo) ListBySite(
 	var items []DomainWithTotal
 	err := r.db.NewSelect().
 		Model((*model.Domain)(nil)).
-		ColumnExpr("domains.*, COUNT(*) OVER() as total").
+		ColumnExpr("d.*, COUNT(*) OVER() as total").
 		Where("account_id = ?", accountID).
 		Where("site_id = ?", siteID).
 		Where("deleted_at IS NULL").

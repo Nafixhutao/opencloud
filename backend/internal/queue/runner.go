@@ -933,9 +933,65 @@ func (p *Processor) Exhaust(ctx context.Context, job *model.Job, workerID, safeE
 		return p.domainProcessor.Exhaust(ctx, job, workerID, safeError)
 	case model.JobProvisionDatabase, model.JobDeleteDatabase, model.JobCleanupDatabase:
 		return p.exhaustDatabase(ctx, job, workerID, safeError)
-	default:
+	case model.JobProvisionStorageBucket, model.JobDeleteStorageBucket, model.JobReconcileStorageBucket:
+		return p.exhaustStorage(ctx, job, workerID, safeError)
+	case model.JobProvisionSite, model.JobDeleteSite, model.JobSuspendSite,
+		model.JobResumeSite, model.JobCleanupSite, model.JobReconcileSite:
 		return p.exhaustSite(ctx, job, workerID, safeError)
+	case model.JobCloneGitSource, model.JobBuildSource, model.JobDeployPreview, model.JobDestroyPreview:
+		// Build/preview jobs hold no durable resource state yet; record the
+		// terminal job state only.
+		return p.jobs.Fail(ctx, job.ID, workerID, safeError)
+	default:
+		// Unknown kinds must not be interpreted as sites (their payloads do
+		// not carry site_id); fail the job itself so the queue stays honest.
+		return p.jobs.Fail(ctx, job.ID, workerID, safeError)
 	}
+}
+
+// exhaustStorage terminates an exhausted storage job: a creating bucket whose
+// provision ran out of attempts transitions to failed with an audit entry;
+// delete/reconcile jobs keep bucket state (reconciliation converges it) and
+// only the job is failed.
+func (p *Processor) exhaustStorage(ctx context.Context, job *model.Job, workerID, safeError string) error {
+	var payload struct {
+		BucketID uuid.UUID `json:"bucket_id"`
+	}
+	if err := json.Unmarshal(job.Payload, &payload); err != nil {
+		return err
+	}
+	if job.AccountID == nil {
+		return errors.New("storage job missing account")
+	}
+	return p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		jobs := p.jobs.WithDB(tx)
+		audit := p.audit.WithDB(tx)
+
+		if job.Kind == model.JobProvisionStorageBucket {
+			result, err := tx.NewUpdate().
+				Model((*model.StorageBucket)(nil)).
+				Set("status = ?", model.BucketFailed).
+				Set("last_error = ?", safeError).
+				Set("updated_at = now()").
+				Where("id = ?", payload.BucketID).
+				Where("status = ?", model.BucketCreating).
+				Exec(ctx)
+			if err != nil {
+				return err
+			}
+			if rows, _ := result.RowsAffected(); rows > 0 {
+				aid := *job.AccountID
+				if err := audit.Append(ctx, repository.Entry{
+					AccountID: &aid,
+					Action:    model.AuditStorageBucketProvisionFailed,
+					Target:    strPtr(payload.BucketID.String()),
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		return jobs.Fail(ctx, job.ID, workerID, safeError)
+	})
 }
 
 func (p *Processor) exhaustSite(ctx context.Context, job *model.Job, workerID, safeError string) error {

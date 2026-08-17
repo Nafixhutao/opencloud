@@ -138,7 +138,10 @@ func TestStorageBucketRepoIdempotencyConstraint(t *testing.T) {
 	}
 	err = bucketRepo.Create(ctx, bucket2)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "UNIQUE constraint")
+	// PostgreSQL reports "duplicate key value violates unique constraint";
+	// MySQL uses "Duplicate entry". Assert on the SQLSTATE so the check
+	// holds on either engine instead of string-matching one dialect.
+	require.Contains(t, err.Error(), "23505")
 }
 
 func strPtr(s string) *string {

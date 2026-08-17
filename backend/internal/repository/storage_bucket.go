@@ -69,7 +69,10 @@ func (r *StorageBucketRepo) GetByAccount(ctx context.Context, accountID, bucketI
 		Where("id = ?", bucketID).
 		Where("deleted_at IS NULL").
 		Scan(ctx)
-	return bucket, err
+	if err != nil {
+		return nil, err
+	}
+	return bucket, nil
 }
 
 // GetByAccountForUpdate locks a live bucket while mutations occur.
@@ -81,7 +84,10 @@ func (r *StorageBucketRepo) GetByAccountForUpdate(ctx context.Context, accountID
 		Where("deleted_at IS NULL").
 		For("UPDATE").
 		Scan(ctx)
-	return bucket, err
+	if err != nil {
+		return nil, err
+	}
+	return bucket, nil
 }
 
 // GetByIDempotencyKey returns a prior creation result for safe retry.
@@ -93,7 +99,10 @@ func (r *StorageBucketRepo) GetByIDempotencyKey(ctx context.Context, accountID, 
 		Where("project_id = ?", projectID).
 		Where("idempotency_key = ?", idempotencyKey).
 		Scan(ctx)
-	return bucket, err
+	if err != nil {
+		return nil, err
+	}
+	return bucket, nil
 }
 
 // ListByAccountProject returns live buckets for an account/project with pagination.
