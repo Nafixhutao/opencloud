@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -34,7 +33,7 @@ func TestS3StorageQueueLifecycle(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "s3-lifecycle-test")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(t, db, ctx, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -82,15 +81,7 @@ func TestS3StorageQueueLifecycle(t *testing.T) {
 
 		payload := model.ProvisionStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:          uuid.New(),
-			AccountID:   &account.ID,
-			Kind:        model.JobProvisionStorageBucket,
-			Status:      model.JobQueued,
-			MaxAttempts: 3,
-			Payload:     rawPayload,
-			RunAt:       time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobProvisionStorageBucket, rawPayload, 3)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -135,15 +126,7 @@ func TestS3StorageQueueLifecycle(t *testing.T) {
 
 		payload := model.DeleteStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:          uuid.New(),
-			AccountID:   &account.ID,
-			Kind:        model.JobDeleteStorageBucket,
-			Status:      model.JobQueued,
-			MaxAttempts: 3,
-			Payload:     rawPayload,
-			RunAt:       time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobDeleteStorageBucket, rawPayload, 3)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -187,15 +170,7 @@ func TestS3StorageQueueLifecycle(t *testing.T) {
 
 		payload := model.ProvisionStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:          uuid.New(),
-			AccountID:   &account.ID,
-			Kind:        model.JobProvisionStorageBucket,
-			Status:      model.JobQueued,
-			MaxAttempts: 3,
-			Payload:     rawPayload,
-			RunAt:       time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobProvisionStorageBucket, rawPayload, 3)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 

@@ -29,11 +29,22 @@ func TestStorageBucketServiceCreateTenantIsolation(t *testing.T) {
 
 	account1, err := acctRepo.CreateAccount(ctx, "account-1")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account1).Where("id = ?", account1.ID).Exec(ctx) }()
+	defer func() {
+		// CreateBucket enqueues provision jobs and bucket rows that do not
+		// cascade from accounts; orphaned queued jobs get stolen by later
+		// Claim-based tests on a shared integration database.
+		_, _ = db.NewDelete().Model((*model.Job)(nil)).Where("account_id = ?", account1.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model((*model.StorageBucket)(nil)).Where("account_id = ?", account1.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model(account1).Where("id = ?", account1.ID).Exec(ctx)
+	}()
 
 	account2, err := acctRepo.CreateAccount(ctx, "account-2")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account2).Where("id = ?", account2.ID).Exec(ctx) }()
+	defer func() {
+		_, _ = db.NewDelete().Model((*model.Job)(nil)).Where("account_id = ?", account2.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model((*model.StorageBucket)(nil)).Where("account_id = ?", account2.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model(account2).Where("id = ?", account2.ID).Exec(ctx)
+	}()
 
 	project1 := &model.Project{
 		ID:        uuid.New(),
@@ -70,7 +81,11 @@ func TestStorageBucketServiceIdempotencySameKey(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer func() {
+		_, _ = db.NewDelete().Model((*model.Job)(nil)).Where("account_id = ?", account.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model((*model.StorageBucket)(nil)).Where("account_id = ?", account.ID).Exec(ctx)
+		_, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx)
+	}()
 
 	project := &model.Project{
 		ID:        uuid.New(),

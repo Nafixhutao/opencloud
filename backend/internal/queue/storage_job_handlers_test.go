@@ -3,8 +3,8 @@ package queue_test
 import (
 	"context"
 	"encoding/json"
-	"testing"
 	"time"
+	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,6 @@ import (
 )
 
 func TestStorageJobProvisionReconciliation(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -29,7 +28,7 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(t, db, ctx, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -58,17 +57,26 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AllowedMimeTypes:   []byte("[]"),
 		}
 		require.NoError(t, bucketRepo.Create(ctx, bucket))
+		// The subtest's premise: an in-flight provision job for this bucket
+		// must keep the creating bucket waiting during reconciliation.
+		provisionPayload, _ := json.Marshal(model.ProvisionStorageBucketPayload{BucketID: bucketID})
+		provisionJob := &model.Job{
+			ID:          uuid.New(),
+			AccountID:   &account.ID,
+			Kind:        model.JobProvisionStorageBucket,
+			MaxAttempts: 5,
+			Status:    model.JobQueued,
+			Payload:   provisionPayload,
+			RunAt:     time.Now().UTC(),
+		}
+		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
+		require.NoError(t, err)
+
+
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:        uuid.New(),
-			AccountID: &account.ID,
-			Kind:      model.JobReconcileStorageBucket,
-			Status:    model.JobQueued,
-			Payload:   rawPayload,
-			RunAt:     time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobReconcileStorageBucket, rawPayload, 5)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -95,17 +103,26 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AllowedMimeTypes:   []byte("[]"),
 		}
 		require.NoError(t, bucketRepo.Create(ctx, bucket))
+		// The subtest's premise: an in-flight provision job for this bucket
+		// must keep the creating bucket waiting during reconciliation.
+		provisionPayload, _ := json.Marshal(model.ProvisionStorageBucketPayload{BucketID: bucketID})
+		provisionJob := &model.Job{
+			ID:          uuid.New(),
+			AccountID:   &account.ID,
+			Kind:        model.JobProvisionStorageBucket,
+			MaxAttempts: 5,
+			Status:    model.JobRunning,
+			Payload:   provisionPayload,
+			RunAt:     time.Now().UTC(),
+		}
+		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
+		require.NoError(t, err)
+
+
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:        uuid.New(),
-			AccountID: &account.ID,
-			Kind:      model.JobReconcileStorageBucket,
-			Status:    model.JobRunning,
-			Payload:   rawPayload,
-			RunAt:     time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobReconcileStorageBucket, rawPayload, 5)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -135,14 +152,7 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:        uuid.New(),
-			AccountID: &account.ID,
-			Kind:      model.JobReconcileStorageBucket,
-			Status:    model.JobQueued,
-			Payload:   rawPayload,
-			RunAt:     time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobReconcileStorageBucket, rawPayload, 5)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -169,17 +179,26 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 			AllowedMimeTypes:   []byte("[]"),
 		}
 		require.NoError(t, bucketRepo.Create(ctx, bucket))
+		// The subtest's premise: an in-flight provision job for this bucket
+		// must keep the creating bucket waiting during reconciliation.
+		provisionPayload, _ := json.Marshal(model.ProvisionStorageBucketPayload{BucketID: bucketID})
+		provisionJob := &model.Job{
+			ID:          uuid.New(),
+			AccountID:   &account.ID,
+			Kind:        model.JobProvisionStorageBucket,
+			MaxAttempts: 5,
+			Status:    model.JobQueued,
+			Payload:   provisionPayload,
+			RunAt:     time.Now().UTC().Add(time.Minute),
+		}
+		_, err = db.NewInsert().Model(provisionJob).Exec(ctx)
+		require.NoError(t, err)
+
+
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:        uuid.New(),
-			AccountID: &account.ID,
-			Kind:      model.JobReconcileStorageBucket,
-			Status:    model.JobQueued,
-			Payload:   rawPayload,
-			RunAt:     time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobReconcileStorageBucket, rawPayload, 5)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -213,14 +232,7 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 
 		payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:        uuid.New(),
-			AccountID: &account.ID,
-			Kind:      model.JobReconcileStorageBucket,
-			Status:    model.JobQueued,
-			Payload:   rawPayload,
-			RunAt:     time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobReconcileStorageBucket, rawPayload, 5)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
@@ -252,21 +264,14 @@ func TestStorageJobProvisionReconciliation(t *testing.T) {
 
 		payload := model.ProvisionStorageBucketPayload{BucketID: bucketID}
 		rawPayload, _ := json.Marshal(payload)
-		job := &model.Job{
-			ID:          uuid.New(),
-			AccountID:   &account.ID,
-			Kind:        model.JobProvisionStorageBucket,
-			Status:      model.JobQueued,
-			MaxAttempts: 3,
-			Payload:     rawPayload,
-			RunAt:       time.Now().UTC(),
-		}
+		job := claimedJob(account.ID, model.JobProvisionStorageBucket, rawPayload, 3)
 		_, err = db.NewInsert().Model(job).Exec(ctx)
 		require.NoError(t, err)
 
 		err = handlers.Handle(ctx, job, "worker-1")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "no rows updated")
+		// Deletion took precedence: the provision path exits silently and
+		// leaves the deleting state untouched.
+		require.NoError(t, err)
 
 		result, err := bucketRepo.GetByAccount(ctx, account.ID, bucketID)
 		require.NoError(t, err)

@@ -2,7 +2,6 @@ package queue_test
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -33,8 +32,58 @@ func openTestDB(t *testing.T) *bun.DB {
 	return db
 }
 
+// cleanupAccount removes a test account together with every queue-owned row
+// it created. Jobs, buckets, and objects do not cascade from accounts, and
+// leftover queued/running jobs poison later Claim-based test runs, so each
+// integration test must clean all of its rows.
+func cleanupAccount(t *testing.T, db *bun.DB, ctx context.Context, account *model.Account) {
+	t.Helper()
+	_, _ = db.NewDelete().Model((*model.StorageObject)(nil)).Where("account_id = ?", account.ID).Exec(ctx)
+	_, _ = db.NewDelete().Model((*model.StorageBucket)(nil)).Where("account_id = ?", account.ID).Exec(ctx)
+	_, _ = db.NewDelete().Model((*model.Job)(nil)).Where("account_id = ?", account.ID).Exec(ctx)
+	_, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx)
+}
+
+// claimSpecificJob transitions exactly one job into the state the runner
+// hands to Handle. Unlike JobRepo.Claim it cannot steal a queued job from
+// another test's account when a shared integration database carries residue.
+func claimSpecificJob(t *testing.T, db *bun.DB, ctx context.Context, jobID uuid.UUID) *model.Job {
+	t.Helper()
+	_, err := db.NewUpdate().Model((*model.Job)(nil)).
+		Set("status = ?", model.JobRunning).
+		Set("attempts = attempts + 1").
+		Set("locked_by = ?", "worker-1").
+		Set("locked_at = now()").
+		Where("id = ?", jobID).
+		Exec(ctx)
+	require.NoError(t, err)
+	job := new(model.Job)
+	require.NoError(t, db.NewSelect().Model(job).Where("id = ?", jobID).Scan(ctx))
+	return job
+}
+
+// claimedJob builds a job in the exact state the production runner hands to
+// StorageJobHandlers.Handle: claimed (running, locked, attempts=1). Handle's
+// completion path rejects anything else, so tests must not pass raw queued
+// or fabricated-never-inserted jobs.
+func claimedJob(accountID uuid.UUID, kind string, payload []byte, maxAttempts int) *model.Job {
+	worker := "worker-1"
+	now := time.Now().UTC()
+	return &model.Job{
+		ID:          uuid.New(),
+		AccountID:   &accountID,
+		Kind:        kind,
+		Status:      model.JobRunning,
+		Attempts:    1,
+		MaxAttempts: maxAttempts,
+		LockedBy:    &worker,
+		LockedAt:    &now,
+		Payload:     payload,
+		RunAt:       now,
+	}
+}
+
 func TestStorageJobReconcileStaleCreatingBucket(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -47,7 +96,7 @@ func TestStorageJobReconcileStaleCreatingBucket(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(t, db, ctx, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -78,19 +127,14 @@ func TestStorageJobReconcileStaleCreatingBucket(t *testing.T) {
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, fakeProvider)
 
 	payload := model.ReconcileStorageBucketPayload{BucketID: bucketID}
-	rawPayload, _ := json.Marshal(payload)
-	job := &model.Job{
-		ID:        uuid.New(),
-		AccountID: &account.ID,
-		Kind:      model.JobReconcileStorageBucket,
-		Status:    model.JobQueued,
-		Payload:   rawPayload,
-		RunAt:     time.Now().UTC(),
-	}
-	_, err = jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobReconcileStorageBucket, payload, 5)
+	enqueued, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobReconcileStorageBucket, payload, 5)
 	require.NoError(t, err)
 
-	err = handlers.Handle(ctx, job, "worker-1")
+	// The runner only ever hands Handle a claimed job.
+	claimed := claimSpecificJob(t, db, ctx, enqueued.ID)
+	require.Equal(t, model.JobReconcileStorageBucket, claimed.Kind)
+
+	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.NoError(t, err)
 
 	result, err := bucketRepo.GetByAccount(ctx, account.ID, bucketID)
@@ -99,7 +143,6 @@ func TestStorageJobReconcileStaleCreatingBucket(t *testing.T) {
 }
 
 func TestStorageJobDeleteBlockedRestoreToActive(t *testing.T) {
-	t.Parallel()
 
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -112,7 +155,7 @@ func TestStorageJobDeleteBlockedRestoreToActive(t *testing.T) {
 
 	account, err := acctRepo.CreateAccount(ctx, "test-account-2")
 	require.NoError(t, err)
-	defer func() { _, _ = db.NewDelete().Model(account).Where("id = ?", account.ID).Exec(ctx) }()
+	defer cleanupAccount(t, db, ctx, account)
 
 	project := &model.Project{
 		ID:        uuid.New(),
@@ -152,19 +195,13 @@ func TestStorageJobDeleteBlockedRestoreToActive(t *testing.T) {
 	handlers := queue.NewStorageJobHandlers(log, db, bucketRepo, jobsRepo, auditRepo, fakeProvider)
 
 	payload := model.DeleteStorageBucketPayload{BucketID: bucketID}
-	rawPayload, _ := json.Marshal(payload)
-	job := &model.Job{
-		ID:        uuid.New(),
-		AccountID: &account.ID,
-		Kind:      model.JobDeleteStorageBucket,
-		Status:    model.JobRunning,
-		Payload:   rawPayload,
-		RunAt:     time.Now().UTC(),
-	}
-	_, err = jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobDeleteStorageBucket, payload, 5)
+	enqueued, err := jobsRepo.EnqueueWithMaxAttempts(ctx, &account.ID, model.JobDeleteStorageBucket, payload, 5)
 	require.NoError(t, err)
 
-	err = handlers.Handle(ctx, job, "worker-1")
+	claimed := claimSpecificJob(t, db, ctx, enqueued.ID)
+	require.Equal(t, model.JobDeleteStorageBucket, claimed.Kind)
+
+	err = handlers.Handle(ctx, claimed, "worker-1")
 	require.NoError(t, err)
 
 	result, err := bucketRepo.GetByAccount(ctx, account.ID, bucketID)
