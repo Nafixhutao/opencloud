@@ -1,8 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, VariableIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
+  HistoryIcon,
+  PlusIcon,
+  VariableIcon,
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
@@ -29,6 +37,7 @@ import { FieldGroup, Field, FieldLabel, FieldError, FieldDescription } from '@/c
 
 import {
   listEnvironmentVariables,
+  listEnvironmentVariableAudit,
   createEnvironmentVariable,
   updateEnvironmentVariable,
   deleteEnvironmentVariable,
@@ -53,6 +62,14 @@ const ENVIRONMENT_LABELS: Record<EnvironmentVariableEnvironment, string> = {
   development: 'Development',
 };
 
+const AUDIT_ACTION_BADGES: Record<string, 'default' | 'secondary' | 'destructive'> = {
+  created: 'default',
+  updated: 'secondary',
+  rotated: 'secondary',
+  revealed: 'secondary',
+  deleted: 'destructive',
+};
+
 export function EnvironmentVariablesManager({ projectId, services }: Props) {
   const queryClient = useQueryClient();
   const [serviceId, setServiceId] = useState(services[0]?.id ?? '');
@@ -63,6 +80,14 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
   const [deleteConfirmKey, setDeleteConfirmKey] = useState('');
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+  const [showAudit, setShowAudit] = useState(false);
 
   const hasServices = services.length > 0 && serviceId !== '';
 
@@ -73,8 +98,17 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
     staleTime: 10_000,
   });
 
-  const invalidateList = () =>
-    queryClient.invalidateQueries({ queryKey: ['environment-variables', projectId, serviceId] });
+  const { data: auditEntries, isLoading: auditLoading, isError: auditError, refetch: refetchAudit } = useQuery({
+    queryKey: ['environment-variable-audit', projectId, serviceId],
+    queryFn: () => listEnvironmentVariableAudit(projectId, serviceId, 20),
+    enabled: hasServices && showAudit,
+    staleTime: 10_000,
+  });
+
+  const invalidateList = () => {
+    void queryClient.invalidateQueries({ queryKey: ['environment-variables', projectId, serviceId] });
+    void queryClient.invalidateQueries({ queryKey: ['environment-variable-audit', projectId, serviceId] });
+  };
 
   const createForm = useForm<CreateEnvironmentVariableValues>({
     resolver: zodResolver(createEnvironmentVariableSchema),
@@ -122,13 +156,18 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
 
   const revealMutation = useMutation({
     mutationFn: (id: string) => revealSecret(projectId, serviceId, id),
-    onSuccess: (value, id) => setRevealed((current) => ({ ...current, [id]: value })),
+    onSuccess: (value, id) => {
+      setRevealed((current) => ({ ...current, [id]: value }));
+      // Reveals are audited server-side, so an open activity panel must refresh.
+      void queryClient.invalidateQueries({ queryKey: ['environment-variable-audit', projectId, serviceId] });
+    },
   });
 
   const handleCopy = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
-    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 2000);
   };
 
   const list = variables ?? [];
@@ -389,6 +428,56 @@ export function EnvironmentVariablesManager({ projectId, services }: Props) {
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+        {hasServices && (
+          <div className="mt-6 rounded-lg border">
+            <div className="flex items-center justify-between px-4 py-3">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <HistoryIcon size={14} aria-hidden="true" />
+                Recent activity
+              </p>
+              <Button variant="ghost" size="xs" aria-expanded={showAudit} onClick={() => setShowAudit((open) => !open)}>
+                {showAudit ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            {showAudit && (
+              <div className="border-t px-4 py-3">
+                {auditLoading ? (
+                  <div aria-label="Loading environment activity" className="flex flex-col gap-2 py-1">
+                    {[...Array(3)].map((_, index) => <Skeleton key={index} className="h-6 w-full" />)}
+                  </div>
+                ) : auditError ? (
+                  <div className="py-2 text-center">
+                    <p className="text-sm text-destructive">Could not load the activity trail.</p>
+                    <Button variant="outline" size="xs" className="mt-2" onClick={() => void refetchAudit()}>Retry</Button>
+                  </div>
+                ) : (auditEntries?.length ?? 0) === 0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    No recorded variable activity for this service yet.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {(auditEntries ?? []).map((entry) => (
+                      <li key={entry.id} className="flex flex-wrap items-center gap-2 text-sm">
+                        <Badge variant={AUDIT_ACTION_BADGES[entry.action] ?? 'secondary'}>{entry.action}</Badge>
+                        <code className="font-mono text-xs">{entry.key}</code>
+                        {entry.is_secret && <Badge variant="outline">secret</Badge>}
+                        <span className="text-xs text-muted-foreground">
+                          {ENVIRONMENT_LABELS[entry.environment as EnvironmentVariableEnvironment] ?? entry.environment}
+                        </span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {new Date(entry.created_at).toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Recorded server-side for every create, update, delete, and reveal — values are never included.
+                </p>
+              </div>
+            )}
           </div>
         )}
         {revealMutation.error && (
