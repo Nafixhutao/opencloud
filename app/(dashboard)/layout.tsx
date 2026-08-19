@@ -1,13 +1,17 @@
 import { PanelLeft } from 'lucide-react';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import {
   AnimatedSidebarInset,
-  AnimatedSidebarProvider,
   AnimatedSidebarTrigger,
 } from '@/components/motion/animated-sidebar';
 import { Sidebar } from '@/components/navigation/sidebar';
+import {
+  SIDEBAR_STATE_COOKIE,
+  SidebarShell,
+} from '@/components/navigation/sidebar-shell';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { memberships } from '@/lib/auth';
 import { getSession } from '@/lib/session';
@@ -28,14 +32,19 @@ export default async function DashboardLayout({
     isAdmin = false;
   }
 
+  const cookieStore = await cookies();
+  const sidebarOpen = cookieStore.get(SIDEBAR_STATE_COOKIE)?.value !== 'false';
+
   return (
-    <AnimatedSidebarProvider className="h-svh overflow-hidden">
+    <SidebarShell defaultOpen={sidebarOpen}>
       <Sidebar email={session.user.email} isAdmin={isAdmin} />
       <AnimatedSidebarInset className="min-h-0">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+        {/* The sidebar owns its own toggle on desktop; on mobile the panel is
+            off-canvas, so the sheet needs a trigger that stays reachable. */}
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4 md:hidden">
           <AnimatedSidebarTrigger
-            aria-label="Toggle sidebar"
-            className="-ml-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Open navigation"
+            className="-ml-1 grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <PanelLeft aria-hidden="true" className="size-4" />
           </AnimatedSidebarTrigger>
@@ -49,6 +58,6 @@ export default async function DashboardLayout({
           </div>
         </div>
       </AnimatedSidebarInset>
-    </AnimatedSidebarProvider>
+    </SidebarShell>
   );
 }

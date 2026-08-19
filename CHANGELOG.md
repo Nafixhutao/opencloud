@@ -14,6 +14,59 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **React Grab (dev-only tooling):** `react-grab` plus a `next/script` tag in
+  `app/layout.tsx`, added by `npx grab@latest init`. Lets a coding agent be
+  handed the file/component context of any hovered element via ⌘/Ctrl+C. The
+  script is gated behind `process.env.NODE_ENV === 'development'` or the
+  `NEXT_PUBLIC_REACT_GRAB` build arg, so it is absent from production builds
+  by default. The preview container on this VPS opts in via
+  `docker-compose.override.yml` (`NEXT_PUBLIC_REACT_GRAB=true`); remove that
+  build arg for any real deployment — the tool exposes component and file
+  structure in the DOM.
+- **Reference sidebar polish (second design pass):** icon-rail collapse with an
+  animated width transition (labels fade and rows fall back to `aria-label`,
+  submenus drop out, header and footer reduce to centered marks); a workspace
+  dropdown on the name chip with the current org check, **Refresh list**, and
+  **Add organization**; a boxed `selected` row state distinct from the accent
+  `active` state; a larger ringed profile avatar; overflow rows (Members, Docs,
+  Support) revealed by the **View more** pill; and a thin custom scrollbar in
+  `sidebar.css`, scoped to `.ref-scroll` because `::-webkit-scrollbar` cannot be
+  expressed as a Tailwind utility. `app/globals.css` remains untouched.
+- **Reference sidebar preview (design replica, not production nav):** a
+  pixel-faithful implementation of a supplied dark-theme sidebar design at
+  `/sidebar-preview`, built from reusable parts in
+  `components/reference-sidebar/{sidebar,sidebar-header,sidebar-menu,sidebar-section,sidebar-item,sidebar-submenu,sidebar-footer}.tsx`
+  with the menu tree in `nav-data.ts` and interaction coverage in
+  `sidebar.test.tsx`. Independent accordions (Review expanded by default),
+  indented submenu with a vertical indicator rail, Beta/New badges, a centered
+  **View more** pill, a bottom-pinned account row, and an off-canvas drawer
+  below `md`. Deliberately kept outside the `(dashboard)` route group: that
+  layout already renders the production sidebar, and none of the design's
+  labels (Triage, Repositories, Slack, Discord, Plan, …) maps to a real
+  OpenCloud route, so rows are inert buttons rather than links that would 404
+  against UI_GUIDELINES §3.1. Production navigation, `lib/navigation.ts`, and
+  `app/globals.css` are unchanged.
+
+  Two approved deviations, both scoped to this subtree:
+  - **ADR 0005 exception** — Lucide 1.21.0 ships no brand glyphs, so Slack and
+    Discord are inline SVGs in `brand-icons.tsx`. ADR 0005 otherwise limits
+    inline brand logos to Google/GitHub; do not widen this without a new
+    decision.
+  - **Monochrome-palette exception** — the design needs a `#0d0b10` surface and
+    an orange "New" badge, which `app/globals.css` reserves for status meaning
+    only. These live as local `--ref-*` custom properties on the sidebar root,
+    so no global token changes and the rest of the app stays grayscale.
+- **Dashboard sidebar rebuild:** the nav now renders from a single
+  `lib/navigation.ts` config (typed groups, nested items, truthful badges,
+  admin gating) instead of an inline array, with segment-aware active-state
+  helpers covered by `lib/navigation.ui.test.ts`. New chrome: a workspace
+  header chip that owns the panel toggle, a client-side nav search filter, a
+  **View more** pill for secondary groups, and a user row with an account /
+  sign-out dropdown. Adds `components/ui/avatar.tsx` and
+  `components/ui/dropdown-menu.tsx` (Base UI, no new npm dependency) plus
+  `components/navigation/{nav-main,sidebar-workspace,sidebar-user,sidebar-shell}.tsx`.
+  Collapsed groups open a dropdown flyout so nested routes stay reachable and
+  keyboard-navigable at icon-rail width.
 - **Phase 4 env/secrets UI (backend previously shipped):** authenticated BFF
   routes for list/create/update/delete/reveal/audit plus a per-service
   Environment Variables manager (service and environment scoping, zod key/value
@@ -82,6 +135,11 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   HTTPS is active.
 
 ### Changed
+- Sidebar links render through `next/link` instead of raw anchors, so dashboard
+  navigation no longer triggers a full page reload. The collapse state persists
+  in a `sidebar_state` cookie and is read by the server layout, so the correct
+  width paints on first render. Sidebar chrome now consumes the previously
+  dormant `--sidebar*` design tokens.
 - Phase 3 production primary hostnames are restricted to the platform-owned
   `SITE_DOMAIN_SUFFIX`; verified custom domains remain provider-neutral. DNS
   instructions disclose TXT proof first and A routing only after ownership is

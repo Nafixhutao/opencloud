@@ -43,6 +43,29 @@ this is about how the product should look and behave.
 - Content has breathing room; group related actions; primary action is visually
   primary, destructive actions are visually distinct.
 
+### 3.1 Dashboard sidebar nav config
+
+The dashboard sidebar renders **only** from [`lib/navigation.ts`](../lib/navigation.ts).
+Never hardcode a nav row in a component.
+
+- `buildNav({ isAdmin })` returns `NavGroup[]`. Every `href` must resolve to a
+  real route — a nav entry that 404s is a bug, not a placeholder. Product areas
+  that are not shipped yet stay out of the nav until they have a page.
+- Active state comes from `isItemActive` / `isHrefActive`, never from an ad-hoc
+  `pathname.startsWith`. Set `exact: true` for index routes (`/dashboard`) so
+  they don't stay lit on children; prefix matching is segment-aware, so
+  `/sites-archive` does not activate `/sites`.
+- A group with `items` renders as a collapsible submenu (auto-opened when a
+  child is active). At icon-rail width the submenu is hidden by the primitive,
+  so `nav-main.tsx` swaps it for a dropdown flyout — keep both branches working.
+- `secondary: true` groups sit behind the **View more** toggle.
+- `badge` is for truthful status only (`Admin`, `Beta`, `New`); don't decorate.
+- Branchy logic in this module is unit-tested in
+  [`lib/navigation.ui.test.ts`](../lib/navigation.ui.test.ts) — extend it when
+  you add a route.
+- Sidebar chrome uses the `--sidebar*` tokens (`bg-sidebar`,
+  `text-sidebar-foreground`, `border-sidebar-border`), not `bg-background`.
+
 ## 4. State design (mandatory per view)
 
 | State | Requirement |

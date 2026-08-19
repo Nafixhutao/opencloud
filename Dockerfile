@@ -25,6 +25,11 @@ COPY . .
 # `next build` loads that module. Nothing connects during the build (pg.Pool
 # is lazy); real values come from the runtime env (docker-compose.yml).
 ENV ENV=build MAIL_PROVIDER=log
+# Opt-in for the preview container: inlines the react-grab script into the
+# production bundle (app/layout.tsx gates on it). Dev-only tooling — leave
+# "false" for any real deployment.
+ARG NEXT_PUBLIC_REACT_GRAB=false
+ENV NEXT_PUBLIC_REACT_GRAB=${NEXT_PUBLIC_REACT_GRAB}
 RUN DATABASE_URL=postgres://build:build@localhost:5432/build \
     BETTER_AUTH_SECRET=build-time-placeholder-secret-never-used-at-runtime \
     BETTER_AUTH_URL=http://localhost:3000 \

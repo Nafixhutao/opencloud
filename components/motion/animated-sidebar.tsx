@@ -13,6 +13,7 @@ import {
   type ButtonHTMLAttributes,
   type CSSProperties,
   createContext,
+  type ElementType,
   forwardRef,
   type HTMLAttributes,
   type ReactNode,
@@ -181,7 +182,9 @@ export function useAnimatedSidebar() {
   return context;
 }
 
-function useAnimatedSidebarPanel() {
+// Exported so app-level nav can branch on rail width (for example swapping an
+// inline submenu for a flyout). Same fast-refresh caveat as useAnimatedSidebar.
+export function useAnimatedSidebarPanel() {
   const context = useContext(AnimatedSidebarPanelContext);
   if (!context) {
     throw new Error(
@@ -895,6 +898,23 @@ export const AnimatedSidebarMenuSubItem = forwardRef<
   );
 });
 
+// motion.create() mints a new component type per call, which would remount the
+// anchor on every render. Cache one wrapper per link component instead.
+const motionLinkCache = new WeakMap<object, ElementType>();
+
+function motionLink(linkComponent?: ElementType) {
+  if (!linkComponent) return motion.a;
+  const key = linkComponent as unknown as object;
+  let wrapped = motionLinkCache.get(key);
+  if (!wrapped) {
+    wrapped = motion.create(
+      linkComponent as Parameters<typeof motion.create>[0],
+    ) as ElementType;
+    motionLinkCache.set(key, wrapped);
+  }
+  return wrapped;
+}
+
 export interface AnimatedSidebarMenuSubButtonProps {
   children: ReactNode;
   icon?: ReactNode;
@@ -906,6 +926,11 @@ export interface AnimatedSidebarMenuSubButtonProps {
   rel?: string;
   onSelect?: () => void;
   className?: string;
+  /**
+   * Element used to render `href` links. Defaults to a plain anchor; pass a
+   * router-aware component (such as `next/link`) for client-side navigation.
+   */
+  linkComponent?: ElementType;
 }
 
 export function AnimatedSidebarMenuSubButton({
@@ -919,6 +944,7 @@ export function AnimatedSidebarMenuSubButton({
   rel,
   onSelect,
   className,
+  linkComponent,
 }: AnimatedSidebarMenuSubButtonProps) {
   const context = useAnimatedSidebar();
 
@@ -954,8 +980,10 @@ export function AnimatedSidebarMenuSubButton({
     className,
   );
 
+  const Anchor = motionLink(linkComponent);
+
   return href ? (
-    <motion.a
+    <Anchor
       href={href}
       target={target}
       rel={
@@ -971,7 +999,7 @@ export function AnimatedSidebarMenuSubButton({
       className={interactiveClassName}
     >
       {content}
-    </motion.a>
+    </Anchor>
   ) : (
     <motion.button
       type="button"
@@ -1000,6 +1028,11 @@ export interface AnimatedSidebarMenuButtonProps {
   rel?: string;
   onSelect?: () => void;
   className?: string;
+  /**
+   * Element used to render `href` links. Defaults to a plain anchor; pass a
+   * router-aware component (such as `next/link`) for client-side navigation.
+   */
+  linkComponent?: ElementType;
 }
 
 export function AnimatedSidebarMenuButton({
@@ -1015,6 +1048,7 @@ export function AnimatedSidebarMenuButton({
   rel,
   onSelect,
   className,
+  linkComponent,
 }: AnimatedSidebarMenuButtonProps) {
   const context = useAnimatedSidebar();
   const panel = useAnimatedSidebarPanel();
@@ -1105,8 +1139,10 @@ export function AnimatedSidebarMenuButton({
     className,
   );
 
+  const Anchor = motionLink(linkComponent);
+
   return href ? (
-    <motion.a
+    <Anchor
       href={href}
       target={target}
       rel={
@@ -1125,7 +1161,7 @@ export function AnimatedSidebarMenuButton({
       className={interactiveClassName}
     >
       {content}
-    </motion.a>
+    </Anchor>
   ) : (
     <motion.button
       type="button"
