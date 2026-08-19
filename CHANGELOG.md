@@ -14,6 +14,17 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
 ## [Unreleased]
 
 ### Added
+- **Dashboard sidebar rebuild:** the nav now renders from a single
+  `lib/navigation.ts` config (typed groups, nested items, truthful badges,
+  admin gating) instead of an inline array, with segment-aware active-state
+  helpers covered by `lib/navigation.ui.test.ts`. New chrome: a workspace
+  header chip that owns the panel toggle, a client-side nav search filter, a
+  **View more** pill for secondary groups, and a user row with an account /
+  sign-out dropdown. Adds `components/ui/avatar.tsx` and
+  `components/ui/dropdown-menu.tsx` (Base UI, no new npm dependency) plus
+  `components/navigation/{nav-main,sidebar-workspace,sidebar-user,sidebar-shell}.tsx`.
+  Collapsed groups open a dropdown flyout so nested routes stay reachable and
+  keyboard-navigable at icon-rail width.
 - **Phase 4 env/secrets UI (backend previously shipped):** authenticated BFF
   routes for list/create/update/delete/reveal/audit plus a per-service
   Environment Variables manager (service and environment scoping, zod key/value
@@ -82,6 +93,11 @@ Change groups: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**,
   HTTPS is active.
 
 ### Changed
+- Sidebar links render through `next/link` instead of raw anchors, so dashboard
+  navigation no longer triggers a full page reload. The collapse state persists
+  in a `sidebar_state` cookie and is read by the server layout, so the correct
+  width paints on first render. Sidebar chrome now consumes the previously
+  dormant `--sidebar*` design tokens.
 - Phase 3 production primary hostnames are restricted to the platform-owned
   `SITE_DOMAIN_SUFFIX`; verified custom domains remain provider-neutral. DNS
   instructions disclose TXT proof first and A routing only after ownership is
